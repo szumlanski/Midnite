@@ -150,47 +150,27 @@ export default async function handler(req, res) {
           const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
           return res.json({ accountType: "installer", sites: Array.isArray(data) ? data : [] });
         }
-        // End-user: get groups then inverters for each group
+        // End-user: get groups, then inverters for each group
         const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };
         glBody.sign = makeSign(glBody);
         const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, auth.token);
         const groupList = groups?.AllGroupList || [];
-        const _debug = {};
 
-        // For each group, try to get the device list
         const sites = [];
         for (const g of groupList) {
           const groupId = g.AutoID;
-          // Try InverterList / GroupDetail with the group ID
-          let deviceSerials = [];
-          const tryEndpoints = [
-            { path: "/Senergytec/web/v2/Inverterapi/InverterList", body: { MemberAutoID: auth.memberAutoId, GroupAutoID: groupId } },
-            { path: "/Senergytec/web/v2/Inverterapi/GroupDetail", body: { MemberAutoID: auth.memberAutoId, GroupAutoID: groupId } },
-            { path: "/Senergytec/web/v2/Inverterapi/GroupInverterList", body: { MemberAutoID: auth.memberAutoId, GroupAutoID: groupId } },
-          ];
-          for (const ep of tryEndpoints) {
-            try {
-              const b = { ...ep.body };
-              b.sign = makeSign(b);
-              const result = await midnitePost(ep.path, b, auth.token);
-              _debug[ep.path.split("/").pop() + "_" + groupId] = result;
-              // Try to extract serials from various response shapes
-              const list = result?.Data || result?.data || result?.list || (Array.isArray(result) ? result : []);
-              if (Array.isArray(list) && list.length > 0 && list[0]?.GoodsID) {
-                deviceSerials = list.map(d => ({ GoodsID: d.GoodsID }));
-                break;
-              }
-            } catch(e) { _debug[ep.path.split("/").pop() + "_err"] = e.message; }
-          }
+          const ilBody = { MemberAutoID: auth.memberAutoId, GroupAutoID: groupId };
+          ilBody.sign = makeSign(ilBody);
+          const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, auth.token);
+          const list = result?.AllInverterList || [];
           const status = g.InverterStatus || {};
           sites.push({
-            MemberID: g.GoodsTypeName || auth.username,
-            GoodsID: deviceSerials,
+            MemberID: auth.username,
+            GoodsID: list.map(d => ({ GoodsID: d.GoodsID })),
             MemberStateCount: [status.Green||0, status.yellow||0, status.red||0, status.gray||0],
-            groupId: groupId,
           });
         }
-        return res.json({ accountType: "enduser", sites, _debug });
+        return res.json({ accountType: "enduser", sites });
       }
       case "status": {
         const {serials}=req.body||{};
