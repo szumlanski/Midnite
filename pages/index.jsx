@@ -21,7 +21,7 @@ async function api(action, body=null) {
 function aggregateDayData(all) {
   const map = {};
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.inTime; if(!map[k]) map[k]={time:k,pv:0,load:0,gridImport:0,gridExport:0,soc:0,n:0}; map[k].pv+=parseFloat(r.Production||0); map[k].load+=parseFloat(r.Consumption||0); map[k].gridImport+=parseFloat(r.powerFromGrid||0); map[k].gridExport+=parseFloat(r.powerToGrid||0); map[k].soc+=parseFloat(r.SOC||0); map[k].n+=1; } }
-  return Object.values(map).sort((a,b)=>a.time.localeCompare(b.time)).map(r=>({...r,soc:r.n?r.soc/r.n:0}));
+  return Object.values(map).sort((a,b)=>a.time.localeCompare(b.time)).map(r=>{const avg=r.n?r.soc/r.n:0; const batNet=r.pv-r.load-r.gridExport+r.gridImport; return {...r,soc:avg,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
 }
 function aggregateMonthData(all) {
   const map = {};
@@ -159,14 +159,16 @@ function DayChart({date,onDateChange,data,loading}) {
   const consumed = data.reduce((s,d) => s + ((d.load||0) * (5/60)), 0);
   const imported = data.reduce((s,d) => s + ((d.gridImport||0) * (5/60)), 0);
   const exported = data.reduce((s,d) => s + ((d.gridExport||0) * (5/60)), 0);
-  const chartData = data.map(d => ({...d, consumptionNeg: -(d.load||0)}));
+  const charged = data.reduce((s,d) => s + ((d.batCharge||0) * (5/60)), 0);
+  const discharged = data.reduce((s,d) => s + ((d.batDischarge||0) * (5/60)), 0);
+  const chartData = data.map(d => ({...d, consumptionNeg: -(d.load||0), batDischargeNeg: -(d.batDischarge||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
         <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Day View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>5-min intervals</div></div>
         <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
       </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:320,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(<>
           <ResponsiveContainer width="100%" height={260}>
@@ -175,8 +177,10 @@ function DayChart({date,onDateChange,data,loading}) {
               <XAxis dataKey="time" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} interval={23}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="stack"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="stack"/>
+              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} name="Produced" stackId="pos"/>
+              <Bar dataKey="batCharge" fill="#22c55e" fillOpacity={0.8} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" stackId="neg"/>
+              <Bar dataKey="batDischargeNeg" fill="#22c55e" fillOpacity={0.8} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
             </BarChart>
           </ResponsiveContainer>
           <div style={{padding:"0 8px",marginTop:8}}>
@@ -217,8 +221,8 @@ function MonthChart({month,onMonthChange,data,loading}) {
               <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="stack"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="stack"/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="pos"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="neg"/>
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -248,8 +252,8 @@ function YearChart({year,onYearChange,data,loading}) {
               <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="stack"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="stack"/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="pos"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="neg"/>
             </BarChart>
           </ResponsiveContainer>
         )}
