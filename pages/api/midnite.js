@@ -150,21 +150,25 @@ export default async function handler(req, res) {
           const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
           return res.json({ accountType: "installer", sites: Array.isArray(data) ? data : [] });
         }
-        // End-user: fetch their inverters via getAllAllMember
-        const euBody = { MemberAutoID: auth.memberAutoId };
+        // End-user: try GroupList, MemberMonitor, and getAllAllMember to find inverters
+        const euBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };
         euBody.sign = makeSign(euBody);
-        const members = await midnitePost("/Senergytec/web/v2/Inverterapi/getAllAllMember", euBody, auth.token);
-        // Return raw response for debugging + attempt to parse inverters
-        const raw = members;
+        const _debug = {};
         let inverters = [];
-        if (Array.isArray(raw)) {
-          inverters = raw.map(m => ({ GoodsID: m.GoodsID || m.goodsID || m }));
-        } else if (raw && typeof raw === "object") {
-          // Might be wrapped in Data, data, or similar
-          const list = raw.Data || raw.data || raw.list || raw.members || [];
-          if (Array.isArray(list)) inverters = list.map(m => ({ GoodsID: m.GoodsID || m.goodsID || m }));
-        }
-        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: inverters, MemberStateCount: [0,0,0,0] }], _debug: raw });
+
+        // Try GroupList first
+        try {
+          const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", euBody, auth.token);
+          _debug.GroupList = groups;
+        } catch(e) { _debug.GroupListError = e.message; }
+
+        // Try MemberMonitor
+        try {
+          const mon = await midnitePost("/Senergytec/web/v2/Inverterapi/MemberMonitor", { MemberAutoID: auth.memberAutoId, sign: makeSign({ MemberAutoID: auth.memberAutoId }) }, auth.token);
+          _debug.MemberMonitor = mon;
+        } catch(e) { _debug.MemberMonitorError = e.message; }
+
+        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: inverters, MemberStateCount: [0,0,0,0] }], _debug });
       }
       case "status": {
         const {serials}=req.body||{};
