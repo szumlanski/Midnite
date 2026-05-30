@@ -41,10 +41,10 @@ async function midnitePost(path, body, token = null) {
   return res.json();
 }
 
-async function login(user = null, pass = null) {
+async function login(user = null, pass = null, loginType = "1") {
   const username = user || process.env.MIDNITE_USERNAME || "FLOSOL2";
   const password = pass || process.env.MIDNITE_PASSWORD || "921551";
-  const params = { MemberID: username, Password: password, type: "1" };
+  const params = { MemberID: username, Password: password, type: loginType };
   const sign = makeSign(params);
   const body = { ...params, remember: false, sign };
   const data = await midnitePost("/Senergytec/web/v2/Inverterapi/UserLogin", body);
@@ -114,8 +114,8 @@ export default async function handler(req, res) {
 
   const action = req.query.action;
   try {
-    const { username, password } = req.body || {};
-    const auth = await login(username, password);
+    const { username, password, loginType } = req.body || {};
+    const auth = await login(username, password, loginType || "1");
 
     switch (action) {
       case "login": {
@@ -124,7 +124,18 @@ export default async function handler(req, res) {
       case "sites": {
         const body = { MemberAutoID: auth.memberAutoId };
         body.sign = makeSign(body);
-        const data = await midnitePost("/Senergytec/web/v2/Inverterapi/terminaluserinfo", body, auth.token);
+        // Try multiple endpoint name variations
+        const paths = [
+          "/Senergytec/web/v2/Inverterapi/TerminalUserInfo",
+          "/Senergytec/web/v2/Inverterapi/terminaluserinfo",
+          "/Senergytec/web/v2/Inverterapi/terminalUserInfo",
+        ];
+        let data = null;
+        for (const path of paths) {
+          try { data = await midnitePost(path, body, auth.token); break; }
+          catch (e) { if (!e.message.includes("405")) throw e; }
+        }
+        if (!data) throw new Error("terminaluserinfo endpoint not found");
         return res.json(data);
       }
       case "status": {
