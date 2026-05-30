@@ -65,10 +65,10 @@ function EnphaseSummaryCard({produced,consumed,imported,exported,charged,dischar
             <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Exported</div>
             <div style={{fontSize:16,fontWeight:700,color:"#4ade80",fontFamily:MONO}}>{fmtE(exported)}</div>
           </div>
-          <div>
+          {charged>0&&<div>
             <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Charged</div>
             <div style={{fontSize:16,fontWeight:700,color:"#22c55e",fontFamily:MONO}}>{fmtE(charged)}</div>
-          </div>
+          </div>}
           {discharged>0&&<div>
             <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Discharged</div>
             <div style={{fontSize:16,fontWeight:700,color:"#fbbf24",fontFamily:MONO}}>{fmtE(discharged)}</div>
@@ -155,11 +155,11 @@ function InverterSelector({selected, onChange, statuses}) {
 }
 
 function DayChart({date,onDateChange,data,loading}) {
-  const produced=data.reduce((s,d)=>s+(d.pv||0),0);
-  const consumed=data.reduce((s,d)=>s+(d.load||0),0);
-  const imported=data.reduce((s,d)=>s+(d.gridImport||0),0);
-  const exported=data.reduce((s,d)=>s+(d.gridExport||0),0);
-  const chartData=data.map(d=>({...d,consumptionNeg:-(d.load||0)}));
+  const produced = data.reduce((s,d) => s + ((d.pv||0) * (5/60)), 0);
+  const consumed = data.reduce((s,d) => s + ((d.load||0) * (5/60)), 0);
+  const imported = data.reduce((s,d) => s + ((d.gridImport||0) * (5/60)), 0);
+  const exported = data.reduce((s,d) => s + ((d.gridExport||0) * (5/60)), 0);
+  const chartData = data.map(d => ({...d, consumptionNeg: -(d.load||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
@@ -171,16 +171,12 @@ function DayChart({date,onDateChange,data,loading}) {
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(<>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
-              <defs>
-                <linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#60a5fa" stopOpacity={0.8}/><stop offset="95%" stopColor="#60a5fa" stopOpacity={0.3}/></linearGradient>
-                <linearGradient id="ldG" x1="0" y1="1" x2="0" y2="0"><stop offset="5%" stopColor="#f97316" stopOpacity={0.8}/><stop offset="95%" stopColor="#f97316" stopOpacity={0.3}/></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" verticalPoints={[0]}/>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
               <XAxis dataKey="time" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} interval={23}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={40}/>
+              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} name="Produced" radius={[2,2,0,0]}/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" radius={[0,0,2,2]}/>
+              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed"/>
             </BarChart>
           </ResponsiveContainer>
           <div style={{padding:"0 8px",marginTop:8}}>
@@ -202,10 +198,10 @@ function DayChart({date,onDateChange,data,loading}) {
 }
 
 function MonthChart({month,onMonthChange,data,loading}) {
-  const produced=data.reduce((s,d)=>s+(d.production||0),0);
-  const consumed=data.reduce((s,d)=>s+(d.consumption||0),0);
-  const imported=data.reduce((s,d)=>s+(d.fromGrid||0),0);
-  const chartData=data.map(d=>({...d,consumptionNeg:-(d.consumption||0)}));
+  const produced = data.reduce((s,d) => s + (d.production||0), 0) * 1000;
+  const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
+  const imported = data.reduce((s,d) => s + (d.fromGrid||0), 0) * 1000;
+  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
@@ -217,12 +213,12 @@ function MonthChart({month,onMonthChange,data,loading}) {
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" verticalPoints={[0]}/>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
               <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
+              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} name="Produced" radius={[2,2,0,0]}/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" radius={[0,0,2,2]}/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed"/>
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -232,9 +228,9 @@ function MonthChart({month,onMonthChange,data,loading}) {
 }
 
 function YearChart({year,onYearChange,data,loading}) {
-  const produced=data.reduce((s,d)=>s+(d.production||0),0);
-  const consumed=data.reduce((s,d)=>s+(d.consumption||0),0);
-  const chartData=data.map(d=>({...d,consumptionNeg:-(d.consumption||0)}));
+  const produced = data.reduce((s,d) => s + (d.production||0), 0) * 1000;
+  const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
+  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
@@ -248,12 +244,12 @@ function YearChart({year,onYearChange,data,loading}) {
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" verticalPoints={[0]}/>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
               <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
+              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} name="Produced" radius={[2,2,0,0]}/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" radius={[0,0,2,2]}/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed"/>
             </BarChart>
           </ResponsiveContainer>
         )}
