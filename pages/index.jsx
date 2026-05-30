@@ -257,10 +257,10 @@ function DayChart({date,onDateChange,data,loading}) {
               <XAxis dataKey="time" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} interval={23}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} name="Produced" stackId="pos"/>
-              <Bar dataKey="batCharge" fill="#22c55e" fillOpacity={0.8} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" stackId="neg"/>
-              <Bar dataKey="batDischargeNeg" fill="#22c55e" fillOpacity={0.8} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
+              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} name="Produced" stackId="a"/>
+              <Bar dataKey="batCharge" fill="#22c55e" fillOpacity={0.8} radius={[2,2,0,0]} name="Bat Charge" stackId="a"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" stackId="a"/>
+              <Bar dataKey="batDischargeNeg" fill="#22c55e" fillOpacity={0.8} radius={[0,0,2,2]} name="Bat Discharge" stackId="a"/>
             </BarChart>
           </ResponsiveContainer>
           <div style={{padding:"0 8px",marginTop:8}}>
@@ -301,8 +301,8 @@ function MonthChart({month,onMonthChange,data,loading}) {
               <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="pos"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="neg"/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="a"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="a"/>
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -332,8 +332,8 @@ function YearChart({year,onYearChange,data,loading}) {
               <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="pos"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="neg"/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="a"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="a"/>
             </BarChart>
           </ResponsiveContainer>
         )}
