@@ -66,6 +66,20 @@ export default async function handler(req, res) {
       case "login": {
         return res.json({ ok: true, memberAutoId: auth.memberAutoId });
       }
+      case "status": {
+        const {serials}=req.body||{};
+        if(!serials?.length) return res.status(400).json({error:"serials required"});
+        const results = await Promise.all(serials.map(async sn=>{
+          const body={GoodsID:sn,MemberAutoID:auth.memberAutoId};
+          body.sign=makeSign(body);
+          try {
+            const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);
+            return {sn,ok:!!raw,data:raw,error:raw?null:"No data"};
+          }
+          catch(e){return {sn,ok:false,data:null,error:e.message};}
+        }));
+        return res.json({results});
+      }
       case "day": {
         const { sn, date } = req.body || {};
         if (!sn || !date) return res.status(400).json({ error: "sn and date required" });
