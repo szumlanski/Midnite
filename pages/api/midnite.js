@@ -154,8 +154,17 @@ export default async function handler(req, res) {
         const euBody = { MemberAutoID: auth.memberAutoId };
         euBody.sign = makeSign(euBody);
         const members = await midnitePost("/Senergytec/web/v2/Inverterapi/getAllAllMember", euBody, auth.token);
-        const inverters = Array.isArray(members) ? members.map(m => ({ GoodsID: m.GoodsID || m })) : [];
-        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: inverters, MemberStateCount: [0,0,0,0] }] });
+        // Return raw response for debugging + attempt to parse inverters
+        const raw = members;
+        let inverters = [];
+        if (Array.isArray(raw)) {
+          inverters = raw.map(m => ({ GoodsID: m.GoodsID || m.goodsID || m }));
+        } else if (raw && typeof raw === "object") {
+          // Might be wrapped in Data, data, or similar
+          const list = raw.Data || raw.data || raw.list || raw.members || [];
+          if (Array.isArray(list)) inverters = list.map(m => ({ GoodsID: m.GoodsID || m.goodsID || m }));
+        }
+        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: inverters, MemberStateCount: [0,0,0,0] }], _debug: raw });
       }
       case "status": {
         const {serials}=req.body||{};
