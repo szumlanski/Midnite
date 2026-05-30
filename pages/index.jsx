@@ -73,6 +73,8 @@ const PageHead = () => (
       .site-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.1)!important}
       .inv-card{transition:box-shadow 0.2s}
       .inv-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1)!important}
+      .inv-scroll::-webkit-scrollbar{display:none}
+      .inv-scroll{-ms-overflow-style:none;scrollbar-width:none}
       @media(max-width:640px){
         .bottom-nav{display:flex!important}
         .top-tabs{display:none!important}
@@ -298,24 +300,34 @@ function InverterCard({inv, status}) {
 
 function InverterSelector({selected, onChange, statuses, inverters}) {
   const options = [
-    { value:"all", label:"All" },
+    { value:"all", label:"All", sub: `${inverters.length} inverters` },
     ...inverters.map((inv,i) => {
       const s = statuses[i];
       const pv = s?.data?.photovoltaic?.power?.totalDc;
-      return { value:inv.sn, label:inv.label + (pv!=null?` · ${fmt(pv)}`:"") };
+      // Show short SN (last 8 chars) + live power
+      const snShort = inv.sn.slice(-8);
+      return { value:inv.sn, label:inv.label, sub: snShort, power: pv!=null ? fmt(pv) : null };
     })
   ];
   return (
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16,overflowX:"auto",paddingBottom:2}}>
-      {options.map(opt=>(
-        <button key={opt.value} onClick={()=>onChange(opt.value)} className="tab-btn" style={{
-          padding:"7px 14px", borderRadius:20, border:`1px solid ${selected===opt.value?SOLAR:BORDER}`,
-          background:selected===opt.value?"#FFFBEB":"transparent",
-          color:selected===opt.value?SOLAR:MUTED,
-          fontSize:12,fontWeight:selected===opt.value?700:500,cursor:"pointer",fontFamily:SANS,
-          whiteSpace:"nowrap",
-        }}>{opt.label}</button>
-      ))}
+    <div className="inv-scroll" style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
+      {options.map(opt=>{
+        const active = selected===opt.value;
+        return (
+          <button key={opt.value} onClick={()=>onChange(opt.value)} style={{
+            flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1,
+            padding:"8px 14px", borderRadius:12,
+            border:`1.5px solid ${active?SOLAR:BORDER}`,
+            background:active?"#FFFBEB":CARD,
+            cursor:"pointer", fontFamily:SANS,
+            boxShadow: active ? `0 0 0 3px rgba(217,119,6,0.1)` : SHADOW_SM,
+            minWidth:56,
+          }}>
+            <span style={{fontSize:12,fontWeight:700,color:active?SOLAR:TEXT,whiteSpace:"nowrap"}}>{opt.label}{opt.power&&<span style={{fontWeight:500,color:active?SOLAR:MUTED}}>{" · "}{opt.power}</span>}</span>
+            <span style={{fontSize:10,fontWeight:500,color:active?"#B45309":FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"monospace"}}>{opt.sub}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
