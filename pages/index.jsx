@@ -414,7 +414,7 @@ function MonthChart({month, onMonthChange, data, loading}) {
           <Legend color={CHART_BAT} label="Battery"/>
         </div>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={12} barGap={-12}>
+          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={20} barGap={-20}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="day" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
@@ -458,7 +458,7 @@ function YearChart({year, onYearChange, data, loading}) {
           <Legend color={CHART_BAT} label="Battery"/>
         </div>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={12} barGap={-12}>
+          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={40} barGap={-40}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="month" tick={{fill:FAINT,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
