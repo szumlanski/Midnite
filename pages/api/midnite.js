@@ -68,8 +68,8 @@ function normalizeDetail(raw, sn) {
   if(!raw || raw.GoodsID === undefined) return null;
   const pvW = parseFloat(raw.TotalDCpower || 0);
   const loadW = (parseFloat(raw.loadCurrpac?.[0] || 0) + parseFloat(raw.loadCurrpac?.[1] || 0) + parseFloat(raw.loadCurrpac?.[2] || 0));
-  const gridExportW = (parseFloat(raw.gridCurrpac?.[0] || 0) + parseFloat(raw.gridCurrpac?.[1] || 0) + parseFloat(raw.gridCurrpac?.[2] || 0));
-  const gridNetW = -gridExportW;
+  // gridCurrpac: positive = importing from grid, negative = exporting to grid
+  const gridNetW = (parseFloat(raw.gridCurrpac?.[0] || 0) + parseFloat(raw.gridCurrpac?.[1] || 0) + parseFloat(raw.gridCurrpac?.[2] || 0));
   const batChargeW = parseFloat(raw.toPbat || 0);
   const batDischargeW = parseFloat(raw.fromPbat || 0);
   return {
