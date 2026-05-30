@@ -27,13 +27,13 @@ function aggregateDayData(all) {
 function aggregateMonthData(all) {
   const map = {};
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; map[k].toGrid+=r.powerToGrid||0; } }
-  return Object.values(map).sort((a,b)=>a.day-b.day);
+  return Object.values(map).sort((a,b)=>a.day-b.day).map(r=>{const batNet=r.production-r.consumption-r.toGrid+r.fromGrid; return {...r,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
 }
 function aggregateYearData(all) {
   const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const map = {};
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; map[k].toGrid+=r.powerToGrid||0; } }
-  return Object.values(map).sort((a,b)=>a.month-b.month);
+  return Object.values(map).sort((a,b)=>a.month-b.month).map(r=>{const batNet=r.production-r.consumption-r.toGrid+r.fromGrid; return {...r,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
 }
 
 const PageHead = () => (
@@ -286,14 +286,16 @@ function MonthChart({month,onMonthChange,data,loading}) {
   const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
   const imported = data.reduce((s,d) => s + (d.fromGrid||0), 0) * 1000;
   const exported = data.reduce((s,d) => s + (d.toGrid||0), 0) * 1000;
-  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
+  const charged = data.reduce((s,d) => s + (d.batCharge||0), 0) * 1000;
+  const discharged = data.reduce((s,d) => s + (d.batDischarge||0), 0) * 1000;
+  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0), batDischargeNeg: -(d.batDischarge||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
         <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Month View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Daily totals</div></div>
         <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
       </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:300,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={260}>
@@ -302,8 +304,10 @@ function MonthChart({month,onMonthChange,data,loading}) {
               <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="pos"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="neg"/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} name="Produced" stackId="pos"/>
+              <Bar dataKey="batCharge" fill="#22c55e" fillOpacity={0.8} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" stackId="neg"/>
+              <Bar dataKey="batDischargeNeg" fill="#22c55e" fillOpacity={0.8} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -317,7 +321,9 @@ function YearChart({year,onYearChange,data,loading}) {
   const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
   const imported = data.reduce((s,d) => s + (d.fromGrid||0), 0) * 1000;
   const exported = data.reduce((s,d) => s + (d.toGrid||0), 0) * 1000;
-  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
+  const charged = data.reduce((s,d) => s + (d.batCharge||0), 0) * 1000;
+  const discharged = data.reduce((s,d) => s + (d.batDischarge||0), 0) * 1000;
+  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0), batDischargeNeg: -(d.batDischarge||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
@@ -326,7 +332,7 @@ function YearChart({year,onYearChange,data,loading}) {
           {["2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:280,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={240}>
@@ -335,8 +341,10 @@ function YearChart({year,onYearChange,data,loading}) {
               <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
               <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}} cursor={false}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced" stackId="pos"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed" stackId="neg"/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} name="Produced" stackId="pos"/>
+              <Bar dataKey="batCharge" fill="#22c55e" fillOpacity={0.8} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" stackId="neg"/>
+              <Bar dataKey="batDischargeNeg" fill="#22c55e" fillOpacity={0.8} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
             </BarChart>
           </ResponsiveContainer>
         )}
