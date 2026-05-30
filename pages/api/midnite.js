@@ -41,15 +41,27 @@ async function midnitePost(path, body, token = null) {
   return res.json();
 }
 
-async function login(user = null, pass = null, loginType = "1") {
-  const username = user || process.env.MIDNITE_USERNAME || "FLOSOL2";
+async function login(user = null, pass = null) {
+  const username = user || process.env.MIDNITE_USERNAME || "Wise Naples";
   const password = pass || process.env.MIDNITE_PASSWORD || "921551";
-  const params = { MemberID: username, Password: password, type: loginType };
-  const sign = makeSign(params);
-  const body = { ...params, remember: false, sign };
+
+  // Try installer (Eagle/Operation) login first
+  try {
+    const opParams = { MemberID: username, PassWord: password };
+    opParams.sign = makeSign(opParams);
+    const opData = await midnitePost("/Eagle/v1/Operation/login", opParams);
+    if (opData.status === "ok" || opData.token) {
+      return { token: opData.token, memberAutoId: String(opData.MemberAutoID || ""), accountType: "installer", username };
+    }
+  } catch (e) { /* fall through to end-user login */ }
+
+  // Fall back to end-user (Senergytec) login
+  const params = { MemberID: username, Password: password, type: "1" };
+  params.sign = makeSign(params);
+  const body = { ...params, remember: false };
   const data = await midnitePost("/Senergytec/web/v2/Inverterapi/UserLogin", body);
-  if (data.status !== "ok") throw new Error(`Login failed: ${JSON.stringify(data)}`);
-  return { token: data.token, memberAutoId: String(data.MemberAutoID) };
+  if (data.status !== "ok") throw new Error(`Login failed: Invalid username or password`);
+  return { token: data.token, memberAutoId: String(data.MemberAutoID), accountType: "enduser", username };
 }
 
 function normalizeDetail(raw, sn) {
@@ -114,30 +126,32 @@ export default async function handler(req, res) {
 
   const action = req.query.action;
   try {
-    const { username, password, loginType } = req.body || {};
-    const auth = await login(username, password, loginType || "1");
+    const { username, password } = req.body || {};
+    const auth = await login(username, password);
 
     switch (action) {
       case "login": {
-        return res.json({ ok: true, memberAutoId: auth.memberAutoId });
+        return res.json({ ok: true, memberAutoId: auth.memberAutoId, accountType: auth.accountType });
       }
       case "sites": {
-        const now = new Date();
-        const inDate = now.toISOString().split("T")[0];
-        const inTime = now.toTimeString().split(" ")[0];
-        const body = {
-          MemberID: username || process.env.MIDNITE_USERNAME || "FLOSOL2",
-          Page: 1,
-          EndUserName: "",
-          OperationName: "",
-          GoodsID: "",
-          inDate,
-          inTime,
-          status: 0,
-        };
-        body.sign = makeSign(body);
-        const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
-        return res.json(data);
+        if (auth.accountType === "installer") {
+          const now = new Date();
+          const body = {
+            MemberID: auth.username,
+            Page: 1,
+            EndUserName: "",
+            OperationName: "",
+            GoodsID: "",
+            inDate: now.toISOString().split("T")[0],
+            inTime: now.toTimeString().split(" ")[0],
+            status: 0,
+          };
+          body.sign = makeSign(body);
+          const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
+          return res.json({ accountType: "installer", sites: Array.isArray(data) ? data : [] });
+        }
+        // End-user: return their username as the single site, inverters discovered via status
+        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: [], MemberStateCount: [0,0,0,0] }] });
       }
       case "status": {
         const {serials}=req.body||{};

@@ -367,13 +367,25 @@ export default function Dashboard() {
   const [yearLoading,setYearLoading]=useState(false);
 
   function handleSitesResponse(data) {
-    const siteList = Array.isArray(data) ? data : [];
-    const normalized = siteList.filter(s => s.GoodsID && s.GoodsID.length > 0).map(s => ({
+    const raw = data.sites || (Array.isArray(data) ? data : []);
+    const normalized = raw.filter(s => s.GoodsID && s.GoodsID.length > 0).map(s => ({
       name: s.MemberID || "Unknown",
-      inverters: s.GoodsID.map((g, j) => ({ sn: g.GoodsID || g, label: `INV-${j + 1}` })),
+      inverters: s.GoodsID.map((g, j) => ({ sn: typeof g === "string" ? g : g.GoodsID, label: `INV-${j + 1}` })),
       statusCounts: s.MemberStateCount || [0,0,0,0],
       installer: s.op_member?.installer || "",
     }));
+
+    // End-user accounts won't have inverter lists from terminaluserinfo
+    // If no sites with inverters found, create a placeholder site that will discover inverters via status
+    if (normalized.length === 0 && data.accountType === "enduser") {
+      const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
+      const endUserSite = { name: creds.username || "My Site", inverters: [], statusCounts: [0,0,0,0], installer: "", needsDiscovery: true };
+      setSites([endUserSite]);
+      setSite(endUserSite);
+      setAuthState("dashboard");
+      return;
+    }
+
     setSites(normalized);
     if (normalized.length === 0) {
       setLoginError("No sites found for this account");
