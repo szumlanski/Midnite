@@ -3,23 +3,11 @@ import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart
 } from 'recharts';
-import crypto from 'crypto-js';
-
-const MIDNITE_API = 'https://appsrv.midniteelectric.com';
-const KEY = crypto.enc.Utf8.parse('05469137076236813460585715952089');
-const IV = crypto.enc.Utf8.parse('5161557162012237');
-const SALT = '05469137076236813460585715952089';
 
 const fmtE = (wh) => {
   if (wh >= 1e6) return (wh / 1e6).toFixed(2) + ' MWh';
   if (wh >= 1e3) return (wh / 1e3).toFixed(2) + ' kWh';
   return wh.toFixed(0) + ' Wh';
-};
-
-const sign = (data) => {
-  const json = JSON.stringify(data);
-  const cipher = crypto.AES.encrypt(json, KEY, { iv: IV, mode: crypto.mode.CBC, padding: crypto.pad.Pkcs7 });
-  return crypto.enc.Base64.stringify(cipher.ciphertext);
 };
 
 const aggregateDayData = (records) => {
@@ -228,78 +216,37 @@ export default function Dashboard() {
   const [yearData, setYearData] = useState([]);
   const [socData, setSocData] = useState([]);
   const [error, setError] = useState(null);
-  const [selectedInverters, setSelectedInverters] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        console.log('Starting data load...');
         setError(null);
 
-        const loginResp = await fetch(`${MIDNITE_API}/api/common/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: '1',
-            memberID: 'FLOSOL2',
-            password: '921551',
-            remember: false
-          })
-        });
-        console.log('Login response status:', loginResp.status);
-        const loginData = await loginResp.json();
-        console.log('Login data:', loginData);
-        
-        if (!loginData.sessionID) {
-          throw new Error('No sessionID in login response');
-        }
-        
-        const sessionID = loginData.sessionID;
-        const groupID = loginData.groupID;
-
-        console.log('Got sessionID, fetching overview...');
-        const overviewResp = await fetch(`${MIDNITE_API}/api/web/system/overview`, {
-          headers: { sessionID }
-        });
-        console.log('Overview response status:', overviewResp.status);
+        const overviewResp = await fetch('/api/midnite?action=overview', { method: 'POST' });
+        if (!overviewResp.ok) throw new Error(`Overview failed: ${overviewResp.status}`);
         const overview = await overviewResp.json();
-        console.log('Overview:', overview);
         setInverters(overview.inverters || []);
 
-        console.log('Fetching day data...');
-        const dayResp = await fetch(`${MIDNITE_API}/api/web/system/dayProductionAndConsumptionAreaTime`, {
-          method: 'POST',
-          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `gid=${groupID}&mtypes=pvArray;loads;grid;battery`
-        });
-        console.log('Day response status:', dayResp.status);
+        const dayResp = await fetch('/api/midnite?action=day', { method: 'POST' });
+        if (!dayResp.ok) throw new Error(`Day failed: ${dayResp.status}`);
         const dayJson = await dayResp.json();
-        console.log('Day data records:', dayJson.records?.length);
         setDayData(aggregateDayData(dayJson.records || []));
 
-        console.log('Fetching month data...');
-        const monthResp = await fetch(`${MIDNITE_API}/api/web/system/monthProductionAndConsumptionArea`, {
+        const monthResp = await fetch('/api/midnite?action=month', {
           method: 'POST',
-          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `gid=${groupID}&date=${month}&mtypes=pvArray;loads;grid;battery`
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: month })
         });
-        console.log('Month response status:', monthResp.status);
+        if (!monthResp.ok) throw new Error(`Month failed: ${monthResp.status}`);
         const monthJson = await monthResp.json();
-        console.log('Month data items:', monthJson.data?.length);
         setMonthData(aggregateMonthData(monthJson.data || []));
 
-        console.log('Fetching year data...');
-        const yearResp = await fetch(`${MIDNITE_API}/api/web/system/yearProductionAndConsumptionArea`, {
-          method: 'POST',
-          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `gid=${groupID}&mtypes=pvArray;loads;grid;battery`
-        });
-        console.log('Year response status:', yearResp.status);
+        const yearResp = await fetch('/api/midnite?action=year', { method: 'POST' });
+        if (!yearResp.ok) throw new Error(`Year failed: ${yearResp.status}`);
         const yearJson = await yearResp.json();
-        console.log('Year data items:', yearJson.data?.length);
         setYearData(aggregateYearData(yearJson.data || []));
 
-        console.log('Data load complete');
+        setSocData((monthJson.data || []).map(d => ({ date: d.date, soc: d.battery?.soc || 0 })));
       } catch (err) {
         console.error('Error loading data:', err);
         setError(err.message);
