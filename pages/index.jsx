@@ -44,6 +44,41 @@ function StatPill({label,value,color="#94a3b8",glow=false}) {
   return <div style={{display:"flex",flexDirection:"column",gap:2,padding:"10px 14px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,boxShadow:glow?`0 0 20px ${color}30`:"none"}}><span style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:MONO}}>{label}</span><span style={{fontSize:15,fontWeight:600,color,fontFamily:MONO}}>{value}</span></div>;
 }
 
+function EnphaseSummaryCard({produced,consumed,imported,exported,charged,discharged}) {
+  return (
+    <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.05)",borderRadius:14,padding:"20px 24px",marginBottom:20}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:16}}>
+        <div style={{display:"flex",gap:20,flexWrap:"wrap",flex:1}}>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Produced</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#60a5fa",fontFamily:MONO}}>{fmtE(produced)}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Consumed</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#f97316",fontFamily:MONO}}>{fmtE(consumed)}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Imported</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#f87171",fontFamily:MONO}}>{fmtE(imported)}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Exported</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#4ade80",fontFamily:MONO}}>{fmtE(exported)}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Charged</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#22c55e",fontFamily:MONO}}>{fmtE(charged)}</div>
+          </div>
+          {discharged>0&&<div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Discharged</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#fbbf24",fontFamily:MONO}}>{fmtE(discharged)}</div>
+          </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InverterCard({inv,status}) {
   const d=status?.data;
   const pv=d?.photovoltaic?.power?.totalDc??null;
@@ -120,39 +155,45 @@ function InverterSelector({selected, onChange, statuses}) {
 }
 
 function DayChart({date,onDateChange,data,loading}) {
-  const [view,setView]=useState("all");
+  const produced=data.reduce((s,d)=>s+(d.pv||0),0);
+  const consumed=data.reduce((s,d)=>s+(d.load||0),0);
+  const imported=data.reduce((s,d)=>s+(d.gridImport||0),0);
+  const exported=data.reduce((s,d)=>s+(d.gridExport||0),0);
+  const chartData=data.map(d=>({...d,consumptionNeg:-(d.load||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Day View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>5-min intervals · W</div></div>
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
-          {["all","pv","grid"].map(v=><button key={v} onClick={()=>setView(v)} style={{padding:"5px 10px",borderRadius:7,border:"1px solid",borderColor:view===v?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.1)",background:view===v?"rgba(251,191,36,0.1)":"transparent",color:view===v?"#fbbf24":"rgba(255,255,255,0.4)",fontSize:11,cursor:"pointer",fontFamily:MONO,textTransform:"uppercase"}}>{v}</button>)}
-        </div>
+        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Day View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>5-min intervals</div></div>
+        <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
       </div>
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:320,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(<>
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={data} margin={{top:0,right:8,left:0,bottom:0}}>
+            <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
               <defs>
-                <linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3}/><stop offset="95%" stopColor="#fbbf24" stopOpacity={0}/></linearGradient>
-                <linearGradient id="ldG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#60a5fa" stopOpacity={0.2}/><stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/></linearGradient>
-                <linearGradient id="exG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.25}/><stop offset="95%" stopColor="#4ade80" stopOpacity={0}/></linearGradient>
-                <linearGradient id="imG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.25}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
+                <linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#60a5fa" stopOpacity={0.8}/><stop offset="95%" stopColor="#60a5fa" stopOpacity={0.3}/></linearGradient>
+                <linearGradient id="ldG" x1="0" y1="1" x2="0" y2="0"><stop offset="5%" stopColor="#f97316" stopOpacity={0.8}/><stop offset="95%" stopColor="#f97316" stopOpacity={0.3}/></linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-              <XAxis dataKey="time" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} interval={23}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v} width={36}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[fmt(v),n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              {(view==="all"||view==="pv")&&<Area type="monotone" dataKey="pv" stroke="#fbbf24" strokeWidth={2} fill="url(#pvG)" name="PV" dot={false}/>}
-              {(view==="all"||view==="pv")&&<Area type="monotone" dataKey="load" stroke="#60a5fa" strokeWidth={1.5} fill="url(#ldG)" name="Load" dot={false}/>}
-              {(view==="all"||view==="grid")&&<Area type="monotone" dataKey="gridExport" stroke="#4ade80" strokeWidth={1.5} fill="url(#exG)" name="Grid Export" dot={false}/>}
-              {(view==="all"||view==="grid")&&<Area type="monotone" dataKey="gridImport" stroke="#f87171" strokeWidth={1.5} fill="url(#imG)" name="Grid Import" dot={false}/>}
-            </AreaChart>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" verticalPoints={[0]}/>
+              <XAxis dataKey="time" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} interval={23}/>
+              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={40}/>
+              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
+              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} name="Produced" radius={[2,2,0,0]}/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" radius={[0,0,2,2]}/>
+            </BarChart>
           </ResponsiveContainer>
-          <div style={{padding:"0 8px",marginTop:4}}>
-            <ResponsiveContainer width="100%" height={44}><LineChart data={data} margin={{top:0,right:8,left:0,bottom:0}}><XAxis dataKey="time" hide/><YAxis domain={[0,100]} hide/><Line type="monotone" dataKey="soc" stroke="#c084fc" strokeWidth={1.5} dot={false} name="SOC %"/><Tooltip contentStyle={TOOLTIP} formatter={v=>[`${Number(v).toFixed(0)}%`,"Battery SOC"]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/></LineChart></ResponsiveContainer>
-            <div style={{fontSize:10,color:"rgba(192,132,252,0.5)",fontFamily:MONO,textAlign:"right"}}>SOC %</div>
+          <div style={{padding:"0 8px",marginTop:8}}>
+            <ResponsiveContainer width="100%" height={60}><AreaChart data={chartData} margin={{top:0,right:8,left:0,bottom:0}}>
+              <defs>
+                <linearGradient id="socG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
+              </defs>
+              <XAxis dataKey="time" hide/>
+              <YAxis domain={[0,100]} hide/>
+              <Area type="monotone" dataKey="soc" stroke="#22c55e" strokeWidth={2} fill="url(#socG)" dot={false} isAnimationActive={false}/>
+              <Tooltip contentStyle={TOOLTIP} formatter={v=>[`${Number(v).toFixed(0)}%`,"Battery SOC"]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
+            </AreaChart></ResponsiveContainer>
+            <div style={{fontSize:10,color:"rgba(34,197,94,0.5)",fontFamily:MONO,textAlign:"right"}}>Battery SOC</div>
           </div>
         </>)}
       </div>
@@ -161,24 +202,27 @@ function DayChart({date,onDateChange,data,loading}) {
 }
 
 function MonthChart({month,onMonthChange,data,loading}) {
+  const produced=data.reduce((s,d)=>s+(d.production||0),0);
+  const consumed=data.reduce((s,d)=>s+(d.consumption||0),0);
+  const imported=data.reduce((s,d)=>s+(d.fromGrid||0),0);
+  const chartData=data.map(d=>({...d,consumptionNeg:-(d.consumption||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Month View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Daily totals · kWh</div></div>
+        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Month View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Daily totals</div></div>
         <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
       </div>
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={0} charged={0} discharged={0}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:300,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={data} margin={{top:0,right:8,left:0,bottom:0}} barGap={2}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
-              <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} width={36}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${v} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Legend wrapperStyle={{fontSize:11,fontFamily:MONO,paddingTop:8}}/>
-              <Bar dataKey="production" fill="#fbbf24" fillOpacity={0.85} radius={[3,3,0,0]} name="Production"/>
-              <Bar dataKey="consumption" fill="#60a5fa" fillOpacity={0.6} radius={[3,3,0,0]} name="Consumption"/>
-              <Bar dataKey="fromGrid" fill="#f87171" fillOpacity={0.5} radius={[3,3,0,0]} name="From Grid"/>
+            <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" verticalPoints={[0]}/>
+              <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
+              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
+              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} name="Produced" radius={[2,2,0,0]}/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" radius={[0,0,2,2]}/>
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -188,25 +232,28 @@ function MonthChart({month,onMonthChange,data,loading}) {
 }
 
 function YearChart({year,onYearChange,data,loading}) {
+  const produced=data.reduce((s,d)=>s+(d.production||0),0);
+  const consumed=data.reduce((s,d)=>s+(d.consumption||0),0);
+  const chartData=data.map(d=>({...d,consumptionNeg:-(d.consumption||0)}));
   return (
     <div style={{marginBottom:32}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Year View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Monthly totals · kWh</div></div>
+        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Year View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Monthly totals</div></div>
         <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:"rgba(15,23,42,0.9)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}>
           {["2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
         </select>
       </div>
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={0} exported={0} charged={0} discharged={0}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:280,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={data} margin={{top:0,right:8,left:0,bottom:0}} barGap={3}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
-              <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={false}/>
+            <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" verticalPoints={[0]}/>
+              <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
               <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={false} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Number(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Legend wrapperStyle={{fontSize:11,fontFamily:MONO,paddingTop:8}}/>
-              <Bar dataKey="production" fill="#fbbf24" fillOpacity={0.85} radius={[4,4,0,0]} name="Production"/>
-              <Bar dataKey="consumption" fill="#60a5fa" fillOpacity={0.6} radius={[4,4,0,0]} name="Consumption"/>
+              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
+              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} name="Produced" radius={[2,2,0,0]}/>
+              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} name="Consumed" radius={[0,0,2,2]}/>
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -241,14 +288,12 @@ export default function Dashboard() {
 
   useEffect(()=>{fetchLive();const t=setInterval(fetchLive,60000);return()=>clearInterval(t);},[fetchLive]);
 
-  // Which inverters to show/fetch for charts
   const chartInverters = selectedInv==="all" ? SITE.inverters : SITE.inverters.filter(i=>i.sn===selectedInv);
 
   useEffect(()=>{ if(tab!=="day") return; setDayLoading(true); Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))).then(all=>{setDayData(aggregateDayData(all));setDayLoading(false);}); },[tab,dayDate,selectedInv]);
   useEffect(()=>{ if(tab!=="month") return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); },[tab,monthDate,selectedInv]);
   useEffect(()=>{ if(tab!=="year") return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); },[tab,yearVal,selectedInv]);
 
-  // Filtered statuses for live view
   const visibleStatuses = selectedInv==="all" ? statuses : statuses.filter(s=>s.sn===selectedInv);
 
   return (
