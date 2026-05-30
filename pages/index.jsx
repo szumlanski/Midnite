@@ -1,56 +1,13 @@
 import { useState, useEffect } from 'react';
 import {
-  BarChart, Bar, LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart
+  BarChart, Bar, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart
 } from 'recharts';
 
 const fmtE = (wh) => {
   if (wh >= 1e6) return (wh / 1e6).toFixed(2) + ' MWh';
   if (wh >= 1e3) return (wh / 1e3).toFixed(2) + ' kWh';
   return wh.toFixed(0) + ' Wh';
-};
-
-const aggregateDayData = (records) => {
-  const byTime = {};
-  records.forEach(r => {
-    const key = r.recordTime;
-    if (!byTime[key]) byTime[key] = { time: key, pv: 0, load: 0, charge: 0, discharge: 0 };
-    byTime[key].pv += r.pvArray?.power || 0;
-    byTime[key].load += r.loads?.power || 0;
-    byTime[key].charge += r.battery?.chargeRate || 0;
-    byTime[key].discharge += r.battery?.dischargeRate || 0;
-  });
-  return Object.values(byTime).map(d => ({
-    ...d,
-    pvWh: d.pv * (5/60),
-    loadWh: d.load * (5/60),
-    chargeWh: d.charge * (5/60),
-    dischargeWh: d.discharge * (5/60)
-  }));
-};
-
-const aggregateMonthData = (days) => {
-  return days.map(d => ({
-    date: d.date,
-    produced: (d.pvArray?.energyProduced || 0) * 1000,
-    consumed: (d.loads?.energyConsumed || 0) * 1000,
-    imported: (d.grid?.energyImported || 0) * 1000,
-    exported: (d.grid?.energyExported || 0) * 1000,
-    charged: (d.battery?.energyCharged || 0) * 1000,
-    discharged: (d.battery?.energyDischarged || 0) * 1000
-  }));
-};
-
-const aggregateYearData = (months) => {
-  return months.map(m => ({
-    date: m.date,
-    produced: m.pvArray?.energyProduced * 1000 || 0,
-    consumed: m.loads?.energyConsumed * 1000 || 0,
-    imported: m.grid?.energyImported * 1000 || 0,
-    exported: m.grid?.energyExported * 1000 || 0,
-    charged: m.battery?.energyCharged * 1000 || 0,
-    discharged: m.battery?.energyDischarged * 1000 || 0
-  }));
 };
 
 const EnphaseSummaryCard = ({ produced, consumed, imported, exported, charged, discharged }) => (
@@ -89,15 +46,13 @@ const DayChart = ({ data }) => {
   if (!data || data.length === 0) return <div style={{color: '#e2e8f0'}}>No day data</div>;
   
   const totals = data.reduce((acc, d) => ({
-    pv: acc.pv + (d.pvWh || 0),
-    load: acc.load + (d.loadWh || 0),
-    charge: acc.charge + (d.chargeWh || 0),
-    discharge: acc.discharge + (d.dischargeWh || 0)
-  }), { pv: 0, load: 0, charge: 0, discharge: 0 });
+    produced: acc.produced + (d.produced || 0),
+    consumed: acc.consumed + (d.consumed || 0)
+  }), { produced: 0, consumed: 0 });
 
   return (
     <div>
-      <EnphaseSummaryCard produced={totals.pv} consumed={totals.load} imported={0} exported={0} charged={totals.charge} discharged={totals.discharge} />
+      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={0} exported={0} charged={0} discharged={0} />
       <ResponsiveContainer width="100%" height={400}>
         <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -108,10 +63,8 @@ const DayChart = ({ data }) => {
             labelStyle={{ color: '#e2e8f0' }}
             cursor={false}
           />
-          <Bar dataKey="pvWh" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="chargeWh" fill="#22c55e" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="loadWh" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="dischargeWh" fill="#f43f5e" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="produced" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="consumed" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -125,14 +78,12 @@ const MonthChart = ({ data }) => {
     produced: acc.produced + (d.produced || 0),
     consumed: acc.consumed + (d.consumed || 0),
     imported: acc.imported + (d.imported || 0),
-    exported: acc.exported + (d.exported || 0),
-    charged: acc.charged + (d.charged || 0),
-    discharged: acc.discharged + (d.discharged || 0)
-  }), { produced: 0, consumed: 0, imported: 0, exported: 0, charged: 0, discharged: 0 });
+    exported: acc.exported + (d.exported || 0)
+  }), { produced: 0, consumed: 0, imported: 0, exported: 0 });
 
   return (
     <div>
-      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={totals.imported} exported={totals.exported} charged={totals.charged} discharged={totals.discharged} />
+      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={totals.imported} exported={totals.exported} charged={0} discharged={0} />
       <ResponsiveContainer width="100%" height={400}>
         <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -144,9 +95,7 @@ const MonthChart = ({ data }) => {
             cursor={false}
           />
           <Bar dataKey="produced" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="charged" fill="#22c55e" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
           <Bar dataKey="consumed" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="discharged" fill="#f43f5e" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -160,14 +109,12 @@ const YearChart = ({ data }) => {
     produced: acc.produced + (d.produced || 0),
     consumed: acc.consumed + (d.consumed || 0),
     imported: acc.imported + (d.imported || 0),
-    exported: acc.exported + (d.exported || 0),
-    charged: acc.charged + (d.charged || 0),
-    discharged: acc.discharged + (d.discharged || 0)
-  }), { produced: 0, consumed: 0, imported: 0, exported: 0, charged: 0, discharged: 0 });
+    exported: acc.exported + (d.exported || 0)
+  }), { produced: 0, consumed: 0, imported: 0, exported: 0 });
 
   return (
     <div>
-      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={totals.imported} exported={totals.exported} charged={totals.charged} discharged={totals.discharged} />
+      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={totals.imported} exported={totals.exported} charged={0} discharged={0} />
       <ResponsiveContainer width="100%" height={400}>
         <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -179,9 +126,7 @@ const YearChart = ({ data }) => {
             cursor={false}
           />
           <Bar dataKey="produced" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="charged" fill="#22c55e" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
           <Bar dataKey="consumed" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
-          <Bar dataKey="discharged" fill="#f43f5e" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -207,14 +152,14 @@ const BatterySOCChart = ({ data }) => {
   );
 };
 
+const INVERTER_SERIALS = ['2426-90190114PH', '2426-90190151PH', '2426-90190186PH', '2426-90190187PH'];
+
 export default function Dashboard() {
   const [view, setView] = useState('day');
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [inverters, setInverters] = useState([]);
   const [dayData, setDayData] = useState([]);
   const [monthData, setMonthData] = useState([]);
   const [yearData, setYearData] = useState([]);
-  const [socData, setSocData] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -222,31 +167,53 @@ export default function Dashboard() {
       try {
         setError(null);
 
-        const overviewResp = await fetch('/api/midnite?action=overview', { method: 'POST' });
-        if (!overviewResp.ok) throw new Error(`Overview failed: ${overviewResp.status}`);
-        const overview = await overviewResp.json();
-        setInverters(overview.inverters || []);
+        // Load day data
+        const dayPromises = INVERTER_SERIALS.map(sn =>
+          fetch('/api/midnite?action=day', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sn, date: new Date().toISOString().slice(0, 10) })
+          }).then(r => r.json()).catch(e => ({ error: e.message }))
+        );
+        const dayResults = await Promise.all(dayPromises);
+        const dayRecords = dayResults.flatMap(r => r.areaDataList || []).map(d => ({
+          time: d.area_time,
+          produced: (d.day_electric_produce || 0) * 1000,
+          consumed: (d.day_electric_consumption || 0) * 1000
+        }));
+        setDayData(dayRecords);
 
-        const dayResp = await fetch('/api/midnite?action=day', { method: 'POST' });
-        if (!dayResp.ok) throw new Error(`Day failed: ${dayResp.status}`);
-        const dayJson = await dayResp.json();
-        setDayData(aggregateDayData(dayJson.records || []));
+        // Load month data
+        const monthPromises = INVERTER_SERIALS.map(sn =>
+          fetch('/api/midnite?action=month', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sn, date: month })
+          }).then(r => r.json()).catch(e => ({ error: e.message }))
+        );
+        const monthResults = await Promise.all(monthPromises);
+        const monthRecords = monthResults.flatMap(r => r.areaDataList || []).map(d => ({
+          date: d.area_time,
+          produced: (d.month_electric_produce || 0) * 1000,
+          consumed: (d.month_electric_consumption || 0) * 1000
+        }));
+        setMonthData(monthRecords);
 
-        const monthResp = await fetch('/api/midnite?action=month', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: month })
-        });
-        if (!monthResp.ok) throw new Error(`Month failed: ${monthResp.status}`);
-        const monthJson = await monthResp.json();
-        setMonthData(aggregateMonthData(monthJson.data || []));
-
-        const yearResp = await fetch('/api/midnite?action=year', { method: 'POST' });
-        if (!yearResp.ok) throw new Error(`Year failed: ${yearResp.status}`);
-        const yearJson = await yearResp.json();
-        setYearData(aggregateYearData(yearJson.data || []));
-
-        setSocData((monthJson.data || []).map(d => ({ date: d.date, soc: d.battery?.soc || 0 })));
+        // Load year data
+        const yearPromises = INVERTER_SERIALS.map(sn =>
+          fetch('/api/midnite?action=year', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sn })
+          }).then(r => r.json()).catch(e => ({ error: e.message }))
+        );
+        const yearResults = await Promise.all(yearPromises);
+        const yearRecords = yearResults.flatMap(r => r.areaDataList || []).map(d => ({
+          date: d.area_time,
+          produced: (d.year_electric_produce || 0) * 1000,
+          consumed: (d.year_electric_consumption || 0) * 1000
+        }));
+        setYearData(yearRecords);
       } catch (err) {
         console.error('Error loading data:', err);
         setError(err.message);
@@ -277,8 +244,8 @@ export default function Dashboard() {
           >
             All Inverters
           </button>
-          {inverters.map(inv => (
-            <button key={inv.id} style={{
+          {INVERTER_SERIALS.map(sn => (
+            <button key={sn} style={{
               padding: '0.75rem 1rem',
               background: '#1e293b',
               color: '#e2e8f0',
@@ -287,7 +254,7 @@ export default function Dashboard() {
               cursor: 'pointer',
               fontSize: '0.875rem'
             }}>
-              {inv.name} - {(inv.power / 1000).toFixed(1)} kW - SOC {inv.soc || 0}%
+              {sn}
             </button>
           ))}
         </div>
@@ -296,7 +263,7 @@ export default function Dashboard() {
           <div>
             <h2 style={{ margin: 0, fontSize: '1.875rem', fontWeight: 'bold' }}>{view === 'day' ? 'Day View' : view === 'month' ? 'Month View' : 'Year View'}</h2>
             <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.875rem' }}>
-              {view === 'day' && 'Today, 5-minute intervals'}
+              {view === 'day' && 'Today'}
               {view === 'month' && 'Daily totals'}
               {view === 'year' && 'Monthly totals'}
             </p>
@@ -345,7 +312,7 @@ export default function Dashboard() {
 
         <div style={{ marginTop: '2rem' }}>
           <h3 style={{ marginBottom: '1rem' }}>Battery SOC</h3>
-          <BatterySOCChart data={socData} />
+          <BatterySOCChart data={[]} />
         </div>
       </div>
     </div>
