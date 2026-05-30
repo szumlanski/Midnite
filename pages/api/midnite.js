@@ -179,14 +179,6 @@ export default async function handler(req, res) {
         }
         return res.json({ accountType: "enduser", sites });
       }
-      case "rawstatus": {
-        const {sn}=req.body||{};
-        if(!sn) return res.status(400).json({error:"sn required"});
-        const body={GoodsID:sn,MemberAutoID:auth.memberAutoId};
-        body.sign=makeSign(body);
-        const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);
-        return res.json({raw});
-      }
       case "status": {
         const {serials}=req.body||{};
         if(!serials?.length) return res.status(400).json({error:"serials required"});
