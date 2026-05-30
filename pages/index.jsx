@@ -98,7 +98,7 @@ const EnphaseSummaryCard = ({ produced, consumed, imported, exported, charged, d
 );
 
 const DayChart = ({ data }) => {
-  if (!data || data.length === 0) return <div>No day data</div>;
+  if (!data || data.length === 0) return <div style={{color: '#e2e8f0'}}>No day data</div>;
   
   const totals = data.reduce((acc, d) => ({
     pv: acc.pv + (d.pvWh || 0),
@@ -131,7 +131,7 @@ const DayChart = ({ data }) => {
 };
 
 const MonthChart = ({ data }) => {
-  if (!data || data.length === 0) return <div>No month data</div>;
+  if (!data || data.length === 0) return <div style={{color: '#e2e8f0'}}>No month data</div>;
   
   const totals = data.reduce((acc, d) => ({
     produced: acc.produced + (d.produced || 0),
@@ -166,7 +166,7 @@ const MonthChart = ({ data }) => {
 };
 
 const YearChart = ({ data }) => {
-  if (!data || data.length === 0) return <div>No year data</div>;
+  if (!data || data.length === 0) return <div style={{color: '#e2e8f0'}}>No year data</div>;
   
   const totals = data.reduce((acc, d) => ({
     produced: acc.produced + (d.produced || 0),
@@ -201,7 +201,7 @@ const YearChart = ({ data }) => {
 };
 
 const BatterySOCChart = ({ data }) => {
-  if (!data || data.length === 0) return <div>No SOC data</div>;
+  if (!data || data.length === 0) return <div style={{color: '#e2e8f0'}}>No SOC data</div>;
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -227,13 +227,18 @@ export default function Dashboard() {
   const [monthData, setMonthData] = useState([]);
   const [yearData, setYearData] = useState([]);
   const [socData, setSocData] = useState([]);
+  const [error, setError] = useState(null);
   const [selectedInverters, setSelectedInverters] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
+        console.log('Starting data load...');
+        setError(null);
+
         const loginResp = await fetch(`${MIDNITE_API}/api/common/login`, {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: '1',
             memberID: 'FLOSOL2',
@@ -241,48 +246,63 @@ export default function Dashboard() {
             remember: false
           })
         });
-        const { sessionID, groupID } = await loginResp.json();
+        console.log('Login response status:', loginResp.status);
+        const loginData = await loginResp.json();
+        console.log('Login data:', loginData);
+        
+        if (!loginData.sessionID) {
+          throw new Error('No sessionID in login response');
+        }
+        
+        const sessionID = loginData.sessionID;
+        const groupID = loginData.groupID;
 
+        console.log('Got sessionID, fetching overview...');
         const overviewResp = await fetch(`${MIDNITE_API}/api/web/system/overview`, {
           headers: { sessionID }
         });
+        console.log('Overview response status:', overviewResp.status);
         const overview = await overviewResp.json();
+        console.log('Overview:', overview);
         setInverters(overview.inverters || []);
-        setSelectedInverters(overview.inverters);
 
+        console.log('Fetching day data...');
         const dayResp = await fetch(`${MIDNITE_API}/api/web/system/dayProductionAndConsumptionAreaTime`, {
           method: 'POST',
           headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `gid=${groupID}&mtypes=pvArray;loads;grid;battery`
         });
-        const dayRecords = await dayResp.json();
-        setDayData(aggregateDayData(dayRecords.records || []));
+        console.log('Day response status:', dayResp.status);
+        const dayJson = await dayResp.json();
+        console.log('Day data records:', dayJson.records?.length);
+        setDayData(aggregateDayData(dayJson.records || []));
 
+        console.log('Fetching month data...');
         const monthResp = await fetch(`${MIDNITE_API}/api/web/system/monthProductionAndConsumptionArea`, {
           method: 'POST',
           headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `gid=${groupID}&date=${month}&mtypes=pvArray;loads;grid;battery`
         });
-        const monthRecords = await monthResp.json();
-        setMonthData(aggregateMonthData(monthRecords.data || []));
+        console.log('Month response status:', monthResp.status);
+        const monthJson = await monthResp.json();
+        console.log('Month data items:', monthJson.data?.length);
+        setMonthData(aggregateMonthData(monthJson.data || []));
 
+        console.log('Fetching year data...');
         const yearResp = await fetch(`${MIDNITE_API}/api/web/system/yearProductionAndConsumptionArea`, {
           method: 'POST',
           headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `gid=${groupID}&mtypes=pvArray;loads;grid;battery`
         });
-        const yearRecords = await yearResp.json();
-        setYearData(aggregateYearData(yearRecords.data || []));
+        console.log('Year response status:', yearResp.status);
+        const yearJson = await yearResp.json();
+        console.log('Year data items:', yearJson.data?.length);
+        setYearData(aggregateYearData(yearJson.data || []));
 
-        const socResp = await fetch(`${MIDNITE_API}/api/web/system/monthProductionAndConsumptionArea`, {
-          method: 'POST',
-          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `gid=${groupID}&date=${month}&mtypes=battery`
-        });
-        const socRecords = await socResp.json();
-        setSocData((socRecords.data || []).map(d => ({ date: d.date, soc: d.battery?.soc || 0 })));
+        console.log('Data load complete');
       } catch (err) {
-        console.error(err);
+        console.error('Error loading data:', err);
+        setError(err.message);
       }
     };
 
@@ -293,6 +313,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ background: '#020617', color: '#e2e8f0', minHeight: '100vh', padding: '2rem', fontFamily: 'system-ui' }}>
+      {error && <div style={{color: '#f87171', marginBottom: '1rem', padding: '1rem', background: '#7f1d1d', borderRadius: '0.5rem'}}>Error: {error}</div>}
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', overflowX: 'auto' }}>
           <button 
