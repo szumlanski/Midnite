@@ -67,13 +67,18 @@ async function login(user = null, pass = null) {
 function normalizeDetail(raw, sn) {
   if(!raw || raw.GoodsID === undefined) return null;
   const pvW = parseFloat(raw.TotalDCpower || 0);
-  // AIO inverters (MN *-AIO) serve load through EPS port, not the AC load port
-  const isAIO = (raw.modelName || "").includes("AIO");
-  const loadPac = isAIO ? raw.epsCurrpac : raw.loadCurrpac;
-  const loadVac = isAIO ? raw.epsVac : raw.loadVac;
-  const loadIac = isAIO ? raw.epsIac : raw.loadIac;
-  const loadEnergyDay = isAIO ? parseFloat(raw.EPSDay || 0) : parseFloat(raw.ELDay || 0);
-  const loadEnergyTotal = isAIO ? parseFloat(raw.EPSTotal || 0) : parseFloat(raw.ELTotal || 0);
+  // Some inverter models (AIO and others) serve load through the EPS port rather than the AC load port.
+  // Auto-detect: if loadCurrpac sums to zero but epsCurrpac has power, use epsCurrpac.
+  const loadPacRaw = raw.loadCurrpac;
+  const epsPacRaw = raw.epsCurrpac;
+  const loadSum = (parseFloat(loadPacRaw?.[0]||0) + parseFloat(loadPacRaw?.[1]||0) + parseFloat(loadPacRaw?.[2]||0));
+  const epsSum  = (parseFloat(epsPacRaw?.[0]||0)  + parseFloat(epsPacRaw?.[1]||0));
+  const useEPS  = loadSum === 0 && epsSum > 0;
+  const loadPac = useEPS ? epsPacRaw : loadPacRaw;
+  const loadVac = useEPS ? raw.epsVac : raw.loadVac;
+  const loadIac = useEPS ? raw.epsIac : raw.loadIac;
+  const loadEnergyDay   = useEPS ? parseFloat(raw.EPSDay   || 0) : parseFloat(raw.ELDay   || 0);
+  const loadEnergyTotal = useEPS ? parseFloat(raw.EPSTotal || 0) : parseFloat(raw.ELTotal || 0);
   const loadW = (parseFloat(loadPac?.[0] || 0) + parseFloat(loadPac?.[1] || 0) + parseFloat(loadPac?.[2] || 0));
   // gridCurrpac: positive = importing from grid, negative = exporting to grid
   const gridNetW = (parseFloat(raw.gridCurrpac?.[0] || 0) + parseFloat(raw.gridCurrpac?.[1] || 0) + parseFloat(raw.gridCurrpac?.[2] || 0));
