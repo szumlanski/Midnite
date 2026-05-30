@@ -26,13 +26,13 @@ function aggregateDayData(all) {
 }
 function aggregateMonthData(all) {
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; } }
+  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; map[k].toGrid+=r.powerToGrid||0; } }
   return Object.values(map).sort((a,b)=>a.day-b.day);
 }
 function aggregateYearData(all) {
   const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; } }
+  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; map[k].toGrid+=r.powerToGrid||0; } }
   return Object.values(map).sort((a,b)=>a.month-b.month);
 }
 
@@ -285,6 +285,7 @@ function MonthChart({month,onMonthChange,data,loading}) {
   const produced = data.reduce((s,d) => s + (d.production||0), 0) * 1000;
   const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
   const imported = data.reduce((s,d) => s + (d.fromGrid||0), 0) * 1000;
+  const exported = data.reduce((s,d) => s + (d.toGrid||0), 0) * 1000;
   const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
   return (
     <div style={{marginBottom:32}}>
@@ -292,7 +293,7 @@ function MonthChart({month,onMonthChange,data,loading}) {
         <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Month View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Daily totals</div></div>
         <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
       </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={0} charged={0} discharged={0}/>}
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:300,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={260}>
@@ -314,6 +315,8 @@ function MonthChart({month,onMonthChange,data,loading}) {
 function YearChart({year,onYearChange,data,loading}) {
   const produced = data.reduce((s,d) => s + (d.production||0), 0) * 1000;
   const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
+  const imported = data.reduce((s,d) => s + (d.fromGrid||0), 0) * 1000;
+  const exported = data.reduce((s,d) => s + (d.toGrid||0), 0) * 1000;
   const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
   return (
     <div style={{marginBottom:32}}>
@@ -323,7 +326,7 @@ function YearChart({year,onYearChange,data,loading}) {
           {["2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={0} exported={0} charged={0} discharged={0}/>}
+      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
       <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:280,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
         {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
           <ResponsiveContainer width="100%" height={240}>
