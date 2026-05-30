@@ -41,9 +41,9 @@ async function midnitePost(path, body, token = null) {
   return res.json();
 }
 
-async function login() {
-  const username = process.env.MIDNITE_USERNAME || "FLOSOL2";
-  const password = process.env.MIDNITE_PASSWORD || "921551";
+async function login(user = null, pass = null) {
+  const username = user || process.env.MIDNITE_USERNAME || "FLOSOL2";
+  const password = pass || process.env.MIDNITE_PASSWORD || "921551";
   const params = { MemberID: username, Password: password, type: "1" };
   const sign = makeSign(params);
   const body = { ...params, remember: false, sign };
@@ -114,11 +114,18 @@ export default async function handler(req, res) {
 
   const action = req.query.action;
   try {
-    const auth = await login();
-    
+    const { username, password } = req.body || {};
+    const auth = await login(username, password);
+
     switch (action) {
       case "login": {
         return res.json({ ok: true, memberAutoId: auth.memberAutoId });
+      }
+      case "sites": {
+        const body = { MemberAutoID: auth.memberAutoId };
+        body.sign = makeSign(body);
+        const data = await midnitePost("/Senergytec/web/v2/Inverterapi/terminaluserinfo", body, auth.token);
+        return res.json(data);
       }
       case "status": {
         const {serials}=req.body||{};

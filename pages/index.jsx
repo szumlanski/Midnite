@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
-import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-const SITE = { name: "Wise Naples", groupId: "47031", inverters: [{ sn: "2426-90190114PH", label: "INV-1" },{ sn: "2426-90190151PH", label: "INV-2" },{ sn: "2426-90190186PH", label: "INV-3" },{ sn: "2426-90190187PH", label: "INV-4" }] };
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const thisYear = today.slice(0,4);
@@ -13,7 +12,9 @@ const fmt = (w,d=1) => { if(w==null) return "--"; if(Math.abs(w)>=1000) return `
 const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1000000).toFixed(2)} MWh`; if(wh>=1000) return `${(wh/1000).toFixed(1)} kWh`; return `${Math.round(wh)} Wh`; };
 
 async function api(action, body=null) {
-  const res = await fetch(`/api/midnite?action=${action}`, { method:body?"POST":"GET", headers:{"Content-Type":"application/json"}, ...(body?{body:JSON.stringify(body)}:{}) });
+  const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
+  const merged = { ...body, username: creds.username, password: creds.password };
+  const res = await fetch(`/api/midnite?action=${action}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(merged) });
   if(!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
@@ -33,6 +34,85 @@ function aggregateYearData(all) {
   const map = {};
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; } }
   return Object.values(map).sort((a,b)=>a.month-b.month);
+}
+
+const PageHead = () => (
+  <Head>
+    <title>Midnite Solar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+    <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{background:#080f1e;color:#e2e8f0}input[type=date]::-webkit-calendar-picker-indicator,input[type=month]::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:pointer}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+  </Head>
+);
+
+function LoginForm({onLogin, error, loading}) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const submit = (e) => { e.preventDefault(); if(username&&password) onLogin(username, password); };
+  return (
+    <>
+      <PageHead/>
+      <div style={{minHeight:"100vh",background:"#080f1e",backgroundImage:"radial-gradient(ellipse 80% 50% at 50% -20%,rgba(251,191,36,0.06),transparent 60%)",fontFamily:SANS,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <form onSubmit={submit} style={{width:"100%",maxWidth:360,padding:32,background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,animation:"fadeUp 0.4s ease"}}>
+          <div style={{textAlign:"center",marginBottom:28}}>
+            <div style={{width:48,height:48,borderRadius:12,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:24,boxShadow:"0 0 24px rgba(251,191,36,0.4)",marginBottom:12}}>⚡</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#e2e8f0"}}>Midnite Solar</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO,marginTop:4}}>Sign in to your portal</div>
+          </div>
+          {error&&<div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#f87171",fontFamily:MONO}}>{error}</div>}
+          <div style={{marginBottom:14}}>
+            <label style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:MONO,textTransform:"uppercase",letterSpacing:"0.08em",display:"block",marginBottom:6}}>Username</label>
+            <input type="text" value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" autoFocus style={{width:"100%",padding:"10px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"#e2e8f0",fontSize:14,fontFamily:MONO,outline:"none"}}/>
+          </div>
+          <div style={{marginBottom:24}}>
+            <label style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:MONO,textTransform:"uppercase",letterSpacing:"0.08em",display:"block",marginBottom:6}}>Password</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" style={{width:"100%",padding:"10px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"#e2e8f0",fontSize:14,fontFamily:MONO,outline:"none"}}/>
+          </div>
+          <button type="submit" disabled={loading||!username||!password} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",background:loading?"rgba(251,191,36,0.3)":"linear-gradient(135deg,#fbbf24,#f59e0b)",color:"#080f1e",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:loading?"wait":"pointer",letterSpacing:"0.02em",boxShadow:loading?"none":"0 0 20px rgba(251,191,36,0.3)",transition:"all 0.15s"}}>{loading?"Signing in...":"Sign In"}</button>
+        </form>
+      </div>
+    </>
+  );
+}
+
+function SiteSelector({sites, onSelect, onLogout}) {
+  return (
+    <>
+      <PageHead/>
+      <div style={{minHeight:"100vh",background:"#080f1e",backgroundImage:"radial-gradient(ellipse 80% 50% at 50% -20%,rgba(251,191,36,0.06),transparent 60%)",fontFamily:SANS,paddingBottom:48}}>
+        <div style={{borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(0,0,0,0.3)",backdropFilter:"blur(12px)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,boxShadow:"0 0 16px rgba(251,191,36,0.4)"}}>⚡</div>
+            <div><div style={{fontSize:15,fontWeight:700}}>Select Site</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>{sites.length} sites available</div></div>
+          </div>
+          <button onClick={onLogout} style={{padding:"6px 14px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.03)",color:"rgba(255,255,255,0.4)",fontSize:11,fontFamily:MONO,cursor:"pointer",transition:"all 0.15s"}}>Logout</button>
+        </div>
+        <div style={{maxWidth:900,margin:"0 auto",padding:"32px 20px",animation:"fadeUp 0.4s ease"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
+            {sites.map(s=>{
+              const [on,alarm,off,disc]=s.statusCounts;
+              const total=s.inverters.length;
+              return (
+                <button key={s.name} onClick={()=>onSelect(s)} style={{textAlign:"left",padding:"20px 22px",background:"linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))",border:"1px solid rgba(255,255,255,0.09)",borderRadius:16,cursor:"pointer",transition:"transform 0.2s, border-color 0.2s",display:"flex",flexDirection:"column",gap:10}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.borderColor="rgba(251,191,36,0.4)";}} onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.borderColor="rgba(255,255,255,0.09)";}}>
+                  <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>{s.name}</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>{total} inverter{total!==1?"s":""}</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    {on>0&&<span style={{fontSize:10,fontFamily:MONO,color:"#4ade80",display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:"#4ade80",boxShadow:"0 0 6px #4ade8080",display:"inline-block"}}/>{on} online</span>}
+                    {alarm>0&&<span style={{fontSize:10,fontFamily:MONO,color:"#fbbf24",display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:"#fbbf24",display:"inline-block"}}/>{alarm} alarm</span>}
+                    {off>0&&<span style={{fontSize:10,fontFamily:MONO,color:"#f87171",display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:"#f87171",display:"inline-block"}}/>{off} offline</span>}
+                    {disc>0&&<span style={{fontSize:10,fontFamily:MONO,color:"rgba(255,255,255,0.3)",display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",display:"inline-block"}}/>{disc} disconnected</span>}
+                    {total===0&&<span style={{fontSize:10,fontFamily:MONO,color:"rgba(255,255,255,0.2)"}}>No inverters</span>}
+                  </div>
+                  {s.installer&&<div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:MONO}}>Installer: {s.installer}</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
 
 function SOCBar({value}) {
@@ -126,10 +206,10 @@ function AggregateBar({statuses}) {
   );
 }
 
-function InverterSelector({selected, onChange, statuses}) {
+function InverterSelector({selected, onChange, statuses, inverters}) {
   const options = [
     { value: "all", label: "All Inverters" },
-    ...SITE.inverters.map((inv, i) => {
+    ...inverters.map((inv, i) => {
       const s = statuses[i];
       const pv = s?.data?.photovoltaic?.power?.totalDc;
       const soc = s?.data?.battery?.soc;
@@ -263,6 +343,12 @@ function YearChart({year,onYearChange,data,loading}) {
 }
 
 export default function Dashboard() {
+  const [authState, setAuthState] = useState("loading");
+  const [loginError, setLoginError] = useState(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [sites, setSites] = useState([]);
+  const [site, setSite] = useState(null);
+
   const [tab,setTab]=useState("live");
   const [statuses,setStatuses]=useState([]);
   const [liveLoading,setLiveLoading]=useState(true);
@@ -280,47 +366,114 @@ export default function Dashboard() {
   const [yearData,setYearData]=useState([]);
   const [yearLoading,setYearLoading]=useState(false);
 
+  function handleSitesResponse(data) {
+    const siteList = Array.isArray(data) ? data : [];
+    const normalized = siteList.filter(s => s.GoodsID && s.GoodsID.length > 0).map(s => ({
+      name: s.MemberID || "Unknown",
+      inverters: s.GoodsID.map((g, j) => ({ sn: g.GoodsID || g, label: `INV-${j + 1}` })),
+      statusCounts: s.MemberStateCount || [0,0,0,0],
+      installer: s.op_member?.installer || "",
+    }));
+    setSites(normalized);
+    if (normalized.length === 0) {
+      setLoginError("No sites found for this account");
+      setAuthState("login");
+    } else if (normalized.length === 1) {
+      setSite(normalized[0]);
+      setAuthState("dashboard");
+    } else {
+      const savedName = localStorage.getItem("midnite_selected_site");
+      const saved = savedName && normalized.find(s => s.name === savedName);
+      if (saved) { setSite(saved); setAuthState("dashboard"); }
+      else setAuthState("sites");
+    }
+  }
+
+  async function handleLogin(username, password) {
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      localStorage.setItem("midnite_creds", JSON.stringify({ username, password }));
+      await api("login");
+      const sitesData = await api("sites");
+      handleSitesResponse(sitesData);
+    } catch (e) {
+      localStorage.removeItem("midnite_creds");
+      setLoginError(e.message.includes("Login failed") ? "Invalid username or password" : e.message);
+      setAuthState("login");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("midnite_creds");
+    localStorage.removeItem("midnite_selected_site");
+    setSite(null);
+    setSites([]);
+    setStatuses([]);
+    setAuthState("login");
+  }
+
+  function handleSelectSite(s) {
+    setSite(s);
+    setStatuses([]);
+    setLiveLoading(true);
+    setSelectedInv("all");
+    localStorage.setItem("midnite_selected_site", s.name);
+    setAuthState("dashboard");
+  }
+
+  useEffect(() => {
+    const creds = JSON.parse(localStorage.getItem("midnite_creds") || "null");
+    if (!creds) { setAuthState("login"); return; }
+    api("sites")
+      .then(data => handleSitesResponse(data))
+      .catch(() => { localStorage.removeItem("midnite_creds"); setAuthState("login"); });
+  }, []);
+
   const fetchLive=useCallback(async()=>{
-    try { const {results}=await api("status",{serials:SITE.inverters.map(i=>i.sn)}); setStatuses(results.map((r,idx)=>({...r,label:SITE.inverters[idx]?.label}))); setLastUpdate(new Date()); setLiveError(null); }
+    if(!site) return;
+    try { const {results}=await api("status",{serials:site.inverters.map(i=>i.sn)}); setStatuses(results.map((r,idx)=>({...r,label:site.inverters[idx]?.label}))); setLastUpdate(new Date()); setLiveError(null); }
     catch(e){setLiveError(e.message);}
     finally{setLiveLoading(false);}
-  },[]);
+  },[site]);
 
-  useEffect(()=>{fetchLive();const t=setInterval(fetchLive,60000);return()=>clearInterval(t);},[fetchLive]);
+  useEffect(()=>{if(!site) return; setLiveLoading(true); fetchLive();const t=setInterval(fetchLive,60000);return()=>clearInterval(t);},[fetchLive]);
 
-  const chartInverters = selectedInv==="all" ? SITE.inverters : SITE.inverters.filter(i=>i.sn===selectedInv);
+  const chartInverters = site ? (selectedInv==="all" ? site.inverters : site.inverters.filter(i=>i.sn===selectedInv)) : [];
 
-  useEffect(()=>{ if(tab!=="day") return; setDayLoading(true); Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))).then(all=>{setDayData(aggregateDayData(all));setDayLoading(false);}); },[tab,dayDate,selectedInv]);
-  useEffect(()=>{ if(tab!=="month") return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); },[tab,monthDate,selectedInv]);
-  useEffect(()=>{ if(tab!=="year") return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); },[tab,yearVal,selectedInv]);
+  useEffect(()=>{ if(tab!=="day"||!site) return; setDayLoading(true); Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))).then(all=>{setDayData(aggregateDayData(all));setDayLoading(false);}); },[tab,dayDate,selectedInv,site]);
+  useEffect(()=>{ if(tab!=="month"||!site) return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); },[tab,monthDate,selectedInv,site]);
+  useEffect(()=>{ if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); },[tab,yearVal,selectedInv,site]);
 
   const visibleStatuses = selectedInv==="all" ? statuses : statuses.filter(s=>s.sn===selectedInv);
 
+  if (authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:"#080f1e",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:MONO,color:"rgba(255,255,255,0.3)",fontSize:13}}>Loading...</div></>);
+  if (authState==="login") return <LoginForm onLogin={handleLogin} error={loginError} loading={loginLoading}/>;
+  if (authState==="sites") return <SiteSelector sites={sites} onSelect={handleSelectSite} onLogout={handleLogout}/>;
+
   return (
     <>
-      <Head>
-        <title>Midnite · {SITE.name}</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
-        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
-        <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{background:#080f1e;color:#e2e8f0}input[type=date]::-webkit-calendar-picker-indicator,input[type=month]::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:pointer}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      </Head>
+      <PageHead/>
       <div style={{minHeight:"100vh",background:"#080f1e",backgroundImage:"radial-gradient(ellipse 80% 50% at 50% -20%,rgba(251,191,36,0.06),transparent 60%)",fontFamily:SANS,paddingBottom:48}}>
         <div style={{borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(0,0,0,0.3)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100,flexWrap:"wrap",gap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,boxShadow:"0 0 16px rgba(251,191,36,0.4)"}}>⚡</div>
-            <div><div style={{fontSize:15,fontWeight:700}}>{SITE.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>{SITE.inverters.length} inverters · Group {SITE.groupId}</div></div>
+            <div><div style={{fontSize:15,fontWeight:700}}>{site.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>{site.inverters.length} inverter{site.inverters.length!==1?"s":""}{site.installer?` · ${site.installer}`:""}</div></div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
             {lastUpdate&&<div style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:MONO}}>Updated {lastUpdate.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>}
             <div style={{display:"flex",gap:4,background:"rgba(255,255,255,0.05)",borderRadius:10,padding:4}}>
               {["live","day","month","year"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",borderRadius:7,border:"none",background:tab===t?"rgba(255,255,255,0.1)":"transparent",color:tab===t?"#e2e8f0":"rgba(255,255,255,0.35)",fontSize:12,cursor:"pointer",fontFamily:MONO,fontWeight:tab===t?600:400,textTransform:"capitalize",transition:"all 0.15s"}}>{t}</button>)}
             </div>
+            {sites.length>1&&<button onClick={()=>{setAuthState("sites");setSite(null);setStatuses([]);}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.03)",color:"rgba(255,255,255,0.4)",fontSize:11,fontFamily:MONO,cursor:"pointer"}}>Sites</button>}
+            <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.03)",color:"rgba(255,255,255,0.4)",fontSize:11,fontFamily:MONO,cursor:"pointer"}}>Logout</button>
           </div>
         </div>
         <div style={{maxWidth:1200,margin:"0 auto",padding:"24px 20px",animation:"fadeUp 0.4s ease"}}>
 
-          <InverterSelector selected={selectedInv} onChange={setSelectedInv} statuses={statuses}/>
+          <InverterSelector selected={selectedInv} onChange={setSelectedInv} statuses={statuses} inverters={site.inverters}/>
 
           {tab==="live"&&(<>
             {liveError&&<div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#f87171",fontFamily:MONO}}>Error: {liveError}</div>}
@@ -328,7 +481,7 @@ export default function Dashboard() {
               {selectedInv==="all"&&<AggregateBar statuses={statuses}/>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
                 {visibleStatuses.map((s,i)=>{
-                  const inv = SITE.inverters.find(inv=>inv.sn===s.sn)||{sn:s.sn,label:s.label};
+                  const inv = site.inverters.find(inv=>inv.sn===s.sn)||{sn:s.sn,label:s.label};
                   return <InverterCard key={s.sn} inv={inv} status={s}/>;
                 })}
               </div>
@@ -338,7 +491,7 @@ export default function Dashboard() {
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
         </div>
-        <div style={{textAlign:"center",fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:MONO,paddingTop:8}}>FSDG · {SITE.name} · Midnite Solar Monitoring</div>
+        <div style={{textAlign:"center",fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:MONO,paddingTop:8}}>FSDG · {site.name} · Midnite Solar Monitoring</div>
       </div>
     </>
   );
