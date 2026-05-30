@@ -12,17 +12,21 @@
 - No `vercel.json`. No `output: standalone`. Standard Next.js build. Framework preset = Next.js.
 - Deployment protection is OFF in Vercel settings.
 
-**Environment variables in Vercel**:
-- `MIDNITE_USERNAME` = `FLOSOL2`
+**Environment variables in Vercel** (fallback only, login is now dynamic):
+- `MIDNITE_USERNAME` = `Wise Naples`
 - `MIDNITE_PASSWORD` = `921551`
 
 ---
 
-## Site Data
+## Accounts
+
+- **End-user (Wise Naples)**: username `Wise Naples`, password `921551`. Logs in via Senergytec API. Sees only their own site.
+- **Installer (FLOSOL2)**: username `FLOSOL2`, password `F78qq13m!`. Logs in via Eagle API. Sees all managed sites via `terminaluserinfo`.
+
+## Site Data (Wise Naples)
 
 - Group ID: `47031`
 - 4 inverters: `2426-90190114PH`, `2426-90190151PH`, `2426-90190186PH`, `2426-90190187PH`
-- Dealer account credentials: FLOSOL2 / 921551
 
 ---
 
@@ -42,20 +46,44 @@ const AES_IV  = "5161557162012237";
 const SALT    = "05469137076236813460585715952089";
 ```
 
-### Login
+### Login (dual path)
 
+The proxy tries **installer login first**, then falls back to **end-user login**.
+
+**Installer (Eagle)**:
+```
+POST /Eagle/v1/Operation/login
+Body: { MemberID, PassWord (capital W), sign }
+Returns: { token } (MemberAutoID is null for installers)
+```
+
+**End-user (Senergytec)**:
 ```
 POST /Senergytec/web/v2/Inverterapi/UserLogin
-Body: { MemberID, Password, type: "1", remember: false, sign }
+Body: { MemberID, Password (lowercase w), type: "1", remember: false, sign }
 Returns: { token, MemberAutoID }
 ```
 
 Note: field is `MemberID` not `memberID` or `Account`.
 
+### Sites (installer only)
+
+```
+POST /Eagle/v1/Operation/terminaluserinfo
+Body: { MemberID, Page: 1, EndUserName: "", OperationName: "", GoodsID: "", inDate, inTime, status: 0, sign }
+Returns: [{ MemberID, GoodsID: [{GoodsID: "serial"}], MemberStateCount: [online,alarm,offline,disc], op_member }]
+```
+
+The Eagle token works with both Eagle and Senergytec data endpoints.
+
 ### Proxy Actions (`/api/midnite?action=X`)
+
+All actions accept optional `username` and `password` in the request body. Falls back to env vars.
 
 | Action | Endpoint | Required body fields |
 |--------|----------|----------------------|
+| `login` | (dual path above) | `username`, `password` |
+| `sites` | `terminaluserinfo` (installer) | `username`, `password` |
 | `status` | `InverterDetailInfoNewone` | `serials: string[]` |
 | `day` | `dayProductionAndConsumptionAreaTime` | `sn`, `date` (YYYY-MM-DD) |
 | `month` | `monthProductionAndConsumptionArea` | `sn`, `date` (YYYY-MM) |
