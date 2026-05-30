@@ -150,8 +150,12 @@ export default async function handler(req, res) {
           const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
           return res.json({ accountType: "installer", sites: Array.isArray(data) ? data : [] });
         }
-        // End-user: return their username as the single site, inverters discovered via status
-        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: [], MemberStateCount: [0,0,0,0] }] });
+        // End-user: fetch their inverters via getAllAllMember
+        const euBody = { MemberAutoID: auth.memberAutoId };
+        euBody.sign = makeSign(euBody);
+        const members = await midnitePost("/Senergytec/web/v2/Inverterapi/getAllAllMember", euBody, auth.token);
+        const inverters = Array.isArray(members) ? members.map(m => ({ GoodsID: m.GoodsID || m })) : [];
+        return res.json({ accountType: "enduser", sites: [{ MemberID: auth.username, GoodsID: inverters, MemberStateCount: [0,0,0,0] }] });
       }
       case "status": {
         const {serials}=req.body||{};

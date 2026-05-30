@@ -375,17 +375,6 @@ export default function Dashboard() {
       installer: s.op_member?.installer || "",
     }));
 
-    // End-user accounts won't have inverter lists from terminaluserinfo
-    // If no sites with inverters found, create a placeholder site that will discover inverters via status
-    if (normalized.length === 0 && data.accountType === "enduser") {
-      const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
-      const endUserSite = { name: creds.username || "My Site", inverters: [], statusCounts: [0,0,0,0], installer: "", needsDiscovery: true };
-      setSites([endUserSite]);
-      setSite(endUserSite);
-      setAuthState("dashboard");
-      return;
-    }
-
     setSites(normalized);
     if (normalized.length === 0) {
       setLoginError("No sites found for this account");
