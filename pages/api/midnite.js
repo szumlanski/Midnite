@@ -67,7 +67,14 @@ async function login(user = null, pass = null) {
 function normalizeDetail(raw, sn) {
   if(!raw || raw.GoodsID === undefined) return null;
   const pvW = parseFloat(raw.TotalDCpower || 0);
-  const loadW = (parseFloat(raw.loadCurrpac?.[0] || 0) + parseFloat(raw.loadCurrpac?.[1] || 0) + parseFloat(raw.loadCurrpac?.[2] || 0));
+  // AIO inverters (MN *-AIO) serve load through EPS port, not the AC load port
+  const isAIO = (raw.modelName || "").includes("AIO");
+  const loadPac = isAIO ? raw.epsCurrpac : raw.loadCurrpac;
+  const loadVac = isAIO ? raw.epsVac : raw.loadVac;
+  const loadIac = isAIO ? raw.epsIac : raw.loadIac;
+  const loadEnergyDay = isAIO ? parseFloat(raw.EPSDay || 0) : parseFloat(raw.ELDay || 0);
+  const loadEnergyTotal = isAIO ? parseFloat(raw.EPSTotal || 0) : parseFloat(raw.ELTotal || 0);
+  const loadW = (parseFloat(loadPac?.[0] || 0) + parseFloat(loadPac?.[1] || 0) + parseFloat(loadPac?.[2] || 0));
   // gridCurrpac: positive = importing from grid, negative = exporting to grid
   const gridNetW = (parseFloat(raw.gridCurrpac?.[0] || 0) + parseFloat(raw.gridCurrpac?.[1] || 0) + parseFloat(raw.gridCurrpac?.[2] || 0));
   const batChargeW = parseFloat(raw.toPbat || 0);
@@ -98,10 +105,10 @@ function normalizeDetail(raw, sn) {
     },
     load: {
       lines: [
-        { power: parseFloat(raw.loadCurrpac?.[0] || 0), voltage: parseFloat(raw.loadVac?.[0] || 0), current: parseFloat(raw.loadIac?.[0] || 0) },
-        { power: parseFloat(raw.loadCurrpac?.[1] || 0), voltage: parseFloat(raw.loadVac?.[1] || 0), current: parseFloat(raw.loadIac?.[1] || 0) },
+        { power: parseFloat(loadPac?.[0] || 0), voltage: parseFloat(loadVac?.[0] || 0), current: parseFloat(loadIac?.[0] || 0) },
+        { power: parseFloat(loadPac?.[1] || 0), voltage: parseFloat(loadVac?.[1] || 0), current: parseFloat(loadIac?.[1] || 0) },
       ],
-      power: { today: parseFloat(raw.ELDay || 0) * 1000, total: parseFloat(raw.ELTotal || 0) * 1000 },
+      power: { today: loadEnergyDay * 1000, total: loadEnergyTotal * 1000 },
     },
     battery: {
       brand: raw.brand || "",
