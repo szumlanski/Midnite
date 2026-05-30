@@ -52,6 +52,60 @@ async function login() {
   return { token: data.token, memberAutoId: String(data.MemberAutoID) };
 }
 
+function normalizeDetail(raw, sn) {
+  if(!raw || raw.GoodsID === undefined) return null;
+  const pvW = parseFloat(raw.TotalDCpower || 0);
+  const loadW = (parseFloat(raw.loadCurrpac?.[0] || 0) + parseFloat(raw.loadCurrpac?.[1] || 0) + parseFloat(raw.loadCurrpac?.[2] || 0));
+  const gridExportW = (parseFloat(raw.gridCurrpac?.[0] || 0) + parseFloat(raw.gridCurrpac?.[1] || 0) + parseFloat(raw.gridCurrpac?.[2] || 0));
+  const gridNetW = -gridExportW;
+  const batChargeW = parseFloat(raw.toPbat || 0);
+  const batDischargeW = parseFloat(raw.fromPbat || 0);
+  return {
+    inverter: {
+      online: true,
+      model: raw.modelName || "",
+      sn: raw.GoodsID,
+      temperature: parseFloat(raw.Tntc || 0),
+      lastUpdateTime: raw.DataTime || "",
+    },
+    photovoltaic: {
+      power: { totalDc: pvW, peak: parseFloat(raw.Peackpower || 0) },
+      production: {
+        today: parseFloat(raw.EToday || 0) * 1000,
+        total: parseFloat(raw.ETotal || 0) * 1000,
+      },
+    },
+    grid: {
+      lines: [
+        { power: Math.abs(parseFloat(raw.gridCurrpac?.[0] || 0)), voltage: parseFloat(raw.gridVac?.[0] || 0), current: parseFloat(raw.gridIac?.[0] || 0), frequency: parseFloat(raw.gridFac || 0) },
+        { power: Math.abs(parseFloat(raw.gridCurrpac?.[1] || 0)), voltage: parseFloat(raw.gridVac?.[1] || 0), current: parseFloat(raw.gridIac?.[1] || 0), frequency: parseFloat(raw.gridFac || 0) },
+      ],
+      netW: gridNetW,
+      sold: { today: parseFloat(raw.ETDay || 0) * 1000, total: parseFloat(raw.ETTotal || 0) * 1000 },
+      consumption: { today: parseFloat(raw.EFDay || 0) * 1000, total: parseFloat(raw.EFTotal || 0) * 1000 },
+    },
+    load: {
+      lines: [
+        { power: parseFloat(raw.loadCurrpac?.[0] || 0), voltage: parseFloat(raw.loadVac?.[0] || 0), current: parseFloat(raw.loadIac?.[0] || 0) },
+        { power: parseFloat(raw.loadCurrpac?.[1] || 0), voltage: parseFloat(raw.loadVac?.[1] || 0), current: parseFloat(raw.loadIac?.[1] || 0) },
+      ],
+      power: { today: parseFloat(raw.ELDay || 0) * 1000, total: parseFloat(raw.ELTotal || 0) * 1000 },
+    },
+    battery: {
+      brand: raw.brand || "",
+      voltage: parseFloat(raw.volt || 0),
+      current: parseFloat(raw.cur || 0),
+      charge: batChargeW,
+      discharge: batDischargeW,
+      soc: parseFloat(raw.SOC || 0),
+      healthPercent: parseFloat(raw.SOH || 0),
+      temperature: parseFloat(raw.BMS_temp || 0),
+      chargeIn: { today: parseFloat(raw.Etotal_batChrg || 0) * 1000, total: 0 },
+      dischargeOut: { today: parseFloat(raw.Etotal_batDischrg || 0) * 1000, total: 0 },
+    },
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -74,7 +128,8 @@ export default async function handler(req, res) {
           body.sign=makeSign(body);
           try {
             const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);
-            return {sn,ok:!!raw,data:raw,error:raw?null:"No data"};
+            const data=normalizeDetail(raw,sn);
+            return {sn,ok:!!data,data,error:data?null:"No data returned"};
           }
           catch(e){return {sn,ok:false,data:null,error:e.message};}
         }));
