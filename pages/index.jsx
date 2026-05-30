@@ -1,341 +1,385 @@
-import { useState, useEffect, useCallback } from "react";
-import Head from "next/head";
-import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useState, useEffect } from 'react';
+import {
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart
+} from 'recharts';
+import crypto from 'crypto-js';
 
-const SITE = { name: "Wise Naples", groupId: "47031", inverters: [{ sn: "2426-90190114PH", label: "INV-1" },{ sn: "2426-90190151PH", label: "INV-2" },{ sn: "2426-90190186PH", label: "INV-3" },{ sn: "2426-90190187PH", label: "INV-4" }] };
-const today = new Date().toISOString().split("T")[0];
-const thisMonth = today.slice(0,7);
-const thisYear = today.slice(0,4);
-const MONO = "'JetBrains Mono', monospace";
-const SANS = "'Space Grotesk', sans-serif";
-const TOOLTIP = { background:"rgba(8,15,30,0.97)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"10px 14px", fontSize:12, fontFamily:MONO, color:"#e2e8f0" };
-const fmt = (w,d=1) => { if(w==null) return "--"; if(Math.abs(w)>=1000) return `${(w/1000).toFixed(d)} kW`; return `${Math.round(w)} W`; };
-const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1000000).toFixed(2)} MWh`; if(wh>=1000) return `${(wh/1000).toFixed(1)} kWh`; return `${Math.round(wh)} Wh`; };
+const MIDNITE_API = 'https://appsrv.midniteelectric.com';
+const KEY = crypto.enc.Utf8.parse('05469137076236813460585715952089');
+const IV = crypto.enc.Utf8.parse('5161557162012237');
+const SALT = '05469137076236813460585715952089';
 
-async function api(action, body=null) {
-  const res = await fetch(`/api/midnite?action=${action}`, { method:body?"POST":"GET", headers:{"Content-Type":"application/json"}, ...(body?{body:JSON.stringify(body)}:{}) });
-  if(!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const fmtE = (wh) => {
+  if (wh >= 1e6) return (wh / 1e6).toFixed(2) + ' MWh';
+  if (wh >= 1e3) return (wh / 1e3).toFixed(2) + ' kWh';
+  return wh.toFixed(0) + ' Wh';
+};
 
-function aggregateDayData(all) {
-  const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.inTime; if(!map[k]) map[k]={time:k,pv:0,load:0,gridImport:0,gridExport:0,soc:0,n:0}; map[k].pv+=parseFloat(r.Production||0); map[k].load+=parseFloat(r.Consumption||0); map[k].gridImport+=parseFloat(r.powerFromGrid||0); map[k].gridExport+=parseFloat(r.powerToGrid||0); map[k].soc+=parseFloat(r.SOC||0); map[k].n+=1; } }
-  return Object.values(map).sort((a,b)=>a.time.localeCompare(b.time)).map(r=>({...r,soc:r.n?r.soc/r.n:0}));
-}
-function aggregateMonthData(all) {
-  const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; } }
-  return Object.values(map).sort((a,b)=>a.day-b.day);
-}
-function aggregateYearData(all) {
-  const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; } }
-  return Object.values(map).sort((a,b)=>a.month-b.month);
-}
+const sign = (data) => {
+  const json = JSON.stringify(data);
+  const cipher = crypto.AES.encrypt(json, KEY, { iv: IV, mode: crypto.mode.CBC, padding: crypto.pad.Pkcs7 });
+  return crypto.enc.Base64.stringify(cipher.ciphertext);
+};
 
-function SOCBar({value}) {
-  const color=value>60?"#4ade80":value>30?"#fbbf24":"#f87171";
-  return <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:6,background:"rgba(255,255,255,0.08)",borderRadius:3,overflow:"hidden"}}><div style={{width:`${value}%`,height:"100%",background:color,borderRadius:3,boxShadow:`0 0 8px ${color}80`}}/></div><span style={{fontSize:12,color,fontFamily:MONO,minWidth:32}}>{value}%</span></div>;
-}
+const aggregateDayData = (records) => {
+  const byTime = {};
+  records.forEach(r => {
+    const key = r.recordTime;
+    if (!byTime[key]) byTime[key] = { time: key, pv: 0, load: 0, charge: 0, discharge: 0 };
+    byTime[key].pv += r.pvArray?.power || 0;
+    byTime[key].load += r.loads?.power || 0;
+    byTime[key].charge += r.battery?.chargeRate || 0;
+    byTime[key].discharge += r.battery?.dischargeRate || 0;
+  });
+  return Object.values(byTime).map(d => ({
+    ...d,
+    pvWh: d.pv * (5/60),
+    loadWh: d.load * (5/60),
+    chargeWh: d.charge * (5/60),
+    dischargeWh: d.discharge * (5/60)
+  }));
+};
 
-function StatPill({label,value,color="#94a3b8",glow=false}) {
-  return <div style={{display:"flex",flexDirection:"column",gap:2,padding:"10px 14px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,boxShadow:glow?`0 0 20px ${color}30`:"none"}}><span style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:MONO}}>{label}</span><span style={{fontSize:15,fontWeight:600,color,fontFamily:MONO}}>{value}</span></div>;
-}
+const aggregateMonthData = (days) => {
+  return days.map(d => ({
+    date: d.date,
+    produced: (d.pvArray?.energyProduced || 0) * 1000,
+    consumed: (d.loads?.energyConsumed || 0) * 1000,
+    imported: (d.grid?.energyImported || 0) * 1000,
+    exported: (d.grid?.energyExported || 0) * 1000,
+    charged: (d.battery?.energyCharged || 0) * 1000,
+    discharged: (d.battery?.energyDischarged || 0) * 1000
+  }));
+};
 
-function EnphaseSummaryCard({produced,consumed,imported,exported,charged,discharged}) {
+const aggregateYearData = (months) => {
+  return months.map(m => ({
+    date: m.date,
+    produced: m.pvArray?.energyProduced * 1000 || 0,
+    consumed: m.loads?.energyConsumed * 1000 || 0,
+    imported: m.grid?.energyImported * 1000 || 0,
+    exported: m.grid?.energyExported * 1000 || 0,
+    charged: m.battery?.energyCharged * 1000 || 0,
+    discharged: m.battery?.energyDischarged * 1000 || 0
+  }));
+};
+
+const EnphaseSummaryCard = ({ produced, consumed, imported, exported, charged, discharged }) => (
+  <div style={{
+    display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem',
+    marginBottom: '1.5rem', padding: '1rem', background: '#0f172a', borderRadius: '0.5rem'
+  }}>
+    <div>
+      <div style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase' }}>PRODUCED</div>
+      <div style={{ fontSize: '1.5rem', color: '#60a5fa', fontWeight: 'bold' }}>{fmtE(produced)}</div>
+    </div>
+    <div>
+      <div style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase' }}>CONSUMED</div>
+      <div style={{ fontSize: '1.5rem', color: '#f97316', fontWeight: 'bold' }}>{fmtE(consumed)}</div>
+    </div>
+    <div>
+      <div style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase' }}>IMPORTED</div>
+      <div style={{ fontSize: '1.5rem', color: '#ec4899', fontWeight: 'bold' }}>{fmtE(imported)}</div>
+    </div>
+    <div>
+      <div style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase' }}>EXPORTED</div>
+      <div style={{ fontSize: '1.5rem', color: '#eab308', fontWeight: 'bold' }}>{fmtE(exported)}</div>
+    </div>
+    <div>
+      <div style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase' }}>CHARGED</div>
+      <div style={{ fontSize: '1.5rem', color: '#22c55e', fontWeight: 'bold' }}>{fmtE(charged)}</div>
+    </div>
+    <div>
+      <div style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase' }}>DISCHARGED</div>
+      <div style={{ fontSize: '1.5rem', color: '#f43f5e', fontWeight: 'bold' }}>{fmtE(discharged)}</div>
+    </div>
+  </div>
+);
+
+const DayChart = ({ data }) => {
+  if (!data || data.length === 0) return <div>No day data</div>;
+  
+  const totals = data.reduce((acc, d) => ({
+    pv: acc.pv + (d.pvWh || 0),
+    load: acc.load + (d.loadWh || 0),
+    charge: acc.charge + (d.chargeWh || 0),
+    discharge: acc.discharge + (d.dischargeWh || 0)
+  }), { pv: 0, load: 0, charge: 0, discharge: 0 });
+
   return (
-    <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.05)",borderRadius:14,padding:"20px 24px",marginBottom:20}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:16}}>
-        <div style={{display:"flex",gap:20,flexWrap:"wrap",flex:1}}>
-          <div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Produced</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#60a5fa",fontFamily:MONO}}>{fmtE(produced)}</div>
-          </div>
-          <div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Consumed</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#f97316",fontFamily:MONO}}>{fmtE(consumed)}</div>
-          </div>
-          <div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Imported</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#f87171",fontFamily:MONO}}>{fmtE(imported)}</div>
-          </div>
-          <div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Exported</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#4ade80",fontFamily:MONO}}>{fmtE(exported)}</div>
-          </div>
-          {charged>0&&<div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Charged</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#22c55e",fontFamily:MONO}}>{fmtE(charged)}</div>
-          </div>}
-          {discharged>0&&<div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:MONO,marginBottom:3}}>Discharged</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#fbbf24",fontFamily:MONO}}>{fmtE(discharged)}</div>
-          </div>}
-        </div>
-      </div>
+    <div>
+      <EnphaseSummaryCard produced={totals.pv} consumed={totals.load} imported={0} exported={0} charged={totals.charge} discharged={totals.discharge} />
+      <ResponsiveContainer width="100%" height={400}>
+        <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="time" stroke="#64748b" />
+          <YAxis stroke="#64748b" />
+          <Tooltip 
+            contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '0.5rem' }}
+            labelStyle={{ color: '#e2e8f0' }}
+            cursor={false}
+          />
+          <Bar dataKey="pvWh" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="chargeWh" fill="#22c55e" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="loadWh" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="dischargeWh" fill="#f43f5e" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
-}
+};
 
-function InverterCard({inv,status}) {
-  const d=status?.data;
-  const pv=d?.photovoltaic?.power?.totalDc??null;
-  const load=d?d.load.lines.reduce((s,l)=>s+(l.power||0),0):null;
-  const gridNet=d?.grid?.netW??null;
-  const soc=d?.battery?.soc??null;
-  const batChg=d?.battery?.charge??null;
-  const temp=d?.inverter?.temperature??null;
-  const online=d?.inverter?.online??false;
-  const eToday=d?.photovoltaic?.production?.today??null;
-  const eTotal=d?.photovoltaic?.production?.total??null;
-  const gridColor=gridNet!=null?(gridNet<0?"#4ade80":"#f87171"):"#94a3b8";
-  const gridLabel=gridNet!=null?(gridNet<0?"Exporting":"Importing"):"Grid";
+const MonthChart = ({ data }) => {
+  if (!data || data.length === 0) return <div>No month data</div>;
+  
+  const totals = data.reduce((acc, d) => ({
+    produced: acc.produced + (d.produced || 0),
+    consumed: acc.consumed + (d.consumed || 0),
+    imported: acc.imported + (d.imported || 0),
+    exported: acc.exported + (d.exported || 0),
+    charged: acc.charged + (d.charged || 0),
+    discharged: acc.discharged + (d.discharged || 0)
+  }), { produced: 0, consumed: 0, imported: 0, exported: 0, charged: 0, discharged: 0 });
+
   return (
-    <div style={{background:"linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))",border:"1px solid rgba(255,255,255,0.09)",borderRadius:16,padding:"18px 20px",display:"flex",flexDirection:"column",gap:12,position:"relative",transition:"transform 0.2s"}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)"}} onMouseLeave={e=>{e.currentTarget.style.transform=""}}>
-      <div style={{position:"absolute",top:14,right:14,display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:"50%",background:online?"#4ade80":"#f87171",boxShadow:online?"0 0 8px #4ade8080":"none"}}/><span style={{fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:MONO}}>{online?"LIVE":"OFFLINE"}</span></div>
-      <div><div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>{inv.label}</div><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO,marginTop:2}}>{inv.sn}</div></div>
-      {status?.ok===false&&<div style={{fontSize:12,color:"#f87171",fontFamily:MONO}}>{status.error||"No data"}</div>}
-      {d&&<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><StatPill label="PV" value={fmt(pv)} color="#fbbf24" glow/><StatPill label="Load" value={fmt(load)} color="#60a5fa"/><StatPill label={gridLabel} value={fmt(gridNet!=null?Math.abs(gridNet):null)} color={gridColor} glow={gridNet!=null&&gridNet<0}/><StatPill label="Bat Chg" value={fmt(batChg)} color="#c084fc"/></div><div><div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:MONO}}>BATTERY SOC</span>{temp!=null&&<span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:MONO}}>{temp}°C</span>}</div>{soc!=null&&<SOCBar value={soc}/>}</div><div style={{display:"flex",justifyContent:"space-between",paddingTop:6,borderTop:"1px solid rgba(255,255,255,0.05)"}}><span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Today: {fmtE(eToday)}</span><span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:MONO}}>Total: {fmtE(eTotal)}</span></div></>}
-      {!d&&!status&&<div style={{fontSize:12,color:"rgba(255,255,255,0.2)",fontFamily:MONO}}>Loading...</div>}
+    <div>
+      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={totals.imported} exported={totals.exported} charged={totals.charged} discharged={totals.discharged} />
+      <ResponsiveContainer width="100%" height={400}>
+        <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="date" stroke="#64748b" />
+          <YAxis stroke="#64748b" />
+          <Tooltip 
+            contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '0.5rem' }}
+            labelStyle={{ color: '#e2e8f0' }}
+            cursor={false}
+          />
+          <Bar dataKey="produced" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="charged" fill="#22c55e" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="consumed" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="discharged" fill="#f43f5e" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
-}
+};
 
-function AggregateBar({statuses}) {
-  const v=statuses.filter(s=>s?.ok&&s?.data);
-  const totalPv=v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
-  const totalLoad=v.reduce((s,i)=>s+i.data.load.lines.reduce((a,l)=>a+(l.power||0),0),0);
-  const totalGrid=v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
-  const totalBat=v.reduce((s,i)=>s+(i.data.battery?.charge||0)-(i.data.battery?.discharge||0),0);
-  const avgSoc=v.length?v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length:null;
-  const totalToday=v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.today||0),0);
-  const totalAll=v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.total||0),0);
+const YearChart = ({ data }) => {
+  if (!data || data.length === 0) return <div>No year data</div>;
+  
+  const totals = data.reduce((acc, d) => ({
+    produced: acc.produced + (d.produced || 0),
+    consumed: acc.consumed + (d.consumed || 0),
+    imported: acc.imported + (d.imported || 0),
+    exported: acc.exported + (d.exported || 0),
+    charged: acc.charged + (d.charged || 0),
+    discharged: acc.discharged + (d.discharged || 0)
+  }), { produced: 0, consumed: 0, imported: 0, exported: 0, charged: 0, discharged: 0 });
+
   return (
-    <div style={{background:"linear-gradient(90deg,rgba(251,191,36,0.08),rgba(96,165,250,0.06),rgba(74,222,128,0.08))",border:"1px solid rgba(251,191,36,0.15)",borderRadius:16,padding:"20px 24px",display:"flex",flexWrap:"wrap",gap:12,alignItems:"center",marginBottom:24}}>
-      <div style={{flex:"0 0 auto"}}><div style={{fontSize:11,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.12em",fontFamily:MONO}}>Site Total</div><div style={{fontSize:22,fontWeight:800,color:"#fbbf24",fontFamily:SANS,lineHeight:1.1}}>{fmt(totalPv,2)}</div><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>PV NOW</div></div>
-      <div style={{width:1,height:44,background:"rgba(255,255,255,0.08)",flexShrink:0}}/>
-      <StatPill label="Total Load" value={fmt(totalLoad,2)} color="#60a5fa"/>
-      <StatPill label={totalGrid<0?"Grid Export":"Grid Import"} value={fmt(Math.abs(totalGrid),2)} color={totalGrid<0?"#4ade80":"#f87171"} glow={totalGrid<0}/>
-      <StatPill label="Bat Net" value={fmt(totalBat)} color="#c084fc"/>
-      {avgSoc!=null&&<StatPill label="Avg SOC" value={`${avgSoc.toFixed(0)}%`} color="#4ade80"/>}
-      <StatPill label="Today" value={fmtE(totalToday)} color="#e2e8f0"/>
-      <StatPill label="All Time" value={fmtE(totalAll)} color="rgba(255,255,255,0.4)"/>
+    <div>
+      <EnphaseSummaryCard produced={totals.produced} consumed={totals.consumed} imported={totals.imported} exported={totals.exported} charged={totals.charged} discharged={totals.discharged} />
+      <ResponsiveContainer width="100%" height={400}>
+        <ComposedChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="date" stroke="#64748b" />
+          <YAxis stroke="#64748b" />
+          <Tooltip 
+            contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '0.5rem' }}
+            labelStyle={{ color: '#e2e8f0' }}
+            cursor={false}
+          />
+          <Bar dataKey="produced" fill="#60a5fa" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="charged" fill="#22c55e" stackId="positive" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="consumed" fill="#f97316" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+          <Bar dataKey="discharged" fill="#f43f5e" stackId="negative" radius={[4, 4, 0, 0]} activeBar={null} />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
-}
+};
 
-function InverterSelector({selected, onChange, statuses}) {
-  const options = [
-    { value: "all", label: "All Inverters" },
-    ...SITE.inverters.map((inv, i) => {
-      const s = statuses[i];
-      const pv = s?.data?.photovoltaic?.power?.totalDc;
-      const soc = s?.data?.battery?.soc;
-      return { value: inv.sn, label: `${inv.label} · ${pv != null ? fmt(pv) : "--"} · SOC ${soc != null ? soc+"%" : "--"}` };
-    })
-  ];
-  return (
-    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}>
-      {options.map(opt=>(
-        <button key={opt.value} onClick={()=>onChange(opt.value)} style={{
-          padding:"8px 16px", borderRadius:10, border:"1px solid",
-          borderColor: selected===opt.value ? "rgba(251,191,36,0.6)" : "rgba(255,255,255,0.1)",
-          background: selected===opt.value ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
-          color: selected===opt.value ? "#fbbf24" : "rgba(255,255,255,0.5)",
-          fontSize:12, cursor:"pointer", fontFamily:MONO,
-          fontWeight: selected===opt.value ? 600 : 400,
-          transition:"all 0.15s",
-          boxShadow: selected===opt.value ? "0 0 16px rgba(251,191,36,0.15)" : "none",
-        }}>{opt.label}</button>
-      ))}
-    </div>
-  );
-}
+const BatterySOCChart = ({ data }) => {
+  if (!data || data.length === 0) return <div>No SOC data</div>;
 
-function DayChart({date,onDateChange,data,loading}) {
-  const produced = data.reduce((s,d) => s + ((d.pv||0) * (5/60)), 0);
-  const consumed = data.reduce((s,d) => s + ((d.load||0) * (5/60)), 0);
-  const imported = data.reduce((s,d) => s + ((d.gridImport||0) * (5/60)), 0);
-  const exported = data.reduce((s,d) => s + ((d.gridExport||0) * (5/60)), 0);
-  const chartData = data.map(d => ({...d, consumptionNeg: -(d.load||0)}));
   return (
-    <div style={{marginBottom:32}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Day View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>5-min intervals</div></div>
-        <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
-      </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={exported} charged={0} discharged={0}/>}
-      <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:320,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
-        {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(<>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-              <XAxis dataKey="time" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} interval={23}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={40}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Bar dataKey="pv" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed"/>
-            </BarChart>
-          </ResponsiveContainer>
-          <div style={{padding:"0 8px",marginTop:8}}>
-            <ResponsiveContainer width="100%" height={60}><AreaChart data={chartData} margin={{top:0,right:8,left:0,bottom:0}}>
-              <defs>
-                <linearGradient id="socG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
-              </defs>
-              <XAxis dataKey="time" hide/>
-              <YAxis domain={[0,100]} hide/>
-              <Area type="monotone" dataKey="soc" stroke="#22c55e" strokeWidth={2} fill="url(#socG)" dot={false} isAnimationActive={false}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={v=>[`${Number(v).toFixed(0)}%`,"Battery SOC"]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-            </AreaChart></ResponsiveContainer>
-            <div style={{fontSize:10,color:"rgba(34,197,94,0.5)",fontFamily:MONO,textAlign:"right"}}>Battery SOC</div>
-          </div>
-        </>)}
-      </div>
-    </div>
+    <ResponsiveContainer width="100%" height={300}>
+      <AreaChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <XAxis dataKey="date" stroke="#64748b" />
+        <YAxis stroke="#64748b" domain={[0, 100]} />
+        <Tooltip 
+          contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '0.5rem' }}
+          labelStyle={{ color: '#e2e8f0' }}
+        />
+        <Area type="monotone" dataKey="soc" fill="#22c55e" stroke="#16a34a" isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
   );
-}
-
-function MonthChart({month,onMonthChange,data,loading}) {
-  const produced = data.reduce((s,d) => s + (d.production||0), 0) * 1000;
-  const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
-  const imported = data.reduce((s,d) => s + (d.fromGrid||0), 0) * 1000;
-  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
-  return (
-    <div style={{marginBottom:32}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Month View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Daily totals</div></div>
-        <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}/>
-      </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={imported} exported={0} charged={0} discharged={0}/>}
-      <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:300,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
-        {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-              <XAxis dataKey="day" tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed"/>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function YearChart({year,onYearChange,data,loading}) {
-  const produced = data.reduce((s,d) => s + (d.production||0), 0) * 1000;
-  const consumed = data.reduce((s,d) => s + (d.consumption||0), 0) * 1000;
-  const chartData = data.map(d => ({...d, consumptionNeg: -(d.consumption||0)}));
-  return (
-    <div style={{marginBottom:32}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-        <div><h2 style={{margin:0,fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:SANS}}>Year View</h2><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>Monthly totals</div></div>
-        <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:"rgba(15,23,42,0.9)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#e2e8f0",padding:"6px 10px",fontSize:12,fontFamily:MONO,cursor:"pointer"}}>
-          {["2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
-        </select>
-      </div>
-      {!loading&&<EnphaseSummaryCard produced={produced} consumed={consumed} imported={0} exported={0} charged={0} discharged={0}/>}
-      <div style={{background:"rgba(255,255,255,0.02)",borderRadius:14,padding:"16px 8px 8px",border:"1px solid rgba(255,255,255,0.05)",minHeight:280,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch"}}>
-        {loading?<div style={{color:"rgba(255,255,255,0.3)",fontFamily:MONO,fontSize:12}}>Loading...</div>:(
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:0}} barGap={0}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-              <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}}/>
-              <YAxis tick={{fill:"rgba(255,255,255,0.3)",fontSize:10,fontFamily:MONO}} tickLine={false} axisLine={{stroke:"rgba(255,255,255,0.1)"}} width={40} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
-              <Tooltip contentStyle={TOOLTIP} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:"rgba(255,255,255,0.5)"}}/>
-              <Bar dataKey="production" fill="#60a5fa" fillOpacity={0.8} radius={[2,2,0,0]} name="Produced"/>
-              <Bar dataKey="consumptionNeg" fill="#f97316" fillOpacity={0.8} radius={[0,0,2,2]} name="Consumed"/>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-    </div>
-  );
-}
+};
 
 export default function Dashboard() {
-  const [tab,setTab]=useState("live");
-  const [statuses,setStatuses]=useState([]);
-  const [liveLoading,setLiveLoading]=useState(true);
-  const [liveError,setLiveError]=useState(null);
-  const [lastUpdate,setLastUpdate]=useState(null);
-  const [selectedInv,setSelectedInv]=useState("all");
+  const [view, setView] = useState('day');
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [inverters, setInverters] = useState([]);
+  const [dayData, setDayData] = useState([]);
+  const [monthData, setMonthData] = useState([]);
+  const [yearData, setYearData] = useState([]);
+  const [socData, setSocData] = useState([]);
+  const [selectedInverters, setSelectedInverters] = useState(null);
 
-  const [dayDate,setDayDate]=useState(today);
-  const [dayData,setDayData]=useState([]);
-  const [dayLoading,setDayLoading]=useState(false);
-  const [monthDate,setMonthDate]=useState(thisMonth);
-  const [monthData,setMonthData]=useState([]);
-  const [monthLoading,setMonthLoading]=useState(false);
-  const [yearVal,setYearVal]=useState(thisYear);
-  const [yearData,setYearData]=useState([]);
-  const [yearLoading,setYearLoading]=useState(false);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const loginResp = await fetch(`${MIDNITE_API}/api/common/login`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: '1',
+            memberID: 'FLOSOL2',
+            password: '921551',
+            remember: false
+          })
+        });
+        const { sessionID, groupID } = await loginResp.json();
 
-  const fetchLive=useCallback(async()=>{
-    try { const {results}=await api("status",{serials:SITE.inverters.map(i=>i.sn)}); setStatuses(results.map((r,idx)=>({...r,label:SITE.inverters[idx]?.label}))); setLastUpdate(new Date()); setLiveError(null); }
-    catch(e){setLiveError(e.message);}
-    finally{setLiveLoading(false);}
-  },[]);
+        const overviewResp = await fetch(`${MIDNITE_API}/api/web/system/overview`, {
+          headers: { sessionID }
+        });
+        const overview = await overviewResp.json();
+        setInverters(overview.inverters || []);
+        setSelectedInverters(overview.inverters);
 
-  useEffect(()=>{fetchLive();const t=setInterval(fetchLive,60000);return()=>clearInterval(t);},[fetchLive]);
+        const dayResp = await fetch(`${MIDNITE_API}/api/web/system/dayProductionAndConsumptionAreaTime`, {
+          method: 'POST',
+          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `gid=${groupID}&mtypes=pvArray;loads;grid;battery`
+        });
+        const dayRecords = await dayResp.json();
+        setDayData(aggregateDayData(dayRecords.records || []));
 
-  const chartInverters = selectedInv==="all" ? SITE.inverters : SITE.inverters.filter(i=>i.sn===selectedInv);
+        const monthResp = await fetch(`${MIDNITE_API}/api/web/system/monthProductionAndConsumptionArea`, {
+          method: 'POST',
+          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `gid=${groupID}&date=${month}&mtypes=pvArray;loads;grid;battery`
+        });
+        const monthRecords = await monthResp.json();
+        setMonthData(aggregateMonthData(monthRecords.data || []));
 
-  useEffect(()=>{ if(tab!=="day") return; setDayLoading(true); Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))).then(all=>{setDayData(aggregateDayData(all));setDayLoading(false);}); },[tab,dayDate,selectedInv]);
-  useEffect(()=>{ if(tab!=="month") return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); },[tab,monthDate,selectedInv]);
-  useEffect(()=>{ if(tab!=="year") return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); },[tab,yearVal,selectedInv]);
+        const yearResp = await fetch(`${MIDNITE_API}/api/web/system/yearProductionAndConsumptionArea`, {
+          method: 'POST',
+          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `gid=${groupID}&mtypes=pvArray;loads;grid;battery`
+        });
+        const yearRecords = await yearResp.json();
+        setYearData(aggregateYearData(yearRecords.data || []));
 
-  const visibleStatuses = selectedInv==="all" ? statuses : statuses.filter(s=>s.sn===selectedInv);
+        const socResp = await fetch(`${MIDNITE_API}/api/web/system/monthProductionAndConsumptionArea`, {
+          method: 'POST',
+          headers: { sessionID, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `gid=${groupID}&date=${month}&mtypes=battery`
+        });
+        const socRecords = await socResp.json();
+        setSocData((socRecords.data || []).map(d => ({ date: d.date, soc: d.battery?.soc || 0 })));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    load();
+    const interval = setInterval(load, 300000);
+    return () => clearInterval(interval);
+  }, [month]);
 
   return (
-    <>
-      <Head>
-        <title>Midnite · {SITE.name}</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
-        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
-        <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{background:#080f1e;color:#e2e8f0}input[type=date]::-webkit-calendar-picker-indicator,input[type=month]::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:pointer}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      </Head>
-      <div style={{minHeight:"100vh",background:"#080f1e",backgroundImage:"radial-gradient(ellipse 80% 50% at 50% -20%,rgba(251,191,36,0.06),transparent 60%)",fontFamily:SANS,paddingBottom:48}}>
-        <div style={{borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(0,0,0,0.3)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100,flexWrap:"wrap",gap:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,boxShadow:"0 0 16px rgba(251,191,36,0.4)"}}>⚡</div>
-            <div><div style={{fontSize:15,fontWeight:700}}>{SITE.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:MONO}}>{SITE.inverters.length} inverters · Group {SITE.groupId}</div></div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-            {lastUpdate&&<div style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:MONO}}>Updated {lastUpdate.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>}
-            <div style={{display:"flex",gap:4,background:"rgba(255,255,255,0.05)",borderRadius:10,padding:4}}>
-              {["live","day","month","year"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",borderRadius:7,border:"none",background:tab===t?"rgba(255,255,255,0.1)":"transparent",color:tab===t?"#e2e8f0":"rgba(255,255,255,0.35)",fontSize:12,cursor:"pointer",fontFamily:MONO,fontWeight:tab===t?600:400,textTransform:"capitalize",transition:"all 0.15s"}}>{t}</button>)}
-            </div>
-          </div>
+    <div style={{ background: '#020617', color: '#e2e8f0', minHeight: '100vh', padding: '2rem', fontFamily: 'system-ui' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', overflowX: 'auto' }}>
+          <button 
+            onClick={() => setView('day')} 
+            style={{ 
+              padding: '0.75rem 1.5rem', 
+              background: view === 'day' ? '#ca8a04' : 'transparent', 
+              color: view === 'day' ? '#000' : '#e2e8f0',
+              border: '1px solid #ca8a04', 
+              borderRadius: '0.5rem', 
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            All Inverters
+          </button>
+          {inverters.map(inv => (
+            <button key={inv.id} style={{
+              padding: '0.75rem 1rem',
+              background: '#1e293b',
+              color: '#e2e8f0',
+              border: '1px solid #334155',
+              borderRadius: '0.5rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            }}>
+              {inv.name} - {(inv.power / 1000).toFixed(1)} kW - SOC {inv.soc || 0}%
+            </button>
+          ))}
         </div>
-        <div style={{maxWidth:1200,margin:"0 auto",padding:"24px 20px",animation:"fadeUp 0.4s ease"}}>
 
-          <InverterSelector selected={selectedInv} onChange={setSelectedInv} statuses={statuses}/>
-
-          {tab==="live"&&(<>
-            {liveError&&<div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#f87171",fontFamily:MONO}}>Error: {liveError}</div>}
-            {liveLoading?<div style={{textAlign:"center",color:"rgba(255,255,255,0.3)",fontFamily:MONO,padding:48}}>Connecting to Midnite portal...</div>:<>
-              {selectedInv==="all"&&<AggregateBar statuses={statuses}/>}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
-                {visibleStatuses.map((s,i)=>{
-                  const inv = SITE.inverters.find(inv=>inv.sn===s.sn)||{sn:s.sn,label:s.label};
-                  return <InverterCard key={s.sn} inv={inv} status={s}/>;
-                })}
-              </div>
-            </>}
-          </>)}
-          {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading}/>}
-          {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
-          {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
+        <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.875rem', fontWeight: 'bold' }}>{view === 'day' ? 'Day View' : view === 'month' ? 'Month View' : 'Year View'}</h2>
+            <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.875rem' }}>
+              {view === 'day' && 'Today, 5-minute intervals'}
+              {view === 'month' && 'Daily totals'}
+              {view === 'year' && 'Monthly totals'}
+            </p>
+          </div>
+          {view === 'month' && (
+            <input 
+              type="month" 
+              value={month} 
+              onChange={(e) => setMonth(e.target.value)}
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#1e293b',
+                color: '#e2e8f0',
+                border: '1px solid #334155',
+                borderRadius: '0.375rem',
+                cursor: 'pointer'
+              }}
+            />
+          )}
         </div>
-        <div style={{textAlign:"center",fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:MONO,paddingTop:8}}>FSDG · {SITE.name} · Midnite Solar Monitoring</div>
+
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+          {['day', 'month', 'year'].map(v => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              style={{
+                padding: '0.5rem 1rem',
+                background: view === v ? '#0ea5e9' : '#1e293b',
+                color: '#e2e8f0',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+                fontWeight: view === v ? 'bold' : 'normal'
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+
+        {view === 'day' && <DayChart data={dayData} />}
+        {view === 'month' && <MonthChart data={monthData} />}
+        {view === 'year' && <YearChart data={yearData} />}
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3 style={{ marginBottom: '1rem' }}>Battery SOC</h3>
+          <BatterySOCChart data={socData} />
+        </div>
       </div>
-    </>
+    </div>
   );
 }
