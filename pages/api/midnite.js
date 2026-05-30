@@ -150,9 +150,9 @@ export default async function handler(req, res) {
         return res.json(await midnitePost("/Senergytec/web/v2/Inverterapi/monthProductionAndConsumptionArea", body, auth.token));
       }
       case "year": {
-        const { sn } = req.body || {};
+        const { sn, date } = req.body || {};
         if (!sn) return res.status(400).json({ error: "sn required" });
-        const body = { GoodsID: sn };
+        const body = { GoodsID: sn, date: date || new Date().getFullYear().toString() };
         body.sign = makeSign(body);
         return res.json(await midnitePost("/Senergytec/web/v2/Inverterapi/yearProductionAndConsumptionArea", body, auth.token));
       }
