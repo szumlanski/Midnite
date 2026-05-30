@@ -122,20 +122,21 @@ export default async function handler(req, res) {
         return res.json({ ok: true, memberAutoId: auth.memberAutoId });
       }
       case "sites": {
-        const body = { MemberAutoID: auth.memberAutoId };
+        const now = new Date();
+        const inDate = now.toISOString().split("T")[0];
+        const inTime = now.toTimeString().split(" ")[0];
+        const body = {
+          MemberID: username || process.env.MIDNITE_USERNAME || "FLOSOL2",
+          Page: 1,
+          EndUserName: "",
+          OperationName: "",
+          GoodsID: "",
+          inDate,
+          inTime,
+          status: 0,
+        };
         body.sign = makeSign(body);
-        // Try multiple endpoint name variations
-        const paths = [
-          "/Senergytec/web/v2/Inverterapi/TerminalUserInfo",
-          "/Senergytec/web/v2/Inverterapi/terminaluserinfo",
-          "/Senergytec/web/v2/Inverterapi/terminalUserInfo",
-        ];
-        let data = null;
-        for (const path of paths) {
-          try { data = await midnitePost(path, body, auth.token); break; }
-          catch (e) { if (!e.message.includes("405")) throw e; }
-        }
-        if (!data) throw new Error("terminaluserinfo endpoint not found");
+        const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
         return res.json(data);
       }
       case "status": {
