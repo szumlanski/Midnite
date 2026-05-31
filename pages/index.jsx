@@ -54,10 +54,32 @@ const CHART_CONS = "#F97316";
 const CHART_BAT = "#22C55E";
 const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
 
+const Logo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="mgS">
+        <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+        <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <circle cx="128" cy="128" r="95" fill="none" stroke="#1a3a52" strokeWidth="2" opacity="0.4"/>
+    <circle cx="128" cy="128" r="70" fill="none" stroke="#1a3a52" strokeWidth="2" opacity="0.5"/>
+    <circle cx="128" cy="128" r="45" fill="none" stroke="#1a3a52" strokeWidth="2.5" opacity="0.7"/>
+    <circle cx="128" cy="128" r="24" fill="none" stroke="#00d9ff" strokeWidth="3"/>
+    <line x1="128" y1="104" x2="128" y2="72" stroke="#00d9ff" strokeWidth="3.5" strokeLinecap="round" opacity="0.9"/>
+    <circle cx="128" cy="128" r="10" fill="#00d9ff" filter="url(#mgS)"/>
+    <circle cx="128" cy="128" r="6" fill="#2d6a4f"/>
+    <circle cx="128" cy="128" r="3" fill="#00d9ff"/>
+    <path d="M 128 104 L 128 65 M 118 85 L 128 65 L 138 85" stroke="#1a3a52" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.8"/>
+    <line x1="80" y1="128" x2="176" y2="128" stroke="#1a3a52" strokeWidth="1.5" opacity="0.25" strokeDasharray="4,3"/>
+  </svg>
+);
+
 const PageHead = () => (
   <Head>
-    <title>Midnite Solar</title>
+    <title>Midnite Sentinel</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -98,8 +120,8 @@ function LoginForm({onLogin, error, loading}) {
       <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
         <form onSubmit={submit} style={{width:"100%",maxWidth:360,animation:"fadeUp 0.4s ease"}}>
           <div style={{textAlign:"center",marginBottom:32}}>
-            <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:26,boxShadow:"0 8px 24px rgba(217,119,6,0.25)",marginBottom:16}}>☀️</div>
-            <div style={{fontSize:22,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Midnite Solar</div>
+            <div style={{marginBottom:16,display:"inline-block"}}><Logo size={64}/></div>
+            <div style={{fontSize:22,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Midnite Sentinel</div>
             <div style={{fontSize:13,color:MUTED,marginTop:4}}>Sign in to your monitoring portal</div>
           </div>
           <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
@@ -127,7 +149,7 @@ function SiteSelector({sites, onSelect, onLogout}) {
       <div style={{minHeight:"100vh",background:BG}}>
         <div style={{borderBottom:`1px solid ${BORDER}`,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",background:CARD,position:"sticky",top:0,zIndex:100}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>☀️</div>
+            <Logo size={32}/>
             <div>
               <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Select a Site</div>
               <div style={{fontSize:11,color:FAINT}}>{sites.length} site{sites.length!==1?"s":""} available</div>
@@ -683,7 +705,7 @@ export default function Dashboard() {
         {/* Header */}
         <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",background:CARD,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.04)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>☀️</div>
+            <Logo size={30}/>
             <div>
               <div style={{fontSize:14,fontWeight:700,color:TEXT,lineHeight:1.2}}>{site.name}</div>
               <div style={{fontSize:10,color:FAINT}}>{site.inverters.length} inverter{site.inverters.length!==1?"s":""}

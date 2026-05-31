@@ -1,0 +1,36 @@
+<svg viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="modernGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d9ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a3a52;stop-opacity:0.8" />
+    </linearGradient>
+    <filter id="modernGlow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Outer scan rings -->
+  <circle cx="600" cy="600" r="400" fill="none" stroke="#1a3a52" stroke-width="8" opacity="0.4"/>
+  <circle cx="600" cy="600" r="300" fill="none" stroke="#1a3a52" stroke-width="8" opacity="0.5"/>
+  <circle cx="600" cy="600" r="200" fill="none" stroke="#1a3a52" stroke-width="10" opacity="0.7"/>
+  <circle cx="600" cy="600" r="100" fill="none" stroke="#00d9ff" stroke-width="12"/>
+  
+  <!-- Active scan accent line (diagonal sweep) -->
+  <line x1="600" y1="500" x2="600" y2="300" stroke="#00d9ff" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+  
+  <!-- Central core point -->
+  <circle cx="600" cy="600" r="35" fill="#00d9ff" filter="url(#modernGlow)"/>
+  <circle cx="600" cy="600" r="20" fill="#2d6a4f"/>
+  <circle cx="600" cy="600" r="10" fill="#00d9ff"/>
+  
+  <!-- Upward sentinel accent (thin arrow) -->
+  <path d="M 600 500 L 600 350 M 570 410 L 600 350 L 630 410" 
+        stroke="#1a3a52" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
+  
+  <!-- Horizontal crosshair accent -->
+  <line x1="420" y1="600" x2="780" y2="600" stroke="#1a3a52" stroke-width="6" opacity="0.3" stroke-dasharray="20,15"/>
+</svg>
