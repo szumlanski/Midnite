@@ -55,9 +55,12 @@ const CHART_BAT = "#22C55E";
 const CHART_GRID = "#94A3B8";
 
 // DO NOT change these without reading CLAUDE.md "Bar chart alignment".
-// barCategoryGap={-100} on day view prevents Recharts from clamping barSize to ~1px at 288 points.
-// barGap must equal -barSize so the pos/neg stacks align flush over the zero line.
-const BAR_DAY   = { barCategoryGap: -100,  barSize: 12, barGap: -12 };
+// BAR_DAY: NO barSize — when barSize is set and sum >= bandSize, Recharts 3.x resets barGap to 0,
+//   making pos/neg groups render side-by-side. Without barSize, Recharts uses the else branch where
+//   barCategoryGap="0%" fills the full category and barGap="-100%" collapses both groups to offset=0.
+// BAR_MONTH/YEAR: barSize IS set and barSize < bandSize, so the barGap reset never triggers.
+//   barGap must equal -barSize to align pos/neg stacks flush over the zero line.
+const BAR_DAY   = { barCategoryGap: "0%", barGap: "-100%" };
 const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
 const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
 const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };

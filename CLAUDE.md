@@ -181,9 +181,9 @@ const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
 const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
 ```
 
-**Why `barCategoryGap={-100}` on the day chart**: With 288 data points, Recharts clamps `barSize` to ~1px unless `barCategoryGap` is a negative pixel value. A percentage like "20%" does NOT work here.
+**Why `BAR_DAY` has NO `barSize`**: In Recharts 3.x (`combineAllBarPositions.js`), when `barSize` IS set, the positioning code checks `if (sum >= bandSize) { realBarGap = 0; }`. With 288 data points, `bandSize ≈ 3px` and any reasonable `barSize` makes `sum >> bandSize`, so Recharts **always resets barGap to 0**, rendering pos and neg groups side-by-side. The `barCategoryGap` prop is also only consulted in the else branch (no barSize). Fix: omit `barSize` entirely. Recharts then uses `originalSize = (bandSize - 0 - 1*(-bandSize)) / 2 = bandSize`, and both group offsets collapse to 0 — perfect overlap.
 
-**Why `barGap = -barSize` on all charts**: Each category has two bar groups — `stackId="pos"` (upward) and `stackId="neg"` (downward). Without `barGap = -barSize`, Recharts places them side by side instead of overlapping at the zero line, making the chart look wrong.
+**Why `BAR_MONTH` and `BAR_YEAR` use `barSize`**: These charts have far fewer data points (~30 and 12), so `bandSize` is large enough that `barSize < bandSize` — the reset condition never triggers. `barGap = -barSize` aligns pos/neg groups to overlap correctly.
 
 **Other invariants that must never change:**
 - Each `<Bar>` must have `activeBar={false}` — prevents white hover box (Recharts 3.x bug)
