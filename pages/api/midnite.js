@@ -233,35 +233,36 @@ export default async function handler(req, res) {
           // Use the end-user memberAutoId (captured via dual Senergytec login) to fetch
           // inverter AutoIDs from InverterList — required for Eagle getInverterStatus calls
           const autoIdMap = {};
-          // Use senToken (Senergytec) for Senergytec endpoints — Eagle token may be rejected
-          const senTok = auth.senToken || auth.token;
-          if (auth.memberAutoId && senTok) {
+          // Eagle's own InverterList returns AutoID + MemberAutoID per inverter
+          // — no Senergytec token needed, works with installer Eagle token alone
+          const memberIdsSeen = new Set(sites.map(s => s.MemberID).filter(Boolean));
+          for (const memberID of memberIdsSeen) {
             try {
-              const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };
-              glBody.sign = makeSign(glBody);
-              const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, senTok);
-              for (const g of (groups?.AllGroupList || [])) {
-                const ilBody = { MemberAutoID: auth.memberAutoId, GroupAutoID: g.AutoID };
-                ilBody.sign = makeSign(ilBody);
-                const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, senTok);
-                for (const inv of (result?.AllInverterList || [])) {
-                  const aid = inv.AutoID ?? inv.InverterAutoID ?? inv.auto_id ?? inv.id ?? null;
-                  if (aid && inv.GoodsID) autoIdMap[inv.GoodsID] = String(aid);
+              const ilb = { MemberID: memberID };
+              ilb.sign = makeSign(ilb);
+              const result = await midnitePost("/Eagle/v1/Inverterapi/InverterList", ilb, auth.token);
+              for (const inv of (result?.AllInverterList || [])) {
+                if (inv.GoodsID && inv.AutoID) {
+                  autoIdMap[inv.GoodsID] = { autoId: String(inv.AutoID), memberAutoId: String(inv.MemberAutoID || "") };
                 }
               }
-              console.log("[installer autoIdMap]", autoIdMap);
-            } catch (e) { console.log("[installer InverterList err]", e.message); }
+            } catch(e) { console.log("[Eagle InverterList err]", e.message); }
           }
+          console.log("[installer autoIdMap]", JSON.stringify(autoIdMap));
 
           // Attach AutoID + MemberAutoID to each site/inverter so status calls can use them
-          const enriched = sites.map(s => ({
-            ...s,
-            MemberAutoID: s.MemberAutoID || auth.memberAutoId,
-            GoodsID: (s.GoodsID || []).map(g => {
-              const sn = typeof g === "string" ? g : g.GoodsID;
-              return { GoodsID: sn, AutoID: autoIdMap[sn] || null };
-            }),
-          }));
+          const enriched = sites.map(s => {
+            const firstSn = typeof s.GoodsID?.[0] === "string" ? s.GoodsID[0] : s.GoodsID?.[0]?.GoodsID;
+            const siteMemberAutoId = autoIdMap[firstSn]?.memberAutoId || s.MemberAutoID || "";
+            return {
+              ...s,
+              MemberAutoID: siteMemberAutoId,
+              GoodsID: (s.GoodsID || []).map(g => {
+                const sn = typeof g === "string" ? g : g.GoodsID;
+                return { GoodsID: sn, AutoID: autoIdMap[sn]?.autoId || null };
+              }),
+            };
+          });
           return res.json({ accountType: "installer", sites: enriched });
         }
         // End-user: get groups, then inverters for each group
