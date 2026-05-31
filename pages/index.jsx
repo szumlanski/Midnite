@@ -437,13 +437,31 @@ function ChartCard({children, loading, minHeight=300}) {
 }
 
 function DayChart({date, onDateChange, data, loading}) {
+  const [showProduced, setShowProduced] = useState(true);
+  const [showConsumed, setShowConsumed] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showBattery, setShowBattery] = useState(true);
   const produced = data.reduce((s,d)=>s+((d.pv||0)*(5/60)),0);
   const consumed = data.reduce((s,d)=>s+((d.load||0)*(5/60)),0);
   const imported = data.reduce((s,d)=>s+((d.gridImport||0)*(5/60)),0);
   const exported = data.reduce((s,d)=>s+((d.gridExport||0)*(5/60)),0);
   const charged = data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
   const discharged = data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
-  const chartData = data.map(d=>({...d,consumptionNeg:-(d.load||0),batDischargeNeg:-(d.batDischarge||0)}));
+  const chartData = data.map(d=>({
+    ...d,
+    pvPos: d.pv||0,
+    batDischargePos: d.batDischarge||0,
+    gridImportPos: d.gridImport||0,
+    loadNeg: -(d.load||0),
+    batChargeNeg: -(d.batCharge||0),
+    gridExportNeg: -(d.gridExport||0),
+  }));
+  const toggleSeries = [
+    {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
+    {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
+    {key:"grid", label:"Imported/\nExported", color:"#64748B", active:showGrid, onToggle:setShowGrid},
+    {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
+  ];
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
@@ -454,12 +472,7 @@ function DayChart({date, onDateChange, data, loading}) {
         <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
-      <ChartCard loading={loading} minHeight={320}>
-        <div style={{marginBottom:8,display:"flex",gap:16,paddingLeft:8}}>
-          <Legend color={CHART_PROD} label="Solar"/>
-          <Legend color={CHART_CONS} label="Load"/>
-          <Legend color={CHART_BAT} label="Battery"/>
-        </div>
+      <ChartCard loading={loading} minHeight={360}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap={-100} barSize={12} barGap={-12}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
@@ -467,10 +480,12 @@ function DayChart({date, onDateChange, data, loading}) {
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={32}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            <Bar dataKey="pv" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos"/>
-            <Bar dataKey="batCharge" fill={CHART_BAT} fillOpacity={0.85} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
-            <Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg"/>
-            <Bar dataKey="batDischargeNeg" fill={CHART_BAT} fillOpacity={0.85} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
+            {showProduced&&<Bar dataKey="pvPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="gridImportPos" fill={GRID_IN} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
+            {showConsumed&&<Bar dataKey="loadNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="gridExportNeg" fill={GRID_OUT} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
         <div style={{marginTop:4}}>
@@ -490,19 +505,38 @@ function DayChart({date, onDateChange, data, loading}) {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        <SeriesToggle series={toggleSeries}/>
       </ChartCard>
     </div>
   );
 }
 
 function MonthChart({month, onMonthChange, data, loading}) {
+  const [showProduced, setShowProduced] = useState(true);
+  const [showConsumed, setShowConsumed] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showBattery, setShowBattery] = useState(true);
   const produced = data.reduce((s,d)=>s+(d.production||0),0)*1000;
   const consumed = data.reduce((s,d)=>s+(d.consumption||0),0)*1000;
   const imported = data.reduce((s,d)=>s+(d.fromGrid||0),0)*1000;
   const exported = data.reduce((s,d)=>s+(d.toGrid||0),0)*1000;
   const charged = data.reduce((s,d)=>s+(d.batCharge||0),0)*1000;
   const discharged = data.reduce((s,d)=>s+(d.batDischarge||0),0)*1000;
-  const chartData = data.map(d=>({...d,consumptionNeg:-(d.consumption||0),batDischargeNeg:-(d.batDischarge||0)}));
+  const chartData = data.map(d=>({
+    ...d,
+    productionPos: d.production||0,
+    batDischargePos: d.batDischarge||0,
+    fromGridPos: d.fromGrid||0,
+    consumptionNeg: -(d.consumption||0),
+    batChargeNeg: -(d.batCharge||0),
+    toGridNeg: -(d.toGrid||0),
+  }));
+  const toggleSeries = [
+    {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
+    {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
+    {key:"grid", label:"Imported/\nExported", color:"#64748B", active:showGrid, onToggle:setShowGrid},
+    {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
+  ];
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
@@ -513,12 +547,7 @@ function MonthChart({month, onMonthChange, data, loading}) {
         <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
-      <ChartCard loading={loading} minHeight={300}>
-        <div style={{marginBottom:8,display:"flex",gap:16,paddingLeft:8}}>
-          <Legend color={CHART_PROD} label="Solar"/>
-          <Legend color={CHART_CONS} label="Load"/>
-          <Legend color={CHART_BAT} label="Battery"/>
-        </div>
+      <ChartCard loading={loading} minHeight={340}>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={20} barGap={-20}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
@@ -526,25 +555,46 @@ function MonthChart({month, onMonthChange, data, loading}) {
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            <Bar dataKey="production" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos"/>
-            <Bar dataKey="batCharge" fill={CHART_BAT} fillOpacity={0.85} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
-            <Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg"/>
-            <Bar dataKey="batDischargeNeg" fill={CHART_BAT} fillOpacity={0.85} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
+            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={GRID_IN} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
+            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={GRID_OUT} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
+        <SeriesToggle series={toggleSeries}/>
       </ChartCard>
     </div>
   );
 }
 
 function YearChart({year, onYearChange, data, loading}) {
+  const [showProduced, setShowProduced] = useState(true);
+  const [showConsumed, setShowConsumed] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showBattery, setShowBattery] = useState(true);
   const produced = data.reduce((s,d)=>s+(d.production||0),0)*1000;
   const consumed = data.reduce((s,d)=>s+(d.consumption||0),0)*1000;
   const imported = data.reduce((s,d)=>s+(d.fromGrid||0),0)*1000;
   const exported = data.reduce((s,d)=>s+(d.toGrid||0),0)*1000;
   const charged = data.reduce((s,d)=>s+(d.batCharge||0),0)*1000;
   const discharged = data.reduce((s,d)=>s+(d.batDischarge||0),0)*1000;
-  const chartData = data.map(d=>({...d,consumptionNeg:-(d.consumption||0),batDischargeNeg:-(d.batDischarge||0)}));
+  const chartData = data.map(d=>({
+    ...d,
+    productionPos: d.production||0,
+    batDischargePos: d.batDischarge||0,
+    fromGridPos: d.fromGrid||0,
+    consumptionNeg: -(d.consumption||0),
+    batChargeNeg: -(d.batCharge||0),
+    toGridNeg: -(d.toGrid||0),
+  }));
+  const toggleSeries = [
+    {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
+    {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
+    {key:"grid", label:"Imported/\nExported", color:"#64748B", active:showGrid, onToggle:setShowGrid},
+    {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
+  ];
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
@@ -557,12 +607,7 @@ function YearChart({year, onYearChange, data, loading}) {
         </select>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
-      <ChartCard loading={loading} minHeight={280}>
-        <div style={{marginBottom:8,display:"flex",gap:16,paddingLeft:8}}>
-          <Legend color={CHART_PROD} label="Solar"/>
-          <Legend color={CHART_CONS} label="Load"/>
-          <Legend color={CHART_BAT} label="Battery"/>
-        </div>
+      <ChartCard loading={loading} minHeight={320}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={40} barGap={-40}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
@@ -570,12 +615,15 @@ function YearChart({year, onYearChange, data, loading}) {
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            <Bar dataKey="production" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos"/>
-            <Bar dataKey="batCharge" fill={CHART_BAT} fillOpacity={0.85} radius={[2,2,0,0]} name="Bat Charge" stackId="pos"/>
-            <Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg"/>
-            <Bar dataKey="batDischargeNeg" fill={CHART_BAT} fillOpacity={0.85} radius={[0,0,2,2]} name="Bat Discharge" stackId="neg"/>
+            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={GRID_IN} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
+            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={GRID_OUT} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
+        <SeriesToggle series={toggleSeries}/>
       </ChartCard>
     </div>
   );
@@ -586,6 +634,22 @@ function Legend({color, label}) {
     <div style={{display:"flex",alignItems:"center",gap:5}}>
       <span style={{width:10,height:10,borderRadius:2,background:color,display:"inline-block"}}/>
       <span style={{fontSize:11,color:MUTED,fontWeight:500}}>{label}</span>
+    </div>
+  );
+}
+
+function SeriesToggle({series}) {
+  return (
+    <div style={{display:"flex",justifyContent:"center",gap:16,flexWrap:"wrap",paddingTop:12,borderTop:`1px solid ${BORDER}`,marginTop:10}}>
+      {series.map(s=>(
+        <button key={s.key} onClick={()=>s.onToggle(!s.active)}
+          style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,border:"none",background:"transparent",cursor:"pointer",padding:"2px 6px",fontFamily:SANS,WebkitTapHighlightColor:"transparent"}}>
+          <div style={{position:"relative",width:40,height:22,borderRadius:11,background:s.active?s.color:"#D1D5DB",transition:"background 0.2s",flexShrink:0}}>
+            <div style={{position:"absolute",top:2,left:s.active?20:2,width:18,height:18,borderRadius:9,background:"#FFFFFF",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left 0.2s"}}/>
+          </div>
+          <span style={{fontSize:10,color:s.active?MUTED:FAINT,fontWeight:500,textAlign:"center",lineHeight:1.3,whiteSpace:"pre-line"}}>{s.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
