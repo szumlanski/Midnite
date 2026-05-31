@@ -1,18 +1,20 @@
 # Midnite Solar Dashboard — Project Knowledge
 
-**Site**: Wise Naples | **URL**: https://midnite-rose.vercel.app | **Repo**: https://github.com/szumlanski/Midnite
-**Project path on Jason's Mac**: `~/midnite/midnite/` (note: nested — git root is `~/midnite/`, Next.js project is `~/midnite/midnite/`)
+**App name**: Midnite Sentinel | **URL**: https://midnite-rose.vercel.app | **Repo**: https://github.com/szumlanski/Midnite
+**Project path on Jason's Mac**: `~/Midnite/midnite/` (git root is `~/Midnite/`, Next.js project is `~/Midnite/midnite/`)
 
 ---
 
 ## Architecture
 
-- `pages/index.jsx` — React frontend dashboard
+- `pages/index.jsx` — React frontend dashboard (single-file, all components inline)
 - `pages/api/midnite.js` — Next.js serverless proxy (handles auth + API signing)
+- `public/favicon.svg` — Bold amber sun + sentinel eye icon
+- `public/logo.svg` — Same design as favicon
 - No `vercel.json`. No `output: standalone`. Standard Next.js build. Framework preset = Next.js.
 - Deployment protection is OFF in Vercel settings.
 
-**Environment variables in Vercel** (fallback only, login is now dynamic):
+**Environment variables in Vercel** (fallback only, login is dynamic):
 - `MIDNITE_USERNAME` = `Wise Naples`
 - `MIDNITE_PASSWORD` = `921551`
 
@@ -89,7 +91,7 @@ All actions accept optional `username` and `password` in the request body. Falls
 | `month` | `monthProductionAndConsumptionArea` | `sn`, `date` (YYYY-MM) |
 | `year` | `yearProductionAndConsumptionArea` | `sn`, `date` (YYYY) |
 
-**Critical**: All four actions must exist in the proxy switch statement. If `status` is missing, the live tab crashes with a 400 error and the whole app breaks with `Cannot read properties of undefined (reading 'lines')`.
+**Critical**: All actions must exist in the proxy switch statement. If `status` is missing, the live tab crashes with a 400 error.
 
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
 
@@ -102,7 +104,57 @@ All actions accept optional `username` and `password` in the request body. Falls
 
 ### normalizeDetail()
 
-The `status` action must call `normalizeDetail(raw, sn)` before returning. The frontend `InverterCard` and `AggregateBar` components access `data.load.lines`, `data.grid.lines`, etc. If raw data is returned without normalization, the app crashes.
+The `status` action calls `normalizeDetail(raw, sn)` before returning. Key logic:
+
+**EPS auto-detect**: Some inverters (AIO and others) serve load through EPS port, not AC load port. `loadCurrpac` = 0, `epsCurrpac` has actual load. Auto-detect: if `loadSum === 0 && epsSum > 0`, use `epsCurrpac`/`epsVac`/`epsIac`/`EPSDay`/`EPSTotal`.
+
+**Battery fields**: All battery data is in `InverterDetailInfoNewone` — no separate endpoint needed.
+- `brand` = BMS brand (empty string = open loop / no BMS comms, e.g. lead acid)
+- `SOC`, `SOH`, `volt`, `cur`, `BMS_temp`, `capacity` (Ah), `toPbat` (charge W), `fromPbat` (discharge W)
+- `Etotal_batChrg`, `Etotal_batDischrg` in kWh → multiply × 1000 for Wh
+
+---
+
+## Frontend Design System
+
+**Theme**: Light warm residential (not dark/glassmorphism).
+
+### Design Tokens (index.jsx)
+```js
+const BG = "#F7F4EF";       // page background
+const CARD = "#FFFFFF";
+const BORDER = "#EAE4DC";
+const TEXT = "#1C1917";
+const MUTED = "#78716C";
+const FAINT = "#A8A29E";
+const SOLAR = "#D97706";    // amber — PV
+const BATTERY = "#16A34A";  // green — battery
+const GRID_IN = "#DC2626";  // red — importing from grid
+const GRID_OUT = "#059669"; // green — exporting to grid
+const LOAD_C = "#2563EB";   // blue — load/consumption
+const CHART_PROD = "#3B82F6";
+const CHART_CONS = "#F97316";
+const CHART_BAT = "#22C55E";
+const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
+```
+
+### Logo
+Bold amber sun with sentinel eye. Inline React `Logo` component in `index.jsx`, also `public/favicon.svg` and `public/logo.svg`. All three must match.
+
+Design: navy `#0D1F33` rounded-rect background → 8 amber `#F59E0B` pill rays rotated 0/45/90…315° → amber disc r=66 → navy ring r=44 → cyan `#00C8E8` iris r=28 → navy pupil r=12 → white core r=5. All on 256×256 viewBox centered at (128,128).
+
+### Mobile / Layout
+- Bottom nav bar (fixed, mobile only via CSS `@media(max-width:640px)`): Live / Day / Month / Year tabs with SVG icons
+- Top tabs hidden on mobile (`display:none!important`)
+- Inverter selector: horizontal scroll, no-wrap, `.inv-scroll` class (hidden scrollbar CSS)
+- Pills show `INV-N · power` with last-8-chars SN as monospace subtitle
+
+### Battery Panel (BatteryPanel component)
+- Sums `charge`, `discharge`, `current` across all inverters with `voltage > 0`
+- Averages `soc`, `voltage`, `healthPercent`, `temperature` from those same inverters
+- Open loop detection: `brand === ""` → hide SOH/temp, label SOC as "estimated"
+- All 4 inverters report the same battery bank (master inverter replicates to all)
+- `capacityAh` is the total bank capacity (e.g. 3140 Ah = 10 × 314 Ah batteries)
 
 ---
 
@@ -121,14 +173,19 @@ Month and year data is in **kWh**. Summary card totals use `* 1000` to convert t
 
 ## Known Issues / History
 
-### Bar alignment in charts
-The month and year charts use `consumptionNeg: -(d.consumption||0)` to render consumption bars below zero. This is the correct approach. Do NOT switch to ComposedChart or stackId approaches — they break the data entirely.
+### Bar chart alignment
+- Day view (288 5-min points): use `barCategoryGap={-100} barSize={12} barGap={-12}`. Negative `barCategoryGap` prevents Recharts from clamping `barSize` to ~1px.
+- Month/year: use `barCategoryGap="20%" barSize={20 or 40} barGap={-20 or -40}`. Category width is large enough that clamping doesn't occur.
+- Month/year use `consumptionNeg: -(d.consumption||0)` to render below zero. Do NOT use ComposedChart or shared stackId — they break the data.
+
+### Recharts Tooltip white hover box
+Add `activeBar={false}` to each `<Bar>` and `cursor={false}` to `<Tooltip>` (Recharts 3.x).
 
 ### verticalPoints prop
-The original working charts had `verticalPoints={[0]}` on `CartesianGrid`. This caused misalignment. Remove it. Use plain `<CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>`.
+Do NOT add `verticalPoints` to `CartesianGrid` — causes misalignment. Use plain `<CartesianGrid strokeDasharray="3 3"/>`.
 
-### White hover bar
-Add `activeBar={false}` to each `<Bar>` component to remove the white highlight on hover.
+### Recharts stackId
+Use `stackId="pos"` for upward bars, `stackId="neg"` for downward bars. Never share a stackId between production and consumption bars.
 
 ---
 
@@ -143,12 +200,6 @@ Add `activeBar={false}` to each `<Bar>` component to remove the white highlight 
 
 ---
 
-## File Delivery to Jason
+## Working with Claude Code
 
-Claude cannot write directly to Jason's Mac filesystem. Workflow:
-1. Create files at `/mnt/user-data/outputs/`
-2. Use `present_files` to surface them
-3. Jason downloads and runs `cp ~/Downloads/filename path/in/project`
-4. Jason runs `git add`, `git commit`, `git push`
-
-Always give Jason the exact bash commands to run, one block, copy-paste ready.
+Claude Code (CLI) can read and write files directly in the project directory. No need to use `/mnt/user-data/outputs/` or manual `cp` steps. Claude commits and pushes directly via git.
