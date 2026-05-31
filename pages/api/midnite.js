@@ -358,6 +358,69 @@ export default async function handler(req, res) {
         const totalErrors=results.reduce((s,r)=>s+(r.total_error_num||0),0);
         return res.json({events,totalErrors});
       }
+      case "debug": {
+        // Diagnostic endpoint — call from browser console to expose auth, site IDs, InverterList fields,
+        // and a live getInverterStatus attempt. Remove this case before production.
+        const {serials:ds}=req.body||{};
+        const out = {
+          auth: { accountType: auth.accountType, memberAutoId: auth.memberAutoId, username: auth.username },
+        };
+
+        // --- installer path: show raw terminaluserinfo structure ---
+        if (auth.accountType === "installer") {
+          try {
+            const now=new Date();
+            const tb={MemberID:auth.username,Page:1,EndUserName:"",OperationName:"",GoodsID:"",
+              inDate:now.toISOString().split("T")[0],inTime:now.toTimeString().split(" ")[0],status:0};
+            tb.sign=makeSign(tb);
+            const sites=await midnitePost("/Eagle/v1/Operation/terminaluserinfo",tb,auth.token);
+            const first=Array.isArray(sites)?sites[0]:null;
+            out.terminaluserinfo_first_site_keys = first ? Object.keys(first) : [];
+            out.terminaluserinfo_first_site = first;
+          } catch(e){ out.terminaluserinfo_err=e.message; }
+        }
+
+        // --- InverterList: show raw first inverter object to find AutoID field ---
+        if (auth.memberAutoId) {
+          try {
+            const glb={MemberAutoID:auth.memberAutoId,inputValue:""};
+            glb.sign=makeSign(glb);
+            const groups=await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList",glb,auth.token);
+            out.groups=(groups?.AllGroupList||[]).map(g=>({AutoID:g.AutoID,name:g.GroupName}));
+            const firstGroup=(groups?.AllGroupList||[])[0];
+            if(firstGroup) {
+              const ilb={MemberAutoID:auth.memberAutoId,GroupAutoID:firstGroup.AutoID};
+              ilb.sign=makeSign(ilb);
+              const inv=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList",ilb,auth.token);
+              const first=(inv?.AllInverterList||[])[0];
+              out.inverterlist_first_keys = first ? Object.keys(first) : [];
+              out.inverterlist_first = first;
+            }
+          } catch(e){ out.inverterlist_err=e.message; }
+        }
+
+        // --- Try getInverterStatus with first provided serial ---
+        const testSn = ds?.[0];
+        if (testSn) {
+          // Try with GoodsID as AutoId fallback
+          const autoIdGuesses = [
+            out.inverterlist_first?.AutoID, out.inverterlist_first?.InverterAutoID,
+            out.inverterlist_first?.auto_id, out.inverterlist_first?.id,
+          ].filter(Boolean);
+          out.autoId_candidates = autoIdGuesses;
+          for (const aid of autoIdGuesses) {
+            try {
+              const rb2={AutoId:String(aid),memberAutoID:String(auth.memberAutoId)};
+              rb2.sign=makeSign(rb2);
+              const r=await midnitePost("/Eagle/v1/Inverterapi/getInverterStatus",rb2,auth.token);
+              out.getInverterStatus_result={autoIdUsed:aid,status:r?.status,hasMppts:!!r?.data?.photovoltaic?.mppts,dataKeys:r?.data?Object.keys(r.data):[]};
+              break;
+            } catch(e){ out.getInverterStatus_err=e.message; }
+          }
+        }
+
+        return res.json(out);
+      }
       case "rawstatus": {
         // Debug endpoint — returns the full unprocessed InverterDetailInfoNewone response
         // Use this to discover MPPT/fault/mode field names
