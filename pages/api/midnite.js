@@ -251,11 +251,12 @@ export default async function handler(req, res) {
           // Try rich endpoint first (has MPPT strings, smart ports, self-consumption %)
           try {
             const rich=await midnitePost("/Senergytec/web/v2/Inverterapi/getInverterStatus",body,auth.token);
+            console.log(`[getInverterStatus ${sn}] status=${rich?.status} keys=${Object.keys(rich||{}).join(",")}`);
             if(rich?.data?.photovoltaic?.mppts) {
               const data=normalizeRich(rich);
-              return {sn,ok:!!data,data,error:data?null:"No data"};
+              return {sn,ok:!!data,data,source:"rich",error:data?null:"No data"};
             }
-          } catch(e) { /* fall through */ }
+          } catch(e) { console.log(`[getInverterStatus ${sn}] failed: ${e.message}`); }
           // Fallback: InverterDetailInfoNewone
           try {
             const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);

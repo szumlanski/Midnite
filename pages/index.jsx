@@ -386,41 +386,54 @@ function FaultPanel({site}) {
   const [events, setEvents] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
-  useEffect(()=>{
+  const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(thirtyAgo);
+  const [endDate, setEndDate] = useState(today);
+  const load = useCallback(()=>{
     if(!site) return;
-    api("logsearch",{serials:site.inverters.map(i=>i.sn)})
+    setLoading(true); setEvents(null);
+    api("logsearch",{serials:site.inverters.map(i=>i.sn),startDate,endDate})
       .then(d=>setEvents(d.events||[]))
       .catch(()=>setEvents([]))
       .finally(()=>setLoading(false));
-  },[site]);
+  },[site,startDate,endDate]);
+  useEffect(()=>{ load(); },[load]);
   const activeCount = events?.filter(e=>e.status==="1").length||0;
-  const hasActive = activeCount>0;
+  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"4px 8px",fontSize:11,fontFamily:SANS,cursor:"pointer"};
   return (
-    <div style={{background:CARD,border:`1px solid ${hasActive?"#FECACA":BORDER}`,borderRadius:16,padding:"18px 20px",marginBottom:16,boxShadow:SHADOW_SM}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:9,background:hasActive?"#FEF2F2":"#F0FDF4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{hasActive?"⚠️":"✅"}</div>
-          <div>
-            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Fault Log</div>
-            <div style={{fontSize:11,color:FAINT}}>{loading?"Loading…":events?`${events.length} events · ${activeCount} active`:"—"}</div>
+    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,overflow:"hidden",boxShadow:SHADOW_SM,marginBottom:16}}>
+      <button onClick={()=>setExpanded(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:12,color:FAINT}}>⚡</span>
+          <span style={{fontSize:12,fontWeight:600,color:MUTED}}>Fault Log</span>
+          {!loading&&events&&<span style={{fontSize:11,color:FAINT}}>— {events.length} events · {activeCount} active</span>}
+          {loading&&<span style={{fontSize:11,color:FAINT}}>Loading…</span>}
+        </div>
+        <span style={{fontSize:11,color:FAINT}}>{expanded?"▲":"▼"}</span>
+      </button>
+      {expanded&&(
+        <>
+          <div style={{borderTop:`1px solid ${BORDER}`,padding:"10px 16px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:11,color:FAINT}}>From</span>
+            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inputS}/>
+            <span style={{fontSize:11,color:FAINT}}>to</span>
+            <input type="date" value={endDate} max={today} onChange={e=>setEndDate(e.target.value)} style={inputS}/>
           </div>
-        </div>
-        <button onClick={()=>setExpanded(x=>!x)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:BG,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{expanded?"Collapse":"Expand"}</button>
-      </div>
-      {expanded&&!loading&&events&&(
-        <div style={{marginTop:14,overflowY:"auto",maxHeight:360}}>
-          {events.length===0&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>No fault events found in the last 30 days</div>}
-          {events.map((e,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"8px 0",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
-              <span style={{fontSize:10,fontWeight:700,color:e.status==="1"?GRID_IN:BATTERY,padding:"2px 6px",borderRadius:4,background:e.status==="1"?"#FEF2F2":"#DCFCE7",whiteSpace:"nowrap"}}>{e.status==="1"?"ACTIVE":"CLEARED"}</span>
-              <div>
-                <div style={{fontSize:12,fontWeight:600,color:TEXT}}>Code {e.ErrorCode}: {FAULT_DESC[e.ErrorCode]||"Unrecognized code"}</div>
-                <div style={{fontSize:10,color:FAINT}}>{e.GoodsID} · {e.ModelName}</div>
+          <div style={{borderTop:`1px solid ${BORDER}`,overflowY:"auto",maxHeight:320,padding:"4px 0"}}>
+            {loading&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>Loading…</div>}
+            {!loading&&events?.length===0&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>No fault events in this range</div>}
+            {!loading&&events?.map((e,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"7px 16px",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
+                <span style={{fontSize:10,fontWeight:700,color:e.status==="1"?GRID_IN:BATTERY,padding:"2px 6px",borderRadius:4,background:e.status==="1"?"#FEF2F2":"#DCFCE7",whiteSpace:"nowrap"}}>{e.status==="1"?"ACTIVE":"CLEARED"}</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:600,color:TEXT}}>Code {e.ErrorCode}: {FAULT_DESC[e.ErrorCode]||"Unrecognized code"}</div>
+                  <div style={{fontSize:10,color:FAINT}}>{e.GoodsID}</div>
+                </div>
+                <span style={{fontSize:10,color:FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{(e.Time||"").slice(5,16)}</span>
               </div>
-              <span style={{fontSize:10,color:FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{(e.Time||"").slice(5,16)}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -978,13 +991,13 @@ export default function Dashboard() {
                   {selectedInv==="all"&&<SiteHero statuses={statuses}/>}
                   {selectedInv==="all"&&<BatteryPanel statuses={statuses}/>}
                   {selectedInv==="all"&&<LifetimePanel statuses={statuses}/>}
-                  {selectedInv==="all"&&<FaultPanel site={site}/>}
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
                     {visibleStatuses.map(s=>{
                       const inv = site.inverters.find(inv=>inv.sn===s.sn)||{sn:s.sn,label:s.label};
                       return <InverterCard key={s.sn} inv={inv} status={s}/>;
                     })}
                   </div>
+                  {selectedInv==="all"&&<FaultPanel site={site}/>}
                 </>
               }
             </>
