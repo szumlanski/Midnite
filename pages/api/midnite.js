@@ -64,6 +64,59 @@ async function login(user = null, pass = null) {
   return { token: data.token, memberAutoId: String(data.MemberAutoID), accountType: "enduser", username };
 }
 
+// Handles the richer getInverterStatus response (has mppts[], smartPortA/B/C, etc.)
+function normalizeRich(raw) {
+  if (!raw?.data) return null;
+  const d = raw.data;
+  // grid netW: negative current on a line = exporting
+  const gridNetW = (d.grid?.lines||[]).reduce((s,l)=>s+((l.current||0)<0?-1:1)*(l.power||0),0);
+  return {
+    inverter: {
+      online: d.inverter?.online ?? true,
+      model: d.inverter?.model || "",
+      sn: d.inverter?.sn || "",
+      temperature: d.inverter?.temperature || 0,
+      lastUpdateTime: d.inverter?.lastUpdateTime || "",
+      selfConsumptionPercent: d.inverter?.selfConsumptionPercent ?? null,
+      selfSufficiencyPercent: d.inverter?.selfSufficiencyPercent ?? null,
+    },
+    photovoltaic: {
+      mppts: d.photovoltaic?.mppts || [],
+      power: d.photovoltaic?.power || { totalDc:0, peak:0 },
+      production: d.photovoltaic?.production || { today:0, total:0 },
+    },
+    grid: {
+      lines: d.grid?.lines || [],
+      netW: gridNetW,
+      sold: d.grid?.sold || { today:0, total:0 },
+      consumption: d.grid?.consumption || { today:0, total:0 },
+    },
+    load: {
+      lines: d.load?.lines || [],
+      power: d.load?.power || { today:0, total:0 },
+    },
+    battery: {
+      brand: d.battery?.brand || "",
+      capacityAh: parseFloat(d.battery?.capacity || 0),
+      voltage: d.battery?.voltage || 0,
+      current: d.battery?.current || 0,
+      charge: d.battery?.charge || 0,
+      discharge: d.battery?.discharge || 0,
+      soc: d.battery?.soc || 0,
+      healthPercent: d.battery?.healthPercent || 0,
+      temperature: d.battery?.temperature || 0,
+      chargeIn: d.battery?.chargeIn || { today:0, total:0 },
+      dischargeOut: d.battery?.dischargeOut || { today:0, total:0 },
+    },
+    smartPorts: {
+      A: d.smartPortA || null,
+      B: d.smartPortB || null,
+      C: d.smartPortC || null,
+    },
+    gen: d.gen || null,
+  };
+}
+
 function normalizeDetail(raw, sn) {
   if(!raw || raw.GoodsID === undefined) return null;
   const pvW = parseFloat(raw.TotalDCpower || 0);
@@ -195,6 +248,15 @@ export default async function handler(req, res) {
         const results = await Promise.all(serials.map(async sn=>{
           const body={GoodsID:sn,MemberAutoID:auth.memberAutoId};
           body.sign=makeSign(body);
+          // Try rich endpoint first (has MPPT strings, smart ports, self-consumption %)
+          try {
+            const rich=await midnitePost("/Senergytec/web/v2/Inverterapi/getInverterStatus",body,auth.token);
+            if(rich?.data?.photovoltaic?.mppts) {
+              const data=normalizeRich(rich);
+              return {sn,ok:!!data,data,error:data?null:"No data"};
+            }
+          } catch(e) { /* fall through */ }
+          // Fallback: InverterDetailInfoNewone
           try {
             const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);
             const data=normalizeDetail(raw,sn);
@@ -224,6 +286,36 @@ export default async function handler(req, res) {
         const body = { GoodsID: sn, date: date || new Date().getFullYear().toString() };
         body.sign = makeSign(body);
         return res.json(await midnitePost("/Senergytec/web/v2/Inverterapi/yearProductionAndConsumptionArea", body, auth.token));
+      }
+      case "logsearch": {
+        const {serials:ls,startDate,endDate}=req.body||{};
+        if(!ls?.length) return res.status(400).json({error:"serials required"});
+        const now=new Date();
+        const eDate=endDate||now.toISOString().split('T')[0];
+        const sDate=startDate||new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
+        const results=await Promise.all(ls.map(async sn=>{
+          const body={GoodsID:sn,MemberID:auth.username,selectType:2,SDate:sDate,EDate:eDate};
+          body.sign=makeSign(body);
+          try {
+            const data=await midnitePost("/Senergytec/web/v2/Inverterapi/logsearch",body,auth.token);
+            return {sn,ok:true,...data};
+          } catch(e){return {sn,ok:false,error:e.message};}
+        }));
+        // Merge all inverter fault events, newest first
+        const events=results.filter(r=>r.ok).flatMap(r=>(r.infoerror||[]).map(e=>({...e,sn:r.sn})));
+        events.sort((a,b)=>new Date(b.Time)-new Date(a.Time));
+        const totalErrors=results.reduce((s,r)=>s+(r.total_error_num||0),0);
+        return res.json({events,totalErrors});
+      }
+      case "rawstatus": {
+        // Debug endpoint — returns the full unprocessed InverterDetailInfoNewone response
+        // Use this to discover MPPT/fault/mode field names
+        const {serials:rs}=req.body||{};
+        const sn=rs?.[0]; if(!sn) return res.status(400).json({error:"serials required"});
+        const rb={GoodsID:sn,MemberAutoID:auth.memberAutoId}; rb.sign=makeSign(rb);
+        const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",rb,auth.token);
+        console.log("[rawstatus fields]", Object.keys(raw).join(", "));
+        return res.json(raw);
       }
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });

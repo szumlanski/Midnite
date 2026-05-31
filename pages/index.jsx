@@ -239,6 +239,11 @@ function SiteHero({statuses}) {
   const totalBat = v.reduce((s,i)=>s+(i.data.battery?.charge||0)-(i.data.battery?.discharge||0),0);
   const avgSoc = v.length ? v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length : null;
   const totalToday = v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.today||0),0);
+  const totalImpToday = v.reduce((s,i)=>s+(i.data.grid?.consumption?.today||0),0);
+  const totalExpToday = v.reduce((s,i)=>s+(i.data.grid?.sold?.today||0),0);
+  const gridFreq = v.find(i=>i.data.grid?.lines?.[0]?.frequency>0)?.data.grid.lines[0].frequency||null;
+  const selfSuffArr = v.filter(i=>i.data.inverter?.selfSufficiencyPercent!=null);
+  const avgSelfSuff = selfSuffArr.length ? selfSuffArr.reduce((s,i)=>s+i.data.inverter.selfSufficiencyPercent,0)/selfSuffArr.length : null;
   const isExporting = totalGrid < -50;
   const isImporting = totalGrid > 50;
   const gridColor = isExporting ? GRID_OUT : isImporting ? GRID_IN : MUTED;
@@ -250,15 +255,21 @@ function SiteHero({statuses}) {
           <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2}}>Site Production Now</div>
           <div style={{fontSize:36,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-1px",fontVariantNumeric:"tabular-nums"}}>{fmt(totalPv,2)}</div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:20,background:isExporting?"#DCFCE7":isImporting?"#FEE2E2":"#F1F5F9",border:`1px solid ${isExporting?"#86EFAC":isImporting?"#FECACA":"#E2E8F0"}`}}>
-          <span style={{width:7,height:7,borderRadius:"50%",background:gridColor,display:"inline-block"}}/>
-          <span style={{fontSize:12,fontWeight:700,color:gridColor}}>{gridLabel}</span>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:20,background:isExporting?"#DCFCE7":isImporting?"#FEE2E2":"#F1F5F9",border:`1px solid ${isExporting?"#86EFAC":isImporting?"#FECACA":"#E2E8F0"}`}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:gridColor,display:"inline-block"}}/>
+            <span style={{fontSize:12,fontWeight:700,color:gridColor}}>{gridLabel}</span>
+          </div>
+          {gridFreq&&<span style={{fontSize:10,color:MUTED,fontWeight:500}}>{gridFreq.toFixed(2)} Hz</span>}
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8}}>
         <StatTile label="Load" value={fmt(totalLoad,2)} color={LOAD_C}/>
         <StatTile label="Battery" value={totalBat>10?`+${fmt(totalBat)}`:totalBat<-10?fmt(totalBat):"Idle"} color={totalBat>10?BATTERY:totalBat<-10?SOLAR:MUTED} sub={avgSoc!=null?`SOC ${avgSoc.toFixed(0)}%`:null}/>
-        <StatTile label="Today" value={fmtE(totalToday)} color={TEXT}/>
+        <StatTile label="PV Today" value={fmtE(totalToday)} color={TEXT}/>
+        {totalImpToday>0&&<StatTile label="Imported" value={fmtE(totalImpToday)} color={GRID_IN}/>}
+        {totalExpToday>0&&<StatTile label="Exported" value={fmtE(totalExpToday)} color={GRID_OUT}/>}
+        {avgSelfSuff!=null&&<StatTile label="Self-Sufficient" value={`${avgSelfSuff.toFixed(0)}%`} color={MUTED}/>}
       </div>
     </div>
   );
@@ -338,6 +349,83 @@ function BatteryPanel({statuses}) {
   );
 }
 
+function LifetimePanel({statuses}) {
+  const v = statuses.filter(s=>s?.ok&&s?.data);
+  if(!v.length) return null;
+  const pvTotal  = v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.total||0),0);
+  const expTotal = v.reduce((s,i)=>s+(i.data.grid?.sold?.total||0),0);
+  const impTotal = v.reduce((s,i)=>s+(i.data.grid?.consumption?.total||0),0);
+  const loadTotal= v.reduce((s,i)=>s+(i.data.load?.power?.total||0),0);
+  if(!pvTotal) return null;
+  return (
+    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"18px 20px",marginBottom:16,boxShadow:SHADOW_SM}}>
+      <div style={{fontSize:11,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Lifetime Totals</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+        <StatTile label="PV Produced"   value={fmtE(pvTotal)}   color={CHART_PROD}/>
+        <StatTile label="Grid Exported" value={fmtE(expTotal)}  color={GRID_OUT}/>
+        <StatTile label="Grid Imported" value={fmtE(impTotal)}  color={GRID_IN}/>
+        {loadTotal>0&&<StatTile label="Load Total" value={fmtE(loadTotal)} color={LOAD_C}/>}
+      </div>
+    </div>
+  );
+}
+
+const FAULT_DESC = {
+  "1":"DC bus over-voltage","2":"DC bus under-voltage","3":"DC bus soft-start failure",
+  "4":"PV over-current","5":"PV over-voltage","6":"PV short circuit",
+  "7":"Battery over-voltage","8":"Battery under-voltage","9":"Battery over-temperature",
+  "10":"Battery under-temperature","11":"Battery over-current",
+  "17":"AC output over-current","18":"AC output overload","19":"AC over-frequency",
+  "20":"AC under-frequency","21":"Grid over-voltage","22":"Grid under-voltage",
+  "23":"Grid over-frequency","24":"Grid under-frequency",
+  "25":"Inverter over-temperature","26":"Fan failure","27":"Communication failure",
+  "48":"Battery voltage deviation","50":"Grid frequency deviation",
+};
+
+function FaultPanel({site}) {
+  const [events, setEvents] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(()=>{
+    if(!site) return;
+    api("logsearch",{serials:site.inverters.map(i=>i.sn)})
+      .then(d=>setEvents(d.events||[]))
+      .catch(()=>setEvents([]))
+      .finally(()=>setLoading(false));
+  },[site]);
+  const activeCount = events?.filter(e=>e.status==="1").length||0;
+  const hasActive = activeCount>0;
+  return (
+    <div style={{background:CARD,border:`1px solid ${hasActive?"#FECACA":BORDER}`,borderRadius:16,padding:"18px 20px",marginBottom:16,boxShadow:SHADOW_SM}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:9,background:hasActive?"#FEF2F2":"#F0FDF4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{hasActive?"⚠️":"✅"}</div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Fault Log</div>
+            <div style={{fontSize:11,color:FAINT}}>{loading?"Loading…":events?`${events.length} events · ${activeCount} active`:"—"}</div>
+          </div>
+        </div>
+        <button onClick={()=>setExpanded(x=>!x)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:BG,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{expanded?"Collapse":"Expand"}</button>
+      </div>
+      {expanded&&!loading&&events&&(
+        <div style={{marginTop:14,overflowY:"auto",maxHeight:360}}>
+          {events.length===0&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>No fault events found in the last 30 days</div>}
+          {events.map((e,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"8px 0",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
+              <span style={{fontSize:10,fontWeight:700,color:e.status==="1"?GRID_IN:BATTERY,padding:"2px 6px",borderRadius:4,background:e.status==="1"?"#FEF2F2":"#DCFCE7",whiteSpace:"nowrap"}}>{e.status==="1"?"ACTIVE":"CLEARED"}</span>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:TEXT}}>Code {e.ErrorCode}: {FAULT_DESC[e.ErrorCode]||"Unrecognized code"}</div>
+                <div style={{fontSize:10,color:FAINT}}>{e.GoodsID} · {e.ModelName}</div>
+              </div>
+              <span style={{fontSize:10,color:FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{(e.Time||"").slice(5,16)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InverterCard({inv, status}) {
   const d = status?.data;
   const pv = d?.photovoltaic?.power?.totalDc ?? null;
@@ -351,29 +439,73 @@ function InverterCard({inv, status}) {
   const eToday = d?.photovoltaic?.production?.today ?? null;
   const gridColor = gridNet!=null ? (gridNet<0?GRID_OUT:GRID_IN) : FAINT;
   const gridLabel = gridNet!=null ? (gridNet<0?"Exporting":"Importing") : "Grid";
+  const model = d?.inverter?.model||null;
+  const gridFreq = d?.grid?.lines?.[0]?.frequency>0 ? d.grid.lines[0].frequency : null;
+  const l1Volt = d?.grid?.lines?.[0]?.voltage>0 ? d.grid.lines[0].voltage : null;
+  const l2Volt = d?.grid?.lines?.[1]?.voltage>0 ? d.grid.lines[1].voltage : null;
+  const gridInToday = d?.grid?.consumption?.today||0;
+  const gridOutToday = d?.grid?.sold?.today||0;
+  const mppts = d?.photovoltaic?.mppts||[];
+  const activePorts = d?.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&(p.lines||[]).reduce((s,l)=>s+(l.power||0),0)>0) : [];
   return (
     <div className="inv-card" style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,overflow:"hidden",boxShadow:SHADOW_SM}}>
       <div style={{height:3,background:online?`linear-gradient(90deg,${SOLAR},${BATTERY})`:"#E5E7EB"}}/>
       <div style={{padding:"16px 16px 14px"}}>
+        {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
           <div>
             <div style={{fontSize:16,fontWeight:700,color:TEXT}}>{inv.label}</div>
+            {model&&<div style={{fontSize:10,color:MUTED,marginTop:1}}>{model}</div>}
             <div style={{fontSize:10,color:FAINT,marginTop:1,fontVariantNumeric:"tabular-nums"}}>{inv.sn}</div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:online?"#DCFCE7":"#FEE2E2",border:`1px solid ${online?"#86EFAC":"#FECACA"}`}}>
-            <span style={{width:5,height:5,borderRadius:"50%",background:online?BATTERY:GRID_IN,display:"inline-block",animation:online?"pulse 2s infinite":"none"}}/>
-            <span style={{fontSize:10,fontWeight:700,color:online?BATTERY:GRID_IN}}>{online?"LIVE":"OFFLINE"}</span>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:online?"#DCFCE7":"#FEE2E2",border:`1px solid ${online?"#86EFAC":"#FECACA"}`}}>
+              <span style={{width:5,height:5,borderRadius:"50%",background:online?BATTERY:GRID_IN,display:"inline-block",animation:online?"pulse 2s infinite":"none"}}/>
+              <span style={{fontSize:10,fontWeight:700,color:online?BATTERY:GRID_IN}}>{online?"LIVE":"OFFLINE"}</span>
+            </div>
+            {gridFreq&&<span style={{fontSize:10,color:FAINT,fontWeight:500}}>{gridFreq.toFixed(2)} Hz</span>}
           </div>
         </div>
         {status?.ok===false&&<div style={{fontSize:12,color:GRID_IN,padding:"8px 10px",background:"#FEF2F2",borderRadius:8,marginBottom:8}}>{status.error||"No data"}</div>}
         {d&&(
           <>
+            {/* Main stats */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               <StatTile label="Solar" value={fmt(pv)} color={SOLAR}/>
               <StatTile label="Load" value={fmt(load)} color={LOAD_C}/>
               <StatTile label={gridLabel} value={fmt(gridNet!=null?Math.abs(gridNet):null)} color={gridColor}/>
               <StatTile label={batChg>10?"Charging":batDis>10?"Discharging":"Battery"} value={fmt(batChg>10?batChg:batDis>10?-batDis:0)} color={batChg>10?BATTERY:batDis>10?SOLAR:MUTED}/>
             </div>
+            {/* MPPT strings */}
+            {mppts.length>0&&(
+              <div style={{marginBottom:10,padding:"8px 10px",background:BG,borderRadius:10}}>
+                <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>PV Strings</div>
+                {mppts.map((m,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:i<mppts.length-1?4:0}}>
+                    <span style={{color:MUTED,fontWeight:600}}>MPPT {i+1}</span>
+                    {m.power>0
+                      ? <span style={{color:SOLAR,fontVariantNumeric:"tabular-nums"}}>{m.voltage.toFixed(0)}V · {m.current.toFixed(2)}A · {fmt(m.power)}</span>
+                      : <span style={{color:FAINT}}>—</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Smart Ports */}
+            {activePorts.length>0&&(
+              <div style={{marginBottom:10,padding:"8px 10px",background:"#F0FDF4",borderRadius:10,border:`1px solid #DCFCE7`}}>
+                <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Smart Ports</div>
+                {activePorts.map(([key,port])=>{
+                  const w=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
+                  return (
+                    <div key={key} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}}>
+                      <span style={{color:MUTED,fontWeight:600}}>Port {key}</span>
+                      <span style={{color:BATTERY,fontVariantNumeric:"tabular-nums"}}>{fmt(w)} · {fmtE(port.power?.today||0)} today</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Battery SOC */}
             <div style={{marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
                 <span style={{fontSize:11,color:MUTED,fontWeight:600}}>Battery SOC</span>
@@ -381,9 +513,27 @@ function InverterCard({inv, status}) {
               </div>
               {soc!=null&&<SOCBar value={soc}/>}
             </div>
-            <div style={{paddingTop:10,borderTop:`1px solid ${BORDER}`,display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontSize:11,color:MUTED}}>Today</span>
-              <span style={{fontSize:11,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtE(eToday)}</span>
+            {/* L1/L2 voltage pills */}
+            {(l1Volt||l2Volt)&&(
+              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+                {l1Volt&&<span style={{fontSize:10,color:FAINT,background:BG,padding:"3px 8px",borderRadius:6}}>L1 {l1Volt.toFixed(1)} V</span>}
+                {l2Volt&&<span style={{fontSize:10,color:FAINT,background:BG,padding:"3px 8px",borderRadius:6}}>L2 {l2Volt.toFixed(1)} V</span>}
+              </div>
+            )}
+            {/* Today summary */}
+            <div style={{paddingTop:10,borderTop:`1px solid ${BORDER}`,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(70px,1fr))",gap:6}}>
+              <div>
+                <div style={{fontSize:9,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>PV Today</div>
+                <div style={{fontSize:12,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtE(eToday)}</div>
+              </div>
+              {gridInToday>0&&<div>
+                <div style={{fontSize:9,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Imported</div>
+                <div style={{fontSize:12,fontWeight:700,color:GRID_IN,fontVariantNumeric:"tabular-nums"}}>{fmtE(gridInToday)}</div>
+              </div>}
+              {gridOutToday>0&&<div>
+                <div style={{fontSize:9,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Exported</div>
+                <div style={{fontSize:12,fontWeight:700,color:GRID_OUT,fontVariantNumeric:"tabular-nums"}}>{fmtE(gridOutToday)}</div>
+              </div>}
             </div>
           </>
         )}
@@ -827,7 +977,9 @@ export default function Dashboard() {
                 : <>
                   {selectedInv==="all"&&<SiteHero statuses={statuses}/>}
                   {selectedInv==="all"&&<BatteryPanel statuses={statuses}/>}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12}}>
+                  {selectedInv==="all"&&<LifetimePanel statuses={statuses}/>}
+                  {selectedInv==="all"&&<FaultPanel site={site}/>}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
                     {visibleStatuses.map(s=>{
                       const inv = site.inverters.find(inv=>inv.sn===s.sn)||{sn:s.sn,label:s.label};
                       return <InverterCard key={s.sn} inv={inv} status={s}/>;
