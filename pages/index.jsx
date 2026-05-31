@@ -52,6 +52,7 @@ const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
 const CHART_PROD = "#3B82F6";
 const CHART_CONS = "#F97316";
 const CHART_BAT = "#22C55E";
+const CHART_GRID = "#94A3B8";
 const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
 
 const Logo = ({size=32}) => (
@@ -459,7 +460,7 @@ function DayChart({date, onDateChange, data, loading}) {
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
-    {key:"grid", label:"Imported/\nExported", color:"#64748B", active:showGrid, onToggle:setShowGrid},
+    {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
     {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
   return (
@@ -481,11 +482,11 @@ function DayChart({date, onDateChange, data, loading}) {
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="pvPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="gridImportPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="gridImportPos" fill={GRID_IN} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
             {showConsumed&&<Bar dataKey="loadNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="gridExportNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="gridExportNeg" fill={GRID_OUT} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
         <div style={{marginTop:4}}>
@@ -534,7 +535,7 @@ function MonthChart({month, onMonthChange, data, loading}) {
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
-    {key:"grid", label:"Imported/\nExported", color:"#64748B", active:showGrid, onToggle:setShowGrid},
+    {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
     {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
   return (
@@ -556,11 +557,11 @@ function MonthChart({month, onMonthChange, data, loading}) {
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="fromGridPos" fill={GRID_IN} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
             {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="toGridNeg" fill={GRID_OUT} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
@@ -592,7 +593,7 @@ function YearChart({year, onYearChange, data, loading}) {
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
-    {key:"grid", label:"Imported/\nExported", color:"#64748B", active:showGrid, onToggle:setShowGrid},
+    {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
     {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
   return (
@@ -616,11 +617,11 @@ function YearChart({year, onYearChange, data, loading}) {
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="fromGridPos" fill={GRID_IN} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
             {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="toGridNeg" fill={GRID_OUT} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
