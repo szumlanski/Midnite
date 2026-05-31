@@ -145,6 +145,9 @@ function LoginForm({onLogin, error, loading}) {
 }
 
 function SiteSelector({sites, onSelect, onLogout}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filtered = q ? sites.filter(s=>s.name.toLowerCase().includes(q)||(s.installer||"").toLowerCase().includes(q)) : sites;
   return (
     <>
       <PageHead/>
@@ -154,14 +157,27 @@ function SiteSelector({sites, onSelect, onLogout}) {
             <Logo size={32}/>
             <div>
               <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Select a Site</div>
-              <div style={{fontSize:11,color:FAINT}}>{sites.length} site{sites.length!==1?"s":""} available</div>
+              <div style={{fontSize:11,color:FAINT}}>{filtered.length} of {sites.length} site{sites.length!==1?"s":""}</div>
             </div>
           </div>
           <button onClick={onLogout} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
         </div>
-        <div style={{maxWidth:900,margin:"0 auto",padding:"24px 16px",animation:"fadeUp 0.4s ease"}}>
+        <div style={{maxWidth:900,margin:"0 auto",padding:"20px 16px",animation:"fadeUp 0.4s ease"}}>
+          <div style={{position:"relative",marginBottom:16}}>
+            <svg style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search sites…"
+              value={query}
+              onChange={e=>setQuery(e.target.value)}
+              style={{width:"100%",padding:"11px 14px 11px 38px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,color:TEXT,fontSize:14,fontFamily:SANS,outline:"none",boxShadow:SHADOW_SM,boxSizing:"border-box"}}
+            />
+            {query&&<button onClick={()=>setQuery("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",border:"none",background:"transparent",color:FAINT,cursor:"pointer",fontSize:18,lineHeight:1,padding:0}}>×</button>}
+          </div>
+          {filtered.length===0&&<div style={{textAlign:"center",color:FAINT,fontSize:13,padding:"48px 0"}}>No sites match "{query}"</div>}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
-            {sites.map(s=>{
+            {filtered.map(s=>{
               const [on,alarm,off,disc]=s.statusCounts;
               const total=s.inverters.length;
               return (
@@ -177,7 +193,7 @@ function SiteSelector({sites, onSelect, onLogout}) {
                     {disc>0&&<span style={{fontSize:11,color:FAINT,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:FAINT,display:"inline-block"}}/>{disc} disconnected</span>}
                     {total===0&&<span style={{fontSize:11,color:FAINT}}>No inverters</span>}
                   </div>
-                  {s.installer&&<div style={{fontSize:11,color:FAINT}}>Installer: {s.installer}</div>}
+                  {s.installer&&<div style={{fontSize:11,color:FAINT}}>{s.installer}</div>}
                   <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",color:SOLAR,fontSize:12,fontWeight:700,gap:4,marginTop:2}}>View →</div>
                 </button>
               );
