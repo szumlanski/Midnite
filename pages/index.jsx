@@ -56,22 +56,20 @@ const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:
 
 const Logo = ({size=32}) => (
   <svg width={size} height={size} viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <filter id="mgS">
-        <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
-        <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-    </defs>
-    <circle cx="128" cy="128" r="95" fill="none" stroke="#1a3a52" strokeWidth="2" opacity="0.4"/>
-    <circle cx="128" cy="128" r="70" fill="none" stroke="#1a3a52" strokeWidth="2" opacity="0.5"/>
-    <circle cx="128" cy="128" r="45" fill="none" stroke="#1a3a52" strokeWidth="2.5" opacity="0.7"/>
-    <circle cx="128" cy="128" r="24" fill="none" stroke="#00d9ff" strokeWidth="3"/>
-    <line x1="128" y1="104" x2="128" y2="72" stroke="#00d9ff" strokeWidth="3.5" strokeLinecap="round" opacity="0.9"/>
-    <circle cx="128" cy="128" r="10" fill="#00d9ff" filter="url(#mgS)"/>
-    <circle cx="128" cy="128" r="6" fill="#2d6a4f"/>
-    <circle cx="128" cy="128" r="3" fill="#00d9ff"/>
-    <path d="M 128 104 L 128 65 M 118 85 L 128 65 L 138 85" stroke="#1a3a52" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.8"/>
-    <line x1="80" y1="128" x2="176" y2="128" stroke="#1a3a52" strokeWidth="1.5" opacity="0.25" strokeDasharray="4,3"/>
+    <rect width="256" height="256" rx="40" fill="#0D1F33"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(0 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(45 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(90 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(135 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(180 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(225 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(270 128 128)"/>
+    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(315 128 128)"/>
+    <circle cx="128" cy="128" r="66" fill="#F59E0B"/>
+    <circle cx="128" cy="128" r="44" fill="#0D1F33"/>
+    <circle cx="128" cy="128" r="28" fill="#00C8E8"/>
+    <circle cx="128" cy="128" r="12" fill="#0D1F33"/>
+    <circle cx="128" cy="128" r="5" fill="#FFFFFF"/>
   </svg>
 );
 

@@ -1,32 +1,23 @@
 <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="modernGlowSmall">
-      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-  
-  <!-- Scan rings -->
-  <circle cx="128" cy="128" r="95" fill="none" stroke="#1a3a52" stroke-width="2" opacity="0.4"/>
-  <circle cx="128" cy="128" r="70" fill="none" stroke="#1a3a52" stroke-width="2" opacity="0.5"/>
-  <circle cx="128" cy="128" r="45" fill="none" stroke="#1a3a52" stroke-width="2.5" opacity="0.7"/>
-  <circle cx="128" cy="128" r="24" fill="none" stroke="#00d9ff" stroke-width="3"/>
-  
-  <!-- Active scan line (upward) -->
-  <line x1="128" y1="104" x2="128" y2="72" stroke="#00d9ff" stroke-width="3.5" stroke-linecap="round" opacity="0.9"/>
-  
-  <!-- Central core -->
-  <circle cx="128" cy="128" r="10" fill="#00d9ff" filter="url(#modernGlowSmall)"/>
-  <circle cx="128" cy="128" r="6" fill="#2d6a4f"/>
-  <circle cx="128" cy="128" r="3" fill="#00d9ff"/>
-  
-  <!-- Upward sentinel arrow (simplified) -->
-  <path d="M 128 104 L 128 65 M 118 85 L 128 65 L 138 85" 
-        stroke="#1a3a52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
-  
-  <!-- Horizontal crosshair -->
-  <line x1="80" y1="128" x2="176" y2="128" stroke="#1a3a52" stroke-width="1.5" opacity="0.25" stroke-dasharray="4,3"/>
+  <!-- Background -->
+  <rect width="256" height="256" rx="40" fill="#0D1F33"/>
+  <!-- 8 bold amber sun rays -->
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(0 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(45 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(90 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(135 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(180 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(225 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(270 128 128)"/>
+  <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(315 128 128)"/>
+  <!-- Sun disc -->
+  <circle cx="128" cy="128" r="66" fill="#F59E0B"/>
+  <!-- Navy eye ring -->
+  <circle cx="128" cy="128" r="44" fill="#0D1F33"/>
+  <!-- Cyan sentinel iris -->
+  <circle cx="128" cy="128" r="28" fill="#00C8E8"/>
+  <!-- Navy pupil -->
+  <circle cx="128" cy="128" r="12" fill="#0D1F33"/>
+  <!-- White bright core -->
+  <circle cx="128" cy="128" r="5" fill="#FFFFFF"/>
 </svg>
