@@ -244,16 +244,35 @@ function SiteHero({statuses}) {
 }
 
 function BatteryPanel({statuses}) {
-  // All inverters share the same battery bank — use the first one with valid data
-  const src = statuses.find(s => s?.ok && s?.data?.battery?.voltage > 0);
-  if (!src) return null;
-  const bat = src.data.battery;
-  // Open loop = no BMS comms, no brand reported (lead acid or disconnected BMS)
-  const closedLoop = !!bat.brand;
-  const socColor = bat.soc > 60 ? BATTERY : bat.soc > 30 ? SOLAR : GRID_IN;
-  const capacityKwh = bat.capacityAh > 0 ? ((bat.capacityAh * bat.voltage) / 1000).toFixed(1) : null;
-  const isCharging = bat.charge > 20;
-  const isDischarging = bat.discharge > 20;
+  const valid = statuses.filter(s => s?.ok && s?.data?.battery?.voltage > 0);
+  if (!valid.length) return null;
+
+  const n = valid.length;
+  // Summed across inverters (each inverter has its own battery current/power)
+  const totalCharge    = valid.reduce((s,i) => s + (i.data.battery.charge    || 0), 0);
+  const totalDischarge = valid.reduce((s,i) => s + (i.data.battery.discharge || 0), 0);
+  const totalCurrent   = valid.reduce((s,i) => s + (i.data.battery.current   || 0), 0);
+  const totalChargeIn  = valid.reduce((s,i) => s + (i.data.battery.chargeIn?.total  || 0), 0);
+  const totalDischargeOut = valid.reduce((s,i) => s + (i.data.battery.dischargeOut?.total || 0), 0);
+
+  // Averaged (physical bank readings — same value reported by each inverter)
+  const avgSoc     = valid.reduce((s,i) => s + (i.data.battery.soc           || 0), 0) / n;
+  const avgVoltage = valid.reduce((s,i) => s + (i.data.battery.voltage        || 0), 0) / n;
+  const avgHealth  = valid.reduce((s,i) => s + (i.data.battery.healthPercent  || 0), 0) / n;
+  const avgTemp    = valid.reduce((s,i) => s + (i.data.battery.temperature    || 0), 0) / n;
+
+  // Capacity: use first inverter (each reports its own bank; topology varies per site)
+  const firstBat = valid[0].data.battery;
+  const capacityAh = firstBat.capacityAh;
+  const capacityKwh = capacityAh > 0 ? ((capacityAh * avgVoltage) / 1000).toFixed(1) : null;
+
+  // Open loop = no BMS brand on any inverter
+  const closedLoop = valid.some(s => !!s.data.battery.brand);
+  const brand = valid.find(s => s.data.battery.brand)?.data.battery.brand || "";
+
+  const isCharging    = totalCharge    > 20;
+  const isDischarging = totalDischarge > 20;
+  const socColor = avgSoc > 60 ? BATTERY : avgSoc > 30 ? SOLAR : GRID_IN;
 
   return (
     <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"18px 20px",marginBottom:16,boxShadow:SHADOW_SM}}>
@@ -261,40 +280,38 @@ function BatteryPanel({statuses}) {
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:32,height:32,borderRadius:9,background:closedLoop?"#DCFCE7":"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🔋</div>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>{closedLoop ? bat.brand : "Battery Bank"}</div>
+            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>{closedLoop ? brand : "Battery Bank"}</div>
             <div style={{fontSize:11,color:FAINT}}>
-              {bat.capacityAh > 0 && `${bat.capacityAh} Ah`}
+              {capacityAh > 0 && `${capacityAh} Ah`}
               {capacityKwh && ` · ~${capacityKwh} kWh`}
               {!closedLoop && <span style={{color:SOLAR,fontWeight:600}}> · Open loop (no BMS)</span>}
             </div>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          {isCharging && <span style={{fontSize:11,fontWeight:700,color:BATTERY,background:"#DCFCE7",padding:"3px 8px",borderRadius:10}}>↑ {fmt(bat.charge)}</span>}
-          {isDischarging && <span style={{fontSize:11,fontWeight:700,color:SOLAR,background:"#FEF3C7",padding:"3px 8px",borderRadius:10}}>↓ {fmt(bat.discharge)}</span>}
+          {isCharging    && <span style={{fontSize:11,fontWeight:700,color:BATTERY,background:"#DCFCE7",padding:"3px 8px",borderRadius:10}}>↑ {fmt(totalCharge)}</span>}
+          {isDischarging && <span style={{fontSize:11,fontWeight:700,color:SOLAR,background:"#FEF3C7",padding:"3px 8px",borderRadius:10}}>↓ {fmt(totalDischarge)}</span>}
           {!isCharging && !isDischarging && <span style={{fontSize:11,fontWeight:600,color:FAINT}}>Idle</span>}
         </div>
       </div>
 
-      {/* SOC bar */}
       <div style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
           <span style={{fontSize:12,fontWeight:600,color:MUTED}}>State of Charge{!closedLoop && " (estimated)"}</span>
-          <span style={{fontSize:24,fontWeight:800,color:socColor,fontVariantNumeric:"tabular-nums"}}>{bat.soc}%</span>
+          <span style={{fontSize:24,fontWeight:800,color:socColor,fontVariantNumeric:"tabular-nums"}}>{Math.round(avgSoc)}%</span>
         </div>
         <div style={{height:10,background:"#F1F5F9",borderRadius:5,overflow:"hidden"}}>
-          <div style={{width:`${bat.soc}%`,height:"100%",background:`linear-gradient(90deg,${socColor},${socColor}CC)`,borderRadius:5,transition:"width 0.5s ease"}}/>
+          <div style={{width:`${avgSoc}%`,height:"100%",background:`linear-gradient(90deg,${socColor},${socColor}CC)`,borderRadius:5,transition:"width 0.5s ease"}}/>
         </div>
       </div>
 
-      {/* Stats grid */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8}}>
-        <StatTile label="Voltage" value={`${bat.voltage.toFixed(1)} V`} color={TEXT}/>
-        <StatTile label="Current" value={`${bat.current.toFixed(1)} A`} color={TEXT}/>
-        {closedLoop && <StatTile label="Health" value={`${bat.healthPercent}%`} color={bat.healthPercent>80?BATTERY:bat.healthPercent>60?SOLAR:GRID_IN}/>}
-        {closedLoop && bat.temperature > 0 && <StatTile label="Temp" value={`${bat.temperature}°C`} color={bat.temperature>45?GRID_IN:bat.temperature>35?SOLAR:TEXT}/>}
-        {bat.chargeIn?.total > 0 && <StatTile label="Lifetime In" value={fmtE(bat.chargeIn.total)} color={MUTED}/>}
-        {bat.dischargeOut?.total > 0 && <StatTile label="Lifetime Out" value={fmtE(bat.dischargeOut.total)} color={MUTED}/>}
+        <StatTile label="Voltage"  value={`${avgVoltage.toFixed(1)} V`} color={TEXT}/>
+        <StatTile label="Current"  value={`${totalCurrent.toFixed(1)} A`} color={TEXT}/>
+        {closedLoop && <StatTile label="Health" value={`${Math.round(avgHealth)}%`} color={avgHealth>80?BATTERY:avgHealth>60?SOLAR:GRID_IN}/>}
+        {closedLoop && avgTemp > 0 && <StatTile label="Temp" value={`${avgTemp.toFixed(0)}°C`} color={avgTemp>45?GRID_IN:avgTemp>35?SOLAR:TEXT}/>}
+        {totalChargeIn    > 0 && <StatTile label="Lifetime In"  value={fmtE(totalChargeIn)}    color={MUTED}/>}
+        {totalDischargeOut > 0 && <StatTile label="Lifetime Out" value={fmtE(totalDischargeOut)} color={MUTED}/>}
       </div>
     </div>
   );
