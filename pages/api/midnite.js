@@ -66,11 +66,12 @@ async function login(user = null, pass = null) {
 
   if (!eagleToken && !senToken) throw new Error("Login failed: Invalid username or password");
 
+  const memberAutoId = senMemberId || eagleMemberId;
   if (eagleToken) {
-    // Installer path — prefer Senergytec memberAutoId (end-user ID needed for getInverterStatus body)
-    return { token: eagleToken, memberAutoId: senMemberId || eagleMemberId, accountType: "installer", username };
+    // Installer path — store BOTH tokens so Senergytec endpoints always use senToken
+    return { token: eagleToken, senToken: senToken || null, memberAutoId, accountType: "installer", username };
   }
-  return { token: senToken, memberAutoId: senMemberId, accountType: "enduser", username };
+  return { token: senToken, senToken: senToken, memberAutoId, accountType: "enduser", username };
 }
 
 // Handles the richer getInverterStatus response (has mppts[], smartPortA/B/C, etc.)
@@ -232,15 +233,17 @@ export default async function handler(req, res) {
           // Use the end-user memberAutoId (captured via dual Senergytec login) to fetch
           // inverter AutoIDs from InverterList — required for Eagle getInverterStatus calls
           const autoIdMap = {};
-          if (auth.memberAutoId) {
+          // Use senToken (Senergytec) for Senergytec endpoints — Eagle token may be rejected
+          const senTok = auth.senToken || auth.token;
+          if (auth.memberAutoId && senTok) {
             try {
               const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };
               glBody.sign = makeSign(glBody);
-              const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, auth.token);
+              const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, senTok);
               for (const g of (groups?.AllGroupList || [])) {
                 const ilBody = { MemberAutoID: auth.memberAutoId, GroupAutoID: g.AutoID };
                 ilBody.sign = makeSign(ilBody);
-                const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, auth.token);
+                const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, senTok);
                 for (const inv of (result?.AllInverterList || [])) {
                   const aid = inv.AutoID ?? inv.InverterAutoID ?? inv.auto_id ?? inv.id ?? null;
                   if (aid && inv.GoodsID) autoIdMap[inv.GoodsID] = String(aid);
@@ -305,11 +308,12 @@ export default async function handler(req, res) {
               }
             } catch(e) { console.log(`[getInverterStatus ${sn}] err: ${e.message}`); }
           }
-          // Fallback: InverterDetailInfoNewone
+          // Fallback: InverterDetailInfoNewone — always use Senergytec token
+          const senTok2 = auth.senToken || auth.token;
           const body={GoodsID:sn,MemberAutoID:auth.memberAutoId};
           body.sign=makeSign(body);
           try {
-            const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);
+            const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,senTok2);
             const data=normalizeDetail(raw,sn);
             return {sn,ok:!!data,data,error:data?null:"No data returned"};
           }
@@ -366,7 +370,9 @@ export default async function handler(req, res) {
           auth: { accountType: auth.accountType, memberAutoId: auth.memberAutoId, username: auth.username },
         };
 
-        // --- installer path: show raw terminaluserinfo structure ---
+        out.senToken_present = !!auth.senToken;
+
+        // --- installer path: show raw terminaluserinfo + probe Eagle endpoints for MemberAutoID ---
         if (auth.accountType === "installer") {
           try {
             const now=new Date();
@@ -377,6 +383,46 @@ export default async function handler(req, res) {
             const first=Array.isArray(sites)?sites[0]:null;
             out.terminaluserinfo_first_site_keys = first ? Object.keys(first) : [];
             out.terminaluserinfo_first_site = first;
+
+            // Probe Eagle endpoints that might give us end-user MemberAutoID or rich status
+            const endUserMemberID = first?.MemberID; // e.g. "Wise Naples"
+            const firstSerial = first?.GoodsID?.[0]?.GoodsID || ds?.[0];
+            out.installer_probe = { endUserMemberID, firstSerial };
+
+            // Probe 1: getUserInfo or similar
+            for (const ep of [
+              "/Eagle/v1/Operation/getUserInfo",
+              "/Eagle/v1/Operation/getEndUserInfo",
+              "/Eagle/v1/Operation/getMemberInfo",
+            ]) {
+              try {
+                const pb={MemberID:endUserMemberID}; pb.sign=makeSign(pb);
+                const r=await midnitePost(ep,pb,auth.token);
+                out.installer_probe[ep]={ok:true,keys:Object.keys(r||{}),sample:r};
+                break;
+              } catch(e){ out.installer_probe[ep]={ok:false,err:e.message}; }
+            }
+
+            // Probe 2: Eagle InverterList variants
+            for (const ep of [
+              "/Eagle/v1/Inverterapi/InverterList",
+              "/Eagle/v1/Inverterapi/getInverterList",
+            ]) {
+              try {
+                const pb={MemberID:endUserMemberID,GoodsID:firstSerial||""}; pb.sign=makeSign(pb);
+                const r=await midnitePost(ep,pb,auth.token);
+                out.installer_probe[ep]={ok:true,keys:Object.keys(r||{}),sample:r};
+              } catch(e){ out.installer_probe[ep]={ok:false,err:e.message}; }
+            }
+
+            // Probe 3: getInverterStatus with MemberID instead of memberAutoID
+            if(firstSerial) {
+              try {
+                const pb={GoodsID:firstSerial,MemberID:endUserMemberID}; pb.sign=makeSign(pb);
+                const r=await midnitePost("/Eagle/v1/Inverterapi/getInverterStatus",pb,auth.token);
+                out.installer_probe["getInverterStatus_with_MemberID"]={ok:true,hasMppts:!!r?.data?.photovoltaic?.mppts,status:r?.status};
+              } catch(e){ out.installer_probe["getInverterStatus_with_MemberID"]={ok:false,err:e.message}; }
+            }
           } catch(e){ out.terminaluserinfo_err=e.message; }
         }
 
