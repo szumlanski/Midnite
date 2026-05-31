@@ -53,6 +53,13 @@ const CHART_PROD = "#3B82F6";
 const CHART_CONS = "#F97316";
 const CHART_BAT = "#22C55E";
 const CHART_GRID = "#94A3B8";
+
+// DO NOT change these without reading CLAUDE.md "Bar chart alignment".
+// barCategoryGap={-100} on day view prevents Recharts from clamping barSize to ~1px at 288 points.
+// barGap must equal -barSize so the pos/neg stacks align flush over the zero line.
+const BAR_DAY   = { barCategoryGap: -100,  barSize: 12, barGap: -12 };
+const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
+const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
 const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
 
 const WORK_MODE_LABELS = {0:"Self Consumption",1:"Feed-In Priority",2:"Backup Priority",3:"Time of Use",4:"Peak Shaving",5:"Off Grid"};
@@ -902,7 +909,7 @@ function DayChart({date, onDateChange, data, loading}) {
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={360}>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap={-100} barSize={12} barGap={-12}>
+          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} {...BAR_DAY}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval={23}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={32}/>
@@ -984,7 +991,7 @@ function MonthChart({month, onMonthChange, data, loading}) {
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={340}>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={20} barGap={-20}>
+          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="day" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
@@ -1051,7 +1058,7 @@ function YearChart({year, onYearChange, data, loading}) {
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={320}>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} barCategoryGap="20%" barSize={40} barGap={-40}>
+          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="month" tick={{fill:FAINT,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>

@@ -171,21 +171,30 @@ Month and year data is in **kWh**. Summary card totals use `* 1000` to convert t
 
 ---
 
+## !! BAR CHART — DO NOT TOUCH THESE PROPS !!
+
+This is the #1 recurring regression in this codebase. Every time these get "cleaned up" the bars break. They are defined as named constants at the top of `index.jsx` and must not be changed:
+
+```js
+const BAR_DAY   = { barCategoryGap: -100,  barSize: 12, barGap: -12 };
+const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
+const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
+```
+
+**Why `barCategoryGap={-100}` on the day chart**: With 288 data points, Recharts clamps `barSize` to ~1px unless `barCategoryGap` is a negative pixel value. A percentage like "20%" does NOT work here.
+
+**Why `barGap = -barSize` on all charts**: Each category has two bar groups — `stackId="pos"` (upward) and `stackId="neg"` (downward). Without `barGap = -barSize`, Recharts places them side by side instead of overlapping at the zero line, making the chart look wrong.
+
+**Other invariants that must never change:**
+- Each `<Bar>` must have `activeBar={false}` — prevents white hover box (Recharts 3.x bug)
+- `<Tooltip>` must have `cursor={false}` — same reason
+- Do NOT add `verticalPoints` to `<CartesianGrid>` — causes misalignment
+- `stackId="pos"` for above-zero bars, `stackId="neg"` for below-zero bars — never share a stackId between them
+- Month/year use `consumptionNeg: -(d.consumption||0)` etc. to render below zero — do NOT use ComposedChart
+
+---
+
 ## Known Issues / History
-
-### Bar chart alignment
-- Day view (288 5-min points): use `barCategoryGap={-100} barSize={12} barGap={-12}`. Negative `barCategoryGap` prevents Recharts from clamping `barSize` to ~1px.
-- Month/year: use `barCategoryGap="20%" barSize={20 or 40} barGap={-20 or -40}`. Category width is large enough that clamping doesn't occur.
-- Month/year use `consumptionNeg: -(d.consumption||0)` to render below zero. Do NOT use ComposedChart or shared stackId — they break the data.
-
-### Recharts Tooltip white hover box
-Add `activeBar={false}` to each `<Bar>` and `cursor={false}` to `<Tooltip>` (Recharts 3.x).
-
-### verticalPoints prop
-Do NOT add `verticalPoints` to `CartesianGrid` — causes misalignment. Use plain `<CartesianGrid strokeDasharray="3 3"/>`.
-
-### Recharts stackId
-Use `stackId="pos"` for upward bars, `stackId="neg"` for downward bars. Never share a stackId between production and consumption bars.
 
 ---
 
