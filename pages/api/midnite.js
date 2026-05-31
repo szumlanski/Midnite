@@ -117,6 +117,7 @@ function normalizeDetail(raw, sn) {
     },
     battery: {
       brand: raw.brand || "",
+      capacityAh: parseFloat(raw.capacity || 0),
       voltage: parseFloat(raw.volt || 0),
       current: parseFloat(raw.cur || 0),
       charge: batChargeW,
@@ -124,8 +125,9 @@ function normalizeDetail(raw, sn) {
       soc: parseFloat(raw.SOC || 0),
       healthPercent: parseFloat(raw.SOH || 0),
       temperature: parseFloat(raw.BMS_temp || 0),
-      chargeIn: { today: parseFloat(raw.Etotal_batChrg || 0) * 1000, total: 0 },
-      dischargeOut: { today: parseFloat(raw.Etotal_batDischrg || 0) * 1000, total: 0 },
+      // Etotal_batChrg/Dischrg are in kWh — convert to Wh for fmtE()
+      chargeIn: { total: parseFloat(raw.Etotal_batChrg || 0) * 1000 },
+      dischargeOut: { total: parseFloat(raw.Etotal_batDischrg || 0) * 1000 },
     },
   };
 }
