@@ -203,3 +203,5 @@ Use `stackId="pos"` for upward bars, `stackId="neg"` for downward bars. Never sh
 ## Working with Claude Code
 
 Claude Code (CLI) can read and write files directly in the project directory. No need to use `/mnt/user-data/outputs/` or manual `cp` steps. Claude commits and pushes directly via git.
+
+**After every code change, Claude must automatically commit and push to GitHub without waiting to be asked.** Use a clear commit message summarizing what changed. Vercel deploys automatically on push.
