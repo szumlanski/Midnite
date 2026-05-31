@@ -874,7 +874,12 @@ export default function Dashboard() {
     const raw = data.sites || (Array.isArray(data) ? data : []);
     const normalized = raw.filter(s=>s.GoodsID&&s.GoodsID.length>0).map(s=>({
       name: s.MemberID || "Unknown",
-      inverters: s.GoodsID.map((g,j)=>({ sn:typeof g==="string"?g:g.GoodsID, label:`INV-${j+1}` })),
+      memberAutoId: s.MemberAutoID ? String(s.MemberAutoID) : null,
+      inverters: s.GoodsID.map((g,j)=>({
+        sn: typeof g==="string"?g:g.GoodsID,
+        autoId: (typeof g==="object"&&g.AutoID) ? String(g.AutoID) : null,
+        label: `INV-${j+1}`,
+      })),
       statusCounts: s.MemberStateCount || [0,0,0,0],
       installer: s.op_member?.installer || "",
     }));
@@ -924,7 +929,11 @@ export default function Dashboard() {
   const fetchLive = useCallback(async () => {
     if(!site) return;
     try {
-      const {results} = await api("status", {serials:site.inverters.map(i=>i.sn)});
+      const {results} = await api("status", {
+        serials: site.inverters.map(i=>i.sn),
+        autoIds: site.inverters.map(i=>i.autoId),
+        memberAutoId: site.memberAutoId,
+      });
       setStatuses(results.map((r,idx)=>({...r,label:site.inverters[idx]?.label})));
       setLastUpdate(new Date()); setLiveError(null);
     } catch(e) { setLiveError(e.message); }

@@ -243,21 +243,27 @@ export default async function handler(req, res) {
         return res.json({ accountType: "enduser", sites });
       }
       case "status": {
-        const {serials}=req.body||{};
+        const {serials, autoIds, memberAutoId:endUserMemberId}=req.body||{};
         if(!serials?.length) return res.status(400).json({error:"serials required"});
-        const results = await Promise.all(serials.map(async sn=>{
+        const results = await Promise.all(serials.map(async (sn,idx)=>{
+          const autoId = autoIds?.[idx];
+          const memberId = endUserMemberId || auth.memberAutoId;
+          // Try Eagle getInverterStatus (MPPT, smart ports, self-sufficiency)
+          if(autoId && memberId) {
+            try {
+              const richBody={AutoId:String(autoId), memberAutoID:String(memberId)};
+              richBody.sign=makeSign(richBody);
+              const rich=await midnitePost("/Eagle/v1/Inverterapi/getInverterStatus",richBody,auth.token);
+              console.log(`[getInverterStatus ${sn}] ok=${rich?.status} hasMppts=${!!rich?.data?.photovoltaic?.mppts}`);
+              if(rich?.data?.photovoltaic?.mppts) {
+                const data=normalizeRich(rich);
+                return {sn,ok:!!data,data,source:"rich",error:data?null:"No data"};
+              }
+            } catch(e) { console.log(`[getInverterStatus ${sn}] err: ${e.message}`); }
+          }
+          // Fallback: InverterDetailInfoNewone
           const body={GoodsID:sn,MemberAutoID:auth.memberAutoId};
           body.sign=makeSign(body);
-          // Try rich endpoint first (has MPPT strings, smart ports, self-consumption %)
-          try {
-            const rich=await midnitePost("/Senergytec/web/v2/Inverterapi/getInverterStatus",body,auth.token);
-            console.log(`[getInverterStatus ${sn}] status=${rich?.status} keys=${Object.keys(rich||{}).join(",")}`);
-            if(rich?.data?.photovoltaic?.mppts) {
-              const data=normalizeRich(rich);
-              return {sn,ok:!!data,data,source:"rich",error:data?null:"No data"};
-            }
-          } catch(e) { console.log(`[getInverterStatus ${sn}] failed: ${e.message}`); }
-          // Fallback: InverterDetailInfoNewone
           try {
             const raw=await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone",body,auth.token);
             const data=normalizeDetail(raw,sn);
