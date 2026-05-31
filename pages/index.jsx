@@ -440,7 +440,7 @@ function ChartCard({children, loading, minHeight=300}) {
 function DayChart({date, onDateChange, data, loading}) {
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
-  const [showGrid, setShowGrid] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);
   const [showBattery, setShowBattery] = useState(true);
   const produced = data.reduce((s,d)=>s+((d.pv||0)*(5/60)),0);
   const consumed = data.reduce((s,d)=>s+((d.load||0)*(5/60)),0);
@@ -463,6 +463,9 @@ function DayChart({date, onDateChange, data, loading}) {
     {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
     {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
+  const dayAtMax = date >= today;
+  const dayPrev = () => { const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()-1); onDateChange(d.toISOString().split('T')[0]); };
+  const dayNext = () => { if(!dayAtMax){const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()+1); onDateChange(d.toISOString().split('T')[0]);} };
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
@@ -470,7 +473,11 @@ function DayChart({date, onDateChange, data, loading}) {
           <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Day</h2>
           <div style={{fontSize:11,color:FAINT}}>5-min intervals</div>
         </div>
-        <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <button onClick={dayNext} disabled={dayAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:dayAtMax?BG:CARD,color:dayAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:dayAtMax?"default":"pointer",boxShadow:dayAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+        </div>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={360}>
@@ -515,7 +522,7 @@ function DayChart({date, onDateChange, data, loading}) {
 function MonthChart({month, onMonthChange, data, loading}) {
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
-  const [showGrid, setShowGrid] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);
   const [showBattery, setShowBattery] = useState(true);
   const produced = data.reduce((s,d)=>s+(d.production||0),0)*1000;
   const consumed = data.reduce((s,d)=>s+(d.consumption||0),0)*1000;
@@ -538,6 +545,9 @@ function MonthChart({month, onMonthChange, data, loading}) {
     {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
     {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
+  const moAtMax = month >= thisMonth;
+  const moPrev = () => { const [y,m]=month.split('-').map(Number); onMonthChange(`${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,'0')}`); };
+  const moNext = () => { if(!moAtMax){const [y,m]=month.split('-').map(Number); onMonthChange(`${m===12?y+1:y}-${String(m===12?1:m+1).padStart(2,'0')}`);} };
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
@@ -545,7 +555,11 @@ function MonthChart({month, onMonthChange, data, loading}) {
           <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Month</h2>
           <div style={{fontSize:11,color:FAINT}}>Daily totals</div>
         </div>
-        <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={moPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <button onClick={moNext} disabled={moAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:moAtMax?BG:CARD,color:moAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:moAtMax?"default":"pointer",boxShadow:moAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+        </div>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={340}>
@@ -573,7 +587,7 @@ function MonthChart({month, onMonthChange, data, loading}) {
 function YearChart({year, onYearChange, data, loading}) {
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
-  const [showGrid, setShowGrid] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);
   const [showBattery, setShowBattery] = useState(true);
   const produced = data.reduce((s,d)=>s+(d.production||0),0)*1000;
   const consumed = data.reduce((s,d)=>s+(d.consumption||0),0)*1000;
@@ -596,6 +610,9 @@ function YearChart({year, onYearChange, data, loading}) {
     {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
     {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
+  const yrAtMax = year >= thisYear;
+  const yrPrev = () => onYearChange(String(Number(year)-1));
+  const yrNext = () => { if(!yrAtMax) onYearChange(String(Number(year)+1)); };
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
@@ -603,9 +620,13 @@ function YearChart({year, onYearChange, data, loading}) {
           <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Year</h2>
           <div style={{fontSize:11,color:FAINT}}>Monthly totals</div>
         </div>
-        <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>
-          {["2024","2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
-        </select>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={yrPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>
+            {["2024","2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          <button onClick={yrNext} disabled={yrAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:yrAtMax?BG:CARD,color:yrAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:yrAtMax?"default":"pointer",boxShadow:yrAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+        </div>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={320}>
