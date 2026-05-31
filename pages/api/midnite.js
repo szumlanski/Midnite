@@ -176,9 +176,12 @@ export default async function handler(req, res) {
           const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, auth.token);
           const list = result?.AllInverterList || [];
           const status = g.InverterStatus || {};
+          // Debug: log full first inverter object to find AutoID field name
+          if (list[0]) console.log("[InverterList fields]", JSON.stringify(Object.keys(list[0])), JSON.stringify(list[0]));
           sites.push({
             MemberID: auth.username,
-            GoodsID: list.map(d => ({ GoodsID: d.GoodsID })),
+            MemberAutoID: auth.memberAutoId,
+            GoodsID: list.map(d => ({ GoodsID: d.GoodsID, AutoID: d.AutoID ?? d.InverterAutoID ?? d.auto_id ?? d.id ?? null })),
             MemberStateCount: [status.Green||0, status.yellow||0, status.red||0, status.gray||0],
           });
         }
