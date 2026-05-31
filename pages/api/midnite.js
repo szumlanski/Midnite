@@ -221,14 +221,21 @@ export default async function handler(req, res) {
       case "sites": {
         if (auth.accountType === "installer") {
           const now = new Date();
-          const body = {
-            MemberID: auth.username, Page: 1, EndUserName: "", OperationName: "",
+          const baseBody = {
+            MemberID: auth.username, EndUserName: "", OperationName: "",
             GoodsID: "", inDate: now.toISOString().split("T")[0],
             inTime: now.toTimeString().split(" ")[0], status: 0,
           };
-          body.sign = makeSign(body);
-          const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
-          const sites = Array.isArray(data) ? data : [];
+          // Paginate until empty page — terminaluserinfo returns one page at a time
+          const sites = [];
+          for (let page = 1; page <= 100; page++) {
+            const body = { ...baseBody, Page: page };
+            body.sign = makeSign(body);
+            const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
+            const pageSites = Array.isArray(data) ? data : [];
+            sites.push(...pageSites);
+            if (pageSites.length === 0) break;
+          }
 
           // Use the end-user memberAutoId (captured via dual Senergytec login) to fetch
           // inverter AutoIDs from InverterList — required for Eagle getInverterStatus calls
