@@ -45,23 +45,32 @@ async function login(user = null, pass = null) {
   const username = user || process.env.MIDNITE_USERNAME || "Wise Naples";
   const password = pass || process.env.MIDNITE_PASSWORD || "921551";
 
-  // Try installer (Eagle/Operation) login first
+  let eagleToken = null, eagleMemberId = "";
+  let senToken = null, senMemberId = "";
+
+  // Try Eagle (installer) login
   try {
     const opParams = { MemberID: username, PassWord: password };
     opParams.sign = makeSign(opParams);
     const opData = await midnitePost("/Eagle/v1/Operation/login", opParams);
-    if (opData.status === "ok" || opData.token) {
-      return { token: opData.token, memberAutoId: String(opData.MemberAutoID || ""), accountType: "installer", username };
-    }
-  } catch (e) { /* fall through to end-user login */ }
+    if (opData.token) { eagleToken = opData.token; eagleMemberId = String(opData.MemberAutoID || ""); }
+  } catch (e) { /* try Senergytec */ }
 
-  // Fall back to end-user (Senergytec) login
-  const params = { MemberID: username, Password: password, type: "1" };
-  params.sign = makeSign(params);
-  const body = { ...params, remember: false };
-  const data = await midnitePost("/Senergytec/web/v2/Inverterapi/UserLogin", body);
-  if (data.status !== "ok") throw new Error(`Login failed: Invalid username or password`);
-  return { token: data.token, memberAutoId: String(data.MemberAutoID), accountType: "enduser", username };
+  // Always also try Senergytec login — gives us end-user memberAutoId even when Eagle succeeds
+  try {
+    const params = { MemberID: username, Password: password, type: "1" };
+    params.sign = makeSign(params);
+    const data = await midnitePost("/Senergytec/web/v2/Inverterapi/UserLogin", { ...params, remember: false });
+    if (data.status === "ok") { senToken = data.token; senMemberId = String(data.MemberAutoID || ""); }
+  } catch (e) { /* installer-only account */ }
+
+  if (!eagleToken && !senToken) throw new Error("Login failed: Invalid username or password");
+
+  if (eagleToken) {
+    // Installer path — prefer Senergytec memberAutoId (end-user ID needed for getInverterStatus body)
+    return { token: eagleToken, memberAutoId: senMemberId || eagleMemberId, accountType: "installer", username };
+  }
+  return { token: senToken, memberAutoId: senMemberId, accountType: "enduser", username };
 }
 
 // Handles the richer getInverterStatus response (has mppts[], smartPortA/B/C, etc.)
@@ -79,6 +88,12 @@ function normalizeRich(raw) {
       lastUpdateTime: d.inverter?.lastUpdateTime || "",
       selfConsumptionPercent: d.inverter?.selfConsumptionPercent ?? null,
       selfSufficiencyPercent: d.inverter?.selfSufficiencyPercent ?? null,
+      state: d.inverter?.state ?? null,
+      workMode: d.inverter?.workMode ?? null,
+      wifiSignal: d.inverter?.wifi?.mdb ?? null,
+      dspVer: d.inverter?.dspVer || "",
+      slaveDspVer: d.inverter?.slaveDspVer || "",
+      csbVer: d.inverter?.csbVer || "",
     },
     photovoltaic: {
       mppts: d.photovoltaic?.mppts || [],
@@ -107,6 +122,8 @@ function normalizeRich(raw) {
       temperature: d.battery?.temperature || 0,
       chargeIn: d.battery?.chargeIn || { today:0, total:0 },
       dischargeOut: d.battery?.dischargeOut || { today:0, total:0 },
+      bmsStatus: d.battery?.bmsStatus || "",
+      bmsFWVer: d.battery?.bmsFWVer || "",
     },
     smartPorts: {
       A: d.smartPortA || null,
@@ -204,18 +221,45 @@ export default async function handler(req, res) {
         if (auth.accountType === "installer") {
           const now = new Date();
           const body = {
-            MemberID: auth.username,
-            Page: 1,
-            EndUserName: "",
-            OperationName: "",
-            GoodsID: "",
-            inDate: now.toISOString().split("T")[0],
-            inTime: now.toTimeString().split(" ")[0],
-            status: 0,
+            MemberID: auth.username, Page: 1, EndUserName: "", OperationName: "",
+            GoodsID: "", inDate: now.toISOString().split("T")[0],
+            inTime: now.toTimeString().split(" ")[0], status: 0,
           };
           body.sign = makeSign(body);
           const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
-          return res.json({ accountType: "installer", sites: Array.isArray(data) ? data : [] });
+          const sites = Array.isArray(data) ? data : [];
+
+          // Use the end-user memberAutoId (captured via dual Senergytec login) to fetch
+          // inverter AutoIDs from InverterList — required for Eagle getInverterStatus calls
+          const autoIdMap = {};
+          if (auth.memberAutoId) {
+            try {
+              const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };
+              glBody.sign = makeSign(glBody);
+              const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, auth.token);
+              for (const g of (groups?.AllGroupList || [])) {
+                const ilBody = { MemberAutoID: auth.memberAutoId, GroupAutoID: g.AutoID };
+                ilBody.sign = makeSign(ilBody);
+                const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, auth.token);
+                for (const inv of (result?.AllInverterList || [])) {
+                  const aid = inv.AutoID ?? inv.InverterAutoID ?? inv.auto_id ?? inv.id ?? null;
+                  if (aid && inv.GoodsID) autoIdMap[inv.GoodsID] = String(aid);
+                }
+              }
+              console.log("[installer autoIdMap]", autoIdMap);
+            } catch (e) { console.log("[installer InverterList err]", e.message); }
+          }
+
+          // Attach AutoID + MemberAutoID to each site/inverter so status calls can use them
+          const enriched = sites.map(s => ({
+            ...s,
+            MemberAutoID: s.MemberAutoID || auth.memberAutoId,
+            GoodsID: (s.GoodsID || []).map(g => {
+              const sn = typeof g === "string" ? g : g.GoodsID;
+              return { GoodsID: sn, AutoID: autoIdMap[sn] || null };
+            }),
+          }));
+          return res.json({ accountType: "installer", sites: enriched });
         }
         // End-user: get groups, then inverters for each group
         const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };

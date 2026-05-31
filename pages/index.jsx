@@ -55,6 +55,9 @@ const CHART_BAT = "#22C55E";
 const CHART_GRID = "#94A3B8";
 const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
 
+const WORK_MODE_LABELS = {0:"Self Consumption",1:"Feed-In Priority",2:"Backup Priority",3:"Time of Use",4:"Peak Shaving",5:"Off Grid"};
+const INV_STATE_LABELS  = {0:"Standby",1:"Normal",2:"Checking",3:"On Grid",4:"Off Grid",5:"Fault"};
+
 const Logo = ({size=32}) => (
   <svg width={size} height={size} viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
     <rect width="256" height="256" rx="40" fill="#0D1F33"/>
@@ -556,6 +559,244 @@ function InverterCard({inv, status}) {
   );
 }
 
+function SectionCard({title, children, fullWidth}) {
+  return (
+    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"16px 18px",boxShadow:SHADOW_SM,...(fullWidth?{gridColumn:"1/-1"}:{})}}>
+      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function PhaseRow({label, line, exportWhenNegative}) {
+  if(!line||(!(line.voltage>0)&&!(line.power>0))) return null;
+  const exporting = exportWhenNegative && (line.current||0) < 0;
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${BORDER}`}}>
+      <span style={{fontSize:11,fontWeight:600,color:MUTED,minWidth:22}}>{label}</span>
+      <div style={{display:"flex",gap:14,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+        <span style={{color:FAINT}}>{(line.voltage||0).toFixed(1)} V</span>
+        <span style={{color:MUTED}}>{Math.abs(line.current||0).toFixed(1)} A</span>
+        <span style={{fontWeight:700,color:exporting?GRID_OUT:LOAD_C}}>{fmt(Math.abs(line.power||0))}</span>
+      </div>
+    </div>
+  );
+}
+
+function InverterDetailPanel({inv, status}) {
+  const [showInfo, setShowInfo] = useState(false);
+  const d = status?.data;
+  if(!d) return <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting…</div>;
+
+  const stateLabel   = d.inverter?.state  != null ? (INV_STATE_LABELS[d.inverter.state]  || `State ${d.inverter.state}`)  : null;
+  const workLabel    = d.inverter?.workMode != null ? (WORK_MODE_LABELS[d.inverter.workMode] || `Mode ${d.inverter.workMode}`) : null;
+  const stateColor   = d.inverter?.state === 3 ? BATTERY : d.inverter?.state === 5 ? GRID_IN : MUTED;
+  const pvTotal      = d.photovoltaic?.power?.totalDc || 0;
+  const pvPeak       = d.photovoltaic?.power?.peak    || 0;
+  const pvToday      = d.photovoltaic?.production?.today  || 0;
+  const pvLifetime   = d.photovoltaic?.production?.total  || 0;
+  const mppts        = d.photovoltaic?.mppts || [];
+  const bat          = d.battery || {};
+  const gridLines    = d.grid?.lines || [];
+  const gridNetW     = d.grid?.netW  || 0;
+  const isExporting  = gridNetW < -50;
+  const isImporting  = gridNetW > 50;
+  const gridFreq     = gridLines.find(l=>l.frequency>0)?.frequency || 0;
+  const loadLines    = d.load?.lines || [];
+  const loadW        = loadLines.reduce((s,l)=>s+(l.power||0),0);
+  const loadFreq     = loadLines.find(l=>l.frequency>0)?.frequency || 0;
+  const smartPorts   = d.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&((p.lines||[]).some(l=>l.power>0)||(p.power?.total||0)>0)) : [];
+  const hasGen       = d.gen && (d.gen.lines||[]).some(l=>(l.power||0)>0);
+
+  return (
+    <div style={{display:"grid",gap:12,gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))"}}>
+
+      {/* Summary hero — full width */}
+      <div style={{gridColumn:"1/-1",background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"18px 20px",border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
+          <div>
+            <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2}}>
+              {d.inverter?.model||inv.label} · <span style={{fontFamily:"monospace",fontWeight:400}}>{inv.sn}</span>
+            </div>
+            <div style={{fontSize:32,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-0.5px",fontVariantNumeric:"tabular-nums"}}>{fmt(pvTotal,2)}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
+            {stateLabel&&<span style={{fontSize:11,fontWeight:700,color:stateColor,padding:"3px 10px",borderRadius:12,background:stateColor===BATTERY?"#DCFCE7":"#F1F5F9"}}>{stateLabel}</span>}
+            {workLabel&&<span style={{fontSize:10,color:MUTED,fontWeight:500}}>{workLabel}</span>}
+            {d.inverter?.lastUpdateTime&&<span style={{fontSize:10,color:FAINT}}>{d.inverter.lastUpdateTime.slice(11,19)}</span>}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
+          <StatTile label="PV Today"       value={fmtE(pvToday)}   color={TEXT}/>
+          <StatTile label="PV Lifetime"    value={fmtE(pvLifetime)} color={TEXT}/>
+          {pvPeak>0&&<StatTile label="Peak Today"    value={fmt(pvPeak)}    color={SOLAR}/>}
+          {d.inverter?.selfConsumptionPercent!=null&&<StatTile label="Self-Consumed"  value={`${d.inverter.selfConsumptionPercent}%`} color={MUTED}/>}
+          {d.inverter?.selfSufficiencyPercent!=null&&<StatTile label="Self-Sufficient" value={`${d.inverter.selfSufficiencyPercent}%`} color={MUTED}/>}
+          <StatTile label="Inverter Temp"  value={`${d.inverter?.temperature||0}°C`} color={TEXT}/>
+        </div>
+      </div>
+
+      {/* Solar / PV */}
+      <SectionCard title="☀️ Solar">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:mppts.length?12:0}}>
+          <StatTile label="Total DC"   value={fmt(pvTotal,2)}  color={SOLAR}/>
+          {pvPeak>0&&<StatTile label="Peak Today" value={fmt(pvPeak)}     color={SOLAR}/>}
+          <StatTile label="Today"      value={fmtE(pvToday)}   color={TEXT}/>
+          <StatTile label="Lifetime"   value={fmtE(pvLifetime)} color={TEXT}/>
+        </div>
+        {mppts.length>0&&(
+          <div>
+            <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Strings</div>
+            {mppts.map((m,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<mppts.length-1?`1px solid ${BORDER}`:"none"}}>
+                <span style={{fontSize:11,fontWeight:600,color:MUTED}}>MPPT {i+1}</span>
+                {m.power>0
+                  ? <span style={{fontSize:11,color:SOLAR,fontVariantNumeric:"tabular-nums"}}>{(m.voltage||0).toFixed(0)} V · {(m.current||0).toFixed(2)} A · {fmt(m.power)}</span>
+                  : <span style={{fontSize:11,color:FAINT}}>—</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Battery */}
+      <SectionCard title="🔋 Battery">
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5}}>
+            <span style={{fontSize:12,fontWeight:600,color:MUTED}}>State of Charge{!bat.brand&&" (est.)"}</span>
+            <span style={{fontSize:22,fontWeight:800,color:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,fontVariantNumeric:"tabular-nums"}}>{(bat.soc||0).toFixed(0)}%</span>
+          </div>
+          <div style={{height:8,background:"#F1F5F9",borderRadius:4,overflow:"hidden",marginBottom:10}}>
+            <div style={{width:`${bat.soc||0}%`,height:"100%",background:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,borderRadius:4,transition:"width 0.5s"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <StatTile label="Voltage"     value={`${(bat.voltage||0).toFixed(1)} V`} color={TEXT}/>
+            <StatTile label="Current"     value={`${(bat.current||0).toFixed(1)} A`} color={TEXT}/>
+            <StatTile label="Charging"    value={fmt(bat.charge||0)}    color={(bat.charge||0)>20?BATTERY:FAINT}/>
+            <StatTile label="Discharging" value={fmt(bat.discharge||0)} color={(bat.discharge||0)>20?SOLAR:FAINT}/>
+            {bat.healthPercent>0&&<StatTile label="Health (SOH)" value={`${bat.healthPercent}%`} color={bat.healthPercent>80?BATTERY:bat.healthPercent>60?SOLAR:GRID_IN}/>}
+            {bat.temperature>0&&<StatTile label="Temp" value={`${bat.temperature}°C`} color={bat.temperature>45?GRID_IN:bat.temperature>35?SOLAR:TEXT}/>}
+          </div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Energy</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <StatTile label="Charged Today"    value={fmtE(bat.chargeIn?.today||0)}    color={BATTERY}/>
+            <StatTile label="Discharged Today" value={fmtE(bat.dischargeOut?.today||0)} color={SOLAR}/>
+            {(bat.chargeIn?.total||0)>0&&<StatTile label="Total Charged"    value={fmtE(bat.chargeIn.total)}    color={MUTED}/>}
+            {(bat.dischargeOut?.total||0)>0&&<StatTile label="Total Discharged" value={fmtE(bat.dischargeOut.total)} color={MUTED}/>}
+          </div>
+        </div>
+        {(bat.brand||bat.capacityAh>0)&&(
+          <div style={{paddingTop:10,borderTop:`1px solid ${BORDER}`,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            {bat.brand&&<span style={{fontSize:11,color:MUTED,fontWeight:600}}>{bat.brand}</span>}
+            {bat.capacityAh>0&&<span style={{fontSize:11,color:FAINT}}>{bat.capacityAh} Ah</span>}
+            {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<span style={{fontSize:10,color:FAINT}}>BMS v{bat.bmsFWVer}</span>}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Grid */}
+      <SectionCard title="⚡ Grid">
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:14,fontWeight:700,color:isExporting?GRID_OUT:isImporting?GRID_IN:MUTED,fontVariantNumeric:"tabular-nums"}}>
+              {isExporting?"Exporting":isImporting?"Importing":"Balanced"} {fmt(Math.abs(gridNetW))}
+            </span>
+            {gridFreq>0&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>{gridFreq.toFixed(2)} Hz</span>}
+          </div>
+          {gridLines.filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
+            <PhaseRow key={i} label={`L${i+1}`} line={l} exportWhenNegative/>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <StatTile label="Feed-In Today"  value={fmtE(d.grid?.sold?.today||0)}        color={GRID_OUT}/>
+          <StatTile label="Total Feed-In"  value={fmtE(d.grid?.sold?.total||0)}        color={GRID_OUT}/>
+          <StatTile label="Imported Today" value={fmtE(d.grid?.consumption?.today||0)} color={GRID_IN}/>
+          <StatTile label="Total Imported" value={fmtE(d.grid?.consumption?.total||0)} color={GRID_IN}/>
+        </div>
+      </SectionCard>
+
+      {/* Normal Load */}
+      <SectionCard title="🏠 Load">
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:14,fontWeight:700,color:LOAD_C,fontVariantNumeric:"tabular-nums"}}>{fmt(loadW)}</span>
+            {loadFreq>0&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>{loadFreq.toFixed(2)} Hz</span>}
+          </div>
+          {loadLines.filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
+            <PhaseRow key={i} label={`L${i+1}`} line={l}/>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <StatTile label="Consumed Today" value={fmtE(d.load?.power?.today||0)}    color={LOAD_C}/>
+          <StatTile label="Total Consumed" value={fmtE(d.load?.power?.total||0)}    color={MUTED}/>
+        </div>
+      </SectionCard>
+
+      {/* Smart Ports — full width if any active */}
+      {smartPorts.length>0&&(
+        <SectionCard title="🔌 Smart Ports" fullWidth>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:16}}>
+            {smartPorts.map(([key,port])=>{
+              const portW=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
+              return (
+                <div key={key}>
+                  <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Port {key}</div>
+                  {(port.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
+                    <PhaseRow key={i} label={`L${i+1}`} line={l}/>
+                  ))}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginTop:8}}>
+                    <StatTile label="Live"  value={fmt(portW)}                     color={portW>0?BATTERY:FAINT}/>
+                    <StatTile label="Today" value={fmtE(port.power?.today||0)}     color={MUTED}/>
+                    {(port.power?.total||0)>0&&<StatTile label="Lifetime" value={fmtE(port.power.total)} color={MUTED}/>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Generator — full width if active */}
+      {hasGen&&(
+        <SectionCard title="⚙️ Generator" fullWidth>
+          <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"center"}}>
+            {(d.gen.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
+              <PhaseRow key={i} label={`L${i+1}`} line={l}/>
+            ))}
+            {d.gen.frequency>0&&<span style={{fontSize:11,color:FAINT}}>{d.gen.frequency.toFixed(1)} Hz</span>}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Inverter details / firmware — collapsible, full width */}
+      <div style={{gridColumn:"1/-1",background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,overflow:"hidden",boxShadow:SHADOW_SM}}>
+        <button onClick={()=>setShowInfo(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
+          <span style={{fontSize:12,fontWeight:600,color:MUTED}}>Inverter Details &amp; Firmware</span>
+          <span style={{fontSize:11,color:FAINT}}>{showInfo?"▲":"▼"}</span>
+        </button>
+        {showInfo&&(
+          <div style={{borderTop:`1px solid ${BORDER}`,padding:"12px 16px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}}>
+              {d.inverter?.model&&<StatTile label="Model"        value={d.inverter.model}       color={TEXT}/>}
+              {stateLabel        &&<StatTile label="Status"       value={stateLabel}              color={stateColor}/>}
+              {workLabel         &&<StatTile label="Work Mode"    value={workLabel}               color={MUTED}/>}
+              {d.inverter?.dspVer     &&<StatTile label="DSP"        value={d.inverter.dspVer}      color={MUTED}/>}
+              {d.inverter?.slaveDspVer&&<StatTile label="Slave DSP"  value={d.inverter.slaveDspVer} color={MUTED}/>}
+              {d.inverter?.csbVer     &&<StatTile label="CSB"         value={d.inverter.csbVer}      color={MUTED}/>}
+              {d.inverter?.wifiSignal!=null&&<StatTile label="WiFi Signal" value={`${d.inverter.wifiSignal}`} color={MUTED}/>}
+              {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<StatTile label="BMS FW"     value={bat.bmsFWVer}           color={MUTED}/>}
+              {d.inverter?.lastUpdateTime&&<StatTile label="Last Update" value={d.inverter.lastUpdateTime.slice(0,16)} color={FAINT}/>}
+            </div>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
 function InverterSelector({selected, onChange, statuses, inverters}) {
   const options = [
     { value:"all", label:"All", sub: `${inverters.length} inverters` },
@@ -1000,12 +1241,19 @@ export default function Dashboard() {
                   {selectedInv==="all"&&<SiteHero statuses={statuses}/>}
                   {selectedInv==="all"&&<BatteryPanel statuses={statuses}/>}
                   {selectedInv==="all"&&<LifetimePanel statuses={statuses}/>}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
-                    {visibleStatuses.map(s=>{
-                      const inv = site.inverters.find(inv=>inv.sn===s.sn)||{sn:s.sn,label:s.label};
-                      return <InverterCard key={s.sn} inv={inv} status={s}/>;
-                    })}
-                  </div>
+                  {selectedInv==="all" ? (
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                      {visibleStatuses.map(s=>{
+                        const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
+                        return <InverterCard key={s.sn} inv={inv} status={s}/>;
+                      })}
+                    </div>
+                  ) : (
+                    visibleStatuses.map(s=>{
+                      const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
+                      return <InverterDetailPanel key={s.sn} inv={inv} status={s}/>;
+                    })
+                  )}
                   {selectedInv==="all"&&<FaultPanel site={site}/>}
                 </>
               }
