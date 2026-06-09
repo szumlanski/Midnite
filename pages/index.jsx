@@ -22,16 +22,23 @@ function aggregateDayData(all) {
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.inTime; if(!map[k]) map[k]={time:k,pv:0,load:0,gridImport:0,gridExport:0,soc:0,n:0}; map[k].pv+=parseFloat(r.Production||0); map[k].load+=parseFloat(r.Consumption||0); map[k].gridImport+=parseFloat(r.powerFromGrid||0); map[k].gridExport+=parseFloat(r.powerToGrid||0); map[k].soc+=parseFloat(r.SOC||0); map[k].n+=1; } }
   return Object.values(map).sort((a,b)=>a.time.localeCompare(b.time)).map(r=>{const avg=r.n?r.soc/r.n:0; const batNet=r.pv-r.load-r.gridExport+r.gridImport; return {...r,soc:avg,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
 }
+// PV production from the month/year rollup. The endpoint's own "Production" field is unreliable
+// on some inverter firmwares (e.g. mode 795) — it can come back far too low, even less than
+// ConsumedDirectly, which is physically impossible. PV energy can only go three places:
+// directly to load, into the battery, or out to the grid. That identity holds on every inverter,
+// so reconstruct production from it instead of trusting "Production". Battery charge/discharge
+// come straight from powerToBattery/powerFromBattery (the rollup provides them — no heuristic).
+function rollupProduction(r){ return parseFloat(r.ConsumedDirectly||0)+parseFloat(r.powerToBattery||0)+parseFloat(r.powerToGrid||0); }
 function aggregateMonthData(all) {
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=parseFloat(r.Production||0); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); } }
-  return Object.values(map).sort((a,b)=>a.day-b.day).map(r=>{const batNet=r.production-r.consumption-r.toGrid+r.fromGrid; return {...r,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
+  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0); } }
+  return Object.values(map).sort((a,b)=>a.day-b.day);
 }
 function aggregateYearData(all) {
   const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=parseFloat(r.Production||0); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); } }
-  return Object.values(map).sort((a,b)=>a.month-b.month).map(r=>{const batNet=r.production-r.consumption-r.toGrid+r.fromGrid; return {...r,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
+  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,_m:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0); } }
+  return Object.values(map).sort((a,b)=>a._m-b._m);
 }
 
 // Design tokens
