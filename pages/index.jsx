@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -17,10 +17,29 @@ async function api(action, body=null) {
   return res.json();
 }
 
+// Keeps per-inverter series (pv{i} above zero, loadNeg{i} below zero) for the stacked-area
+// day chart, plus the summed pv/load/grid/soc used for fallbacks and the grid line.
 function aggregateDayData(all) {
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.inTime; if(!map[k]) map[k]={time:k,pv:0,load:0,gridImport:0,gridExport:0,soc:0,n:0}; map[k].pv+=parseFloat(r.Production||0); map[k].load+=parseFloat(r.Consumption||0); map[k].gridImport+=parseFloat(r.powerFromGrid||0); map[k].gridExport+=parseFloat(r.powerToGrid||0); map[k].soc+=parseFloat(r.SOC||0); map[k].n+=1; } }
-  return Object.values(map).sort((a,b)=>a.time.localeCompare(b.time)).map(r=>{const avg=r.n?r.soc/r.n:0; const batNet=r.pv-r.load-r.gridExport+r.gridImport; return {...r,soc:avg,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
+  all.forEach((inv, idx) => {
+    if(!inv||!inv.Data) return;
+    for(const r of inv.Data) {
+      const k=r.inTime;
+      if(!map[k]) map[k]={time:k,pv:0,load:0,gridImport:0,gridExport:0,soc:0,n:0};
+      const row=map[k];
+      const prod=parseFloat(r.Production||0), cons=parseFloat(r.Consumption||0);
+      row["pv"+idx]=(row["pv"+idx]||0)+prod;
+      row["loadNeg"+idx]=(row["loadNeg"+idx]||0)-cons;
+      row.pv+=prod; row.load+=cons;
+      row.gridImport+=parseFloat(r.powerFromGrid||0);
+      row.gridExport+=parseFloat(r.powerToGrid||0);
+      const soc=parseFloat(r.SOC||0); if(soc>0){row.soc+=soc; row.n+=1;}
+    }
+  });
+  return Object.values(map).sort((a,b)=>a.time.localeCompare(b.time)).map(r=>{
+    const avg=r.n?r.soc/r.n:null; const batNet=r.pv-r.load-r.gridExport+r.gridImport;
+    return {...r,soc:avg,gridNet:r.gridImport-r.gridExport,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};
+  });
 }
 // PV production from the month/year rollup. The endpoint's own "Production" field is unreliable
 // on some inverter firmwares (e.g. mode 795) — it can come back far too low, even less than
@@ -874,11 +893,18 @@ function ChartCard({children, loading, minHeight=300}) {
   );
 }
 
-function DayChart({date, onDateChange, data, loading, summary}) {
+const PROD_SHADES = ["#2563EB","#3B82F6","#60A5FA","#93C5FD","#BFDBFE","#1D4ED8"];
+const CONS_SHADES = ["#EA580C","#F97316","#FB923C","#FDBA74","#FED7AA","#C2410C"];
+const GRID_LINE = "#0D9488";
+const BAT_LINE = "#EAB308";
+const SOC_LINE = "#16A34A";
+
+function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
-  const [showBattery, setShowBattery] = useState(true);
+  const [showBattery, setShowBattery] = useState(false);
+  const [showSoc, setShowSoc] = useState(true);
   // Summary totals come from the month rollup for this day (energy registers) so the Day tab
   // matches the Month tab exactly. Fall back to integrating the intraday power if unavailable.
   const produced   = summary ? summary.produced   : data.reduce((s,d)=>s+((d.pv||0)*(5/60)),0);
@@ -887,20 +913,15 @@ function DayChart({date, onDateChange, data, loading, summary}) {
   const exported   = summary ? summary.exported   : data.reduce((s,d)=>s+((d.gridExport||0)*(5/60)),0);
   const charged    = summary ? summary.charged    : data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
   const discharged = summary ? summary.discharged : data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
-  const chartData = data.map(d=>({
-    ...d,
-    pvPos: d.pv||0,
-    batDischargePos: d.batDischarge||0,
-    gridImportPos: d.gridImport||0,
-    loadNeg: -(d.load||0),
-    batChargeNeg: -(d.batCharge||0),
-    gridExportNeg: -(d.gridExport||0),
-  }));
+  const n = Math.max(1, inverters.length);
+  const single = n === 1;
+  const chartData = data.map(d=>({ ...d, batNet:(d.batCharge||0)-(d.batDischarge||0) }));
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
-    {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
-    {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
+    {key:"grid", label:"Grid", color:GRID_LINE, active:showGrid, onToggle:setShowGrid},
+    {key:"battery", label:"Battery", color:BAT_LINE, active:showBattery, onToggle:setShowBattery},
+    {key:"soc", label:"SOC", color:SOC_LINE, active:showSoc, onToggle:setShowSoc},
   ];
   const dayAtMax = date >= today;
   const dayPrev = () => { const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()-1); onDateChange(d.toISOString().split('T')[0]); };
@@ -910,7 +931,7 @@ function DayChart({date, onDateChange, data, loading, summary}) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Day</h2>
-          <div style={{fontSize:11,color:FAINT}}>5-min intervals</div>
+          <div style={{fontSize:11,color:FAINT}}>Power · drag the bar below to zoom</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
@@ -920,38 +941,26 @@ function DayChart({date, onDateChange, data, loading, summary}) {
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={360}>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} {...BAR_DAY}>
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-            <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval={23}/>
-            <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>v===0?"0":v>0?`${(v/1000).toFixed(0)}k`:`${(v/1000).toFixed(0)}k`} width={32}/>
-            <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
-            <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[fmt(Math.abs(v)),n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            {showProduced&&<Bar dataKey="pvPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="gridImportPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
-            {showConsumed&&<Bar dataKey="loadNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="gridExportNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
-          </BarChart>
+            <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval={23} minTickGap={20}/>
+            <YAxis yAxisId="power" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
+            <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
+            <ReferenceLine yAxisId="power" y={0} stroke={BORDER} strokeWidth={1}/>
+            <Tooltip contentStyle={TOOLTIP_S} formatter={(v,nm)=> v==null?["--",nm] : (nm==="SOC"?[`${Number(v).toFixed(0)}%`,nm]:[fmt(Math.abs(v)),nm])} labelStyle={{color:MUTED,marginBottom:4}} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
+            {showProduced&&inverters.map((inv,i)=>(
+              <Area key={"pv"+i} yAxisId="power" type="monotone" dataKey={"pv"+i} stackId="prod" stroke={PROD_SHADES[i%PROD_SHADES.length]} strokeWidth={single?1.5:0.5} fill={PROD_SHADES[i%PROD_SHADES.length]} fillOpacity={0.55} name={single?"Solar":`${inv.label} Solar`} isAnimationActive={false} dot={false}/>
+            ))}
+            {showConsumed&&inverters.map((inv,i)=>(
+              <Area key={"load"+i} yAxisId="power" type="monotone" dataKey={"loadNeg"+i} stackId="cons" stroke={CONS_SHADES[i%CONS_SHADES.length]} strokeWidth={single?1.5:0.5} fill={CONS_SHADES[i%CONS_SHADES.length]} fillOpacity={0.5} name={single?"Load":`${inv.label} Load`} isAnimationActive={false} dot={false}/>
+            ))}
+            {showGrid&&<Line yAxisId="power" type="monotone" dataKey="gridNet" stroke={GRID_LINE} strokeWidth={1.5} dot={false} name="Grid (− export)" isAnimationActive={false}/>}
+            {showBattery&&<Line yAxisId="power" type="monotone" dataKey="batNet" stroke={BAT_LINE} strokeWidth={1.5} dot={false} name="Battery (+ charge)" isAnimationActive={false}/>}
+            {showSoc&&<Line yAxisId="soc" type="monotone" dataKey="soc" stroke={SOC_LINE} strokeWidth={1.5} dot={false} name="SOC" isAnimationActive={false} connectNulls/>}
+            <Brush dataKey="time" height={22} stroke={FAINT} fill={BG} travellerWidth={10} tickFormatter={()=>""}/>
+          </ComposedChart>
         </ResponsiveContainer>
-        <div style={{marginTop:4}}>
-          <div style={{fontSize:10,color:FAINT,fontWeight:600,marginBottom:4,paddingLeft:4}}>Battery SOC</div>
-          <ResponsiveContainer width="100%" height={50}>
-            <AreaChart data={chartData} margin={{top:0,right:4,left:0,bottom:0}}>
-              <defs>
-                <linearGradient id="socG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={CHART_BAT} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={CHART_BAT} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="time" hide/>
-              <YAxis domain={[0,100]} hide/>
-              <Area type="monotone" dataKey="soc" stroke={CHART_BAT} strokeWidth={1.5} fill="url(#socG)" dot={false} isAnimationActive={false}/>
-              <Tooltip contentStyle={TOOLTIP_S} formatter={v=>[`${Number(v).toFixed(0)}%`,"SOC"]} labelStyle={{color:MUTED}}/>
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
         <SeriesToggle series={toggleSeries}/>
       </ChartCard>
     </div>
@@ -1448,7 +1457,7 @@ export default function Dashboard() {
               }
             </>
           )}
-          {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary}/>}
+          {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} inverters={chartInverters}/>}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
           {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate} site={site}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
