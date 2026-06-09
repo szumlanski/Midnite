@@ -518,6 +518,32 @@ export default async function handler(req, res) {
         catch (e) { out.viewErr = e.message; }
         return res.json(out);
       }
+      case "installertest": {
+        // TEMPORARY — using the CURRENT login (installer Eagle token for a managed site),
+        // try to make month return correct/balanced data by passing the end-user MemberAutoID.
+        // "balance" = ConsumedDirectly + powerToBattery + powerToGrid; correct when ≈ Production.
+        const { sn, memberAutoId, date } = req.body || {};
+        if (!sn) return res.status(400).json({ error: "sn required" });
+        const d = date || "2026-06";
+        const out = { sn, memberAutoId, accountType: auth.accountType, tokenMemberAutoId: auth.memberAutoId };
+        const variants = [
+          ["A: eagleTok, no MemberAutoID", auth.token, { GoodsID: sn, date: d }],
+          ["B: eagleTok + MemberAutoID", auth.token, { GoodsID: sn, date: d, MemberAutoID: memberAutoId }],
+          ["C: eagleTok + MemberAutoID lower", auth.token, { GoodsID: sn, date: d, MemberAutoId: memberAutoId }],
+          ["D: senTok + MemberAutoID", auth.senToken || auth.token, { GoodsID: sn, date: d, MemberAutoID: memberAutoId }],
+        ];
+        for (const [label, tok, body] of variants) {
+          const b = { ...body }; b.sign = makeSign(b);
+          try {
+            const r = await midnitePost("/Senergytec/web/v2/Inverterapi/monthProductionAndConsumptionArea", b, tok);
+            const x = (r.Data || []).find(o => String(o.day) === "8");
+            out[label] = x
+              ? { Prod: x.Production, Cons: x.Consumption, CD: x.ConsumedDirectly, toBat: x.powerToBattery, toGrid: x.powerToGrid, balance: (x.ConsumedDirectly || 0) + (x.powerToBattery || 0) + (x.powerToGrid || 0) }
+              : "no day-8";
+          } catch (e) { out[label] = "ERR " + e.message.slice(0, 90); }
+        }
+        return res.json(out);
+      }
       case "logsearch": {
         const {serials:ls,startDate,endDate}=req.body||{};
         if(!ls?.length) return res.status(400).json({error:"serials required"});

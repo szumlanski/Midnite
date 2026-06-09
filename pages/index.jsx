@@ -1084,7 +1084,7 @@ function YearChart({year, onYearChange, data, loading}) {
 // TEMPORARY DEBUG PANEL — compares the day endpoint (integrated) against the
 // month endpoint for one chosen day, per inverter, and dumps raw records on
 // screen. Remove once the month/year totals discrepancy is resolved.
-function MonthDebugPanel({inverters, month}) {
+function MonthDebugPanel({inverters, month, site}) {
   const [day, setDay] = useState("08");
   const [out, setOut] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1180,6 +1180,22 @@ function MonthDebugPanel({inverters, month}) {
     setOut(lines.join("\n"));
     setBusy(false);
   };
+  const installertest = async () => {
+    setBusy(true); setOut(null);
+    const sn = inverters[0]?.sn;
+    const lines = [`Installer month test — ${inverters[0]?.label} (${sn})`,
+      `site memberAutoId: ${site?.memberAutoId}`,
+      `(correct when "balance" ≈ Prod; broken when balance > Prod)\n`];
+    try {
+      const r = await api("installertest", { sn, memberAutoId: site?.memberAutoId, date: month });
+      lines.push(`accountType: ${r.accountType} | token memberAutoId: ${r.tokenMemberAutoId}\n`);
+      for (const k of Object.keys(r)) {
+        if (k.match(/^[A-D]:/)) lines.push(`${k}\n    ${JSON.stringify(r[k])}`);
+      }
+    } catch (e) { lines.push("ERROR: " + String(e)); }
+    setOut(lines.join("\n"));
+    setBusy(false);
+  };
   return (
     <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
@@ -1191,6 +1207,7 @@ function MonthDebugPanel({inverters, month}) {
         <button onClick={probe} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe endpoints"}</button>
         <button onClick={vendor} disabled={busy} style={{background:"#16A34A",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Read vendor JS"}</button>
         <button onClick={viewtest} disabled={busy} style={{background:"#DC2626",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Service vs View"}</button>
+        <button onClick={installertest} disabled={busy} style={{background:"#7C3AED",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Installer test"}</button>
       </div>
       {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
     </div>
@@ -1403,7 +1420,7 @@ export default function Dashboard() {
           )}
           {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading}/>}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
-          {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate}/>}
+          {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate} site={site}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
         </div>
 
