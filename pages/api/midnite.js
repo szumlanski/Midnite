@@ -378,6 +378,36 @@ export default async function handler(req, res) {
         body.sign = makeSign(body);
         return res.json(await midnitePost("/Senergytec/web/v2/Inverterapi/dayProductionAndConsumptionAreaTime", body, auth.token));
       }
+      case "dayexcel": {
+        // Per-MPPT intraday data, parsed from the installer site's day-chart CSV export.
+        // GET /Eagle/v1//Excel/hybridStatusExcelMidNite?MemberID&inDate&GoodsID&sign (sign-authorized).
+        const { sn, date, memberId } = req.body || {};
+        if (!sn || !date) return res.status(400).json({ error: "sn and date required" });
+        const MemberID = memberId || auth.username;
+        const sign = makeSign({ MemberID, inDate: date, GoodsID: sn });
+        const enc = encodeURIComponent;
+        const url = `${BASE}/Eagle/v1//Excel/hybridStatusExcelMidNite?MemberID=${enc(MemberID)}&inDate=${enc(date)}&GoodsID=${enc(sn)}&sign=${enc(sign)}`;
+        const resp = await fetch(url, { headers: {
+          "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+          "Referer": "https://service.midnitepower.com/",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+          "Cookie": "timezone=America%2FNew_York",
+        }});
+        const text = await resp.text();
+        if (!resp.ok) return res.status(502).json({ error: `excel ${resp.status}`, sample: text.slice(0,200) });
+        // Parse the quoted CSV. Header row begins with "Time"; columns: Time,MPPT1,MPPT2,MPPT3,...
+        const wOf = (cell) => { const p = String(cell||"").split("/"); const last = p[p.length-1]||""; return parseFloat(last.replace(/[^0-9.\-]/g,"")) || 0; };
+        const rows = []; let started = false;
+        for (const line of text.split(/\r?\n/)) {
+          const f = [...line.matchAll(/"([^"]*)"/g)].map(m=>m[1]);
+          if (!f.length) continue;
+          if (f[0] === "Time") { started = true; continue; }
+          if (!started || !/^\d{4}-\d{2}-\d{2}[ T]/.test(f[0])) continue;
+          rows.push({ time: f[0].split(/[ T]/)[1], mppt: [wOf(f[1]), wOf(f[2]), wOf(f[3])] });
+        }
+        const activeMppts = [0,1,2].filter(i => rows.some(r => Math.abs(r.mppt[i]) > 1));
+        return res.json({ rows, activeMppts, count: rows.length });
+      }
       case "month": {
         const { sn, date } = req.body || {};
         if (!sn || !date) return res.status(400).json({ error: "sn and date required" });

@@ -14,12 +14,29 @@ const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1
 const balanceLoad = (d) => d ? Math.max(0, (d.photovoltaic?.power?.totalDc||0) + (d.grid?.netW||0) + (d.battery?.discharge||0) - (d.battery?.charge||0)) : null;
 const fmtHrs = (h) => { if(!isFinite(h)||h<=0) return "--"; if(h>=48) return `${(h/24).toFixed(1)} days`; const H=Math.floor(h), M=Math.round((h-H)*60); return M? `${H}h ${M}m` : `${H}h`; };
 
+// Session cache for historical, immutable data (past day/month/year + their MPPT export). The
+// current day/month/year is never cached so live periods stay fresh. Cleared on logout.
+const _apiCache = new Map();
+function _cacheKey(action, body){ return `${action}:${body?.sn||""}:${body?.date||""}:${body?.memberId||""}`; }
+function _isHistorical(action, body){
+  const d = body?.date;
+  if(!d) return false;
+  if(action==="day"||action==="dayexcel") return d < today;
+  if(action==="month") return d < thisMonth;
+  if(action==="year") return d < thisYear;
+  return false;
+}
 async function api(action, body=null) {
+  const cacheable = _isHistorical(action, body);
+  const key = cacheable ? _cacheKey(action, body) : null;
+  if(key && _apiCache.has(key)) return _apiCache.get(key);
   const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
   const merged = { ...body, username: creds.username, password: creds.password };
   const res = await fetch(`/api/midnite?action=${action}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(merged) });
   if(!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if(key) _apiCache.set(key, data);
+  return data;
 }
 
 // Keeps per-inverter series (pv{i} above zero, loadNeg{i} below zero) for the stacked-area
@@ -53,6 +70,22 @@ function aggregateDayData(all) {
 // so reconstruct production from it instead of trusting "Production". Battery charge/discharge
 // come straight from powerToBattery/powerFromBattery (the rollup provides them — no heuristic).
 function rollupProduction(r){ return parseFloat(r.ConsumedDirectly||0)+parseFloat(r.powerToBattery||0)+parseFloat(r.powerToGrid||0); }
+// Single-inverter per-MPPT day data: merges the CSV-export MPPT power (pv0/pv1/pv2) with the
+// regular day endpoint's load/grid/battery/soc, keyed by time.
+function aggregateDayMppt(dayResp, excelRows) {
+  const dmap = {};
+  for(const r of (dayResp?.Data||[])) dmap[r.inTime] = r;
+  return excelRows.map(er=>{
+    const dr = dmap[er.time] || {};
+    const load = parseFloat(dr.Consumption||0);
+    const gi = parseFloat(dr.powerFromGrid||0), ge = parseFloat(dr.powerToGrid||0);
+    const ch = parseFloat(dr.powerToBattery||0), di = parseFloat(dr.powerFromBattery||0);
+    const socv = parseFloat(dr.SOC||0);
+    const row = { time: er.time, loadNeg0: -load, gridNet: gi-ge, batNet: ch-di, soc: socv>0?socv:null };
+    er.mppt.forEach((w,i)=>{ row["pv"+i]=w; });
+    return row;
+  });
+}
 function aggregateMonthData(all) {
   const map = {};
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0); } }
@@ -993,7 +1026,7 @@ function DayTooltip({active, payload, label}) {
   );
 }
 
-function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
+function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], consSeries=[], mpptHint, mpptActive}) {
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -1007,9 +1040,7 @@ function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
   const exported   = summary ? summary.exported   : data.reduce((s,d)=>s+((d.gridExport||0)*(5/60)),0);
   const charged    = summary ? summary.charged    : data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
   const discharged = summary ? summary.discharged : data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
-  const n = Math.max(1, inverters.length);
-  const single = n === 1;
-  const chartData = data.map(d=>({ ...d, batNet:(d.batCharge||0)-(d.batDischarge||0) }));
+  const chartData = data.map(d=>({ ...d, batNet: d.batNet!=null ? d.batNet : ((d.batCharge||0)-(d.batDischarge||0)) }));
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
@@ -1025,7 +1056,7 @@ function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Day</h2>
-          <div style={{fontSize:11,color:FAINT}}>Power · drag the bar below to zoom</div>
+          <div style={{fontSize:11,color:FAINT}}>{mpptActive?"Per-MPPT production · drag to zoom":"Power · drag the bar below to zoom"}</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
@@ -1043,11 +1074,11 @@ function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
             <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
             <ReferenceLine yAxisId="power" y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip content={<DayTooltip/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
-            {showProduced&&inverters.map((inv,i)=>(
-              <Area key={"pv"+i} yAxisId="power" type="monotone" dataKey={"pv"+i} stackId="prod" stroke={PROD_SHADES[i%PROD_SHADES.length]} strokeWidth={single?1.5:0.5} fill={PROD_SHADES[i%PROD_SHADES.length]} fillOpacity={0.55} name={single?"Solar":`${inv.label} Solar`} isAnimationActive={false} dot={false}/>
+            {showProduced&&prodSeries.map((s)=>(
+              <Area key={s.key} yAxisId="power" type="monotone" dataKey={s.key} stackId="prod" stroke={s.color} strokeWidth={prodSeries.length===1?1.5:0.5} fill={s.color} fillOpacity={0.55} name={s.name} isAnimationActive={false} dot={false}/>
             ))}
-            {showConsumed&&inverters.map((inv,i)=>(
-              <Area key={"load"+i} yAxisId="power" type="monotone" dataKey={"loadNeg"+i} stackId="cons" stroke={CONS_SHADES[i%CONS_SHADES.length]} strokeWidth={single?1.5:0.5} fill={CONS_SHADES[i%CONS_SHADES.length]} fillOpacity={0.5} name={single?"Load":`${inv.label} Load`} isAnimationActive={false} dot={false}/>
+            {showConsumed&&consSeries.map((s)=>(
+              <Area key={s.key} yAxisId="power" type="monotone" dataKey={s.key} stackId="cons" stroke={s.color} strokeWidth={consSeries.length===1?1.5:0.5} fill={s.color} fillOpacity={0.5} name={s.name} isAnimationActive={false} dot={false}/>
             ))}
             {showGrid&&<Line yAxisId="power" type="monotone" dataKey="gridNet" stroke={GRID_LINE} strokeWidth={1.5} dot={false} name="Grid (− export)" isAnimationActive={false}/>}
             {showBattery&&<Line yAxisId="power" type="monotone" dataKey="batNet" stroke={BAT_LINE} strokeWidth={1.5} dot={false} name="Battery (+ charge)" isAnimationActive={false}/>}
@@ -1057,6 +1088,7 @@ function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
       </ChartCard>
+      {mpptHint&&<div style={{fontSize:11,color:FAINT,textAlign:"center",marginTop:8}}>Select a single inverter to break production out by MPPT string.</div>}
     </div>
   );
 }
@@ -1393,6 +1425,7 @@ export default function Dashboard() {
   const [dayDate, setDayDate] = useState(today);
   const [dayData, setDayData] = useState([]);
   const [daySummary, setDaySummary] = useState(null);
+  const [dayMode, setDayMode] = useState({type:"inverter"});
   const [dayLoading, setDayLoading] = useState(false);
   const [monthDate, setMonthDate] = useState(thisMonth);
   const [monthData, setMonthData] = useState([]);
@@ -1442,6 +1475,7 @@ export default function Dashboard() {
   function handleLogout() {
     localStorage.removeItem("midnite_creds");
     localStorage.removeItem("midnite_selected_site");
+    _apiCache.clear();
     setSite(null); setSites([]); setStatuses([]); setAuthState("login");
   }
 
@@ -1486,13 +1520,21 @@ export default function Dashboard() {
     setDayLoading(true); setDaySummary(null);
     const dayNum = Number(dayDate.slice(8,10));
     const monthStr = dayDate.slice(0,7);
-    // Fetch the intraday power curve (for the chart shape) AND the month rollup (for the summary
-    // totals). The summary uses the month register value for this day so Day matches Month exactly.
+    const single = chartInverters.length===1;
+    // Day curve (shape) + month rollup (summary totals, so Day matches Month). When exactly one
+    // inverter is selected, also pull the per-MPPT CSV export to break production out by string.
     Promise.all([
       Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))),
       Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthStr}).catch(()=>null))),
-    ]).then(([dayAll, monthAll])=>{
-      setDayData(aggregateDayData(dayAll));
+      single ? api("dayexcel",{sn:chartInverters[0].sn,date:dayDate,memberId:site.name}).catch(()=>null) : Promise.resolve(null),
+    ]).then(([dayAll, monthAll, excel])=>{
+      if(single && excel?.rows?.length){
+        setDayData(aggregateDayMppt(dayAll[0], excel.rows));
+        setDayMode({type:"mppt", active: excel.activeMppts?.length?excel.activeMppts:[0]});
+      } else {
+        setDayData(aggregateDayData(dayAll));
+        setDayMode({type:"inverter"});
+      }
       const md = aggregateMonthData(monthAll).find(r=>Number(r.day)===dayNum);
       setDaySummary(md ? {
         produced: md.production*1000, consumed: md.consumption*1000,
@@ -1589,7 +1631,18 @@ export default function Dashboard() {
               }
             </>
           )}
-          {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} inverters={chartInverters}/>}
+          {tab==="day"&&(()=>{
+            let prodSeries, consSeries;
+            if(dayMode.type==="mppt"){
+              prodSeries = dayMode.active.map((mi,idx)=>({key:`pv${mi}`, name:`MPPT${mi+1}`, color:PROD_SHADES[idx%PROD_SHADES.length]}));
+              consSeries = [{key:"loadNeg0", name:"Load", color:CONS_SHADES[0]}];
+            } else {
+              const single = chartInverters.length===1;
+              prodSeries = chartInverters.map((inv,i)=>({key:`pv${i}`, name:single?"Solar":`${inv.label} Solar`, color:PROD_SHADES[i%PROD_SHADES.length]}));
+              consSeries = chartInverters.map((inv,i)=>({key:`loadNeg${i}`, name:single?"Load":`${inv.label} Load`, color:CONS_SHADES[i%CONS_SHADES.length]}));
+            }
+            return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1 && chartInverters.length>1}/>;
+          })()}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
           {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate} site={site}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
