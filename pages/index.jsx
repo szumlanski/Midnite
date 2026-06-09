@@ -849,35 +849,28 @@ function InverterDetailPanel({inv, status}) {
   );
 }
 
-function InverterSelector({selected, onChange, statuses, inverters}) {
-  const options = [
-    { value:"all", label:"All", sub: `${inverters.length} inverters` },
-    ...inverters.map((inv,i) => {
-      const s = statuses[i];
-      const pv = s?.data?.photovoltaic?.power?.totalDc;
-      // Show short SN (last 8 chars) + live power
-      const snShort = inv.sn.slice(-8);
-      return { value:inv.sn, label:inv.label, sub: snShort, power: pv!=null ? fmt(pv) : null };
-    })
-  ];
+function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, inverters}) {
+  const pill = (active, onClick, key, label, sub, power) => (
+    <button key={key} onClick={onClick} style={{
+      flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1,
+      padding:"8px 14px", borderRadius:12,
+      border:`1.5px solid ${active?SOLAR:BORDER}`,
+      background:active?"#FFFBEB":CARD,
+      cursor:"pointer", fontFamily:SANS,
+      boxShadow: active ? `0 0 0 3px rgba(217,119,6,0.1)` : SHADOW_SM,
+      minWidth:56, opacity: active?1:0.65,
+    }}>
+      <span style={{fontSize:12,fontWeight:700,color:active?SOLAR:TEXT,whiteSpace:"nowrap"}}>{label}{power&&<span style={{fontWeight:500,color:active?SOLAR:MUTED}}>{" · "}{power}</span>}</span>
+      <span style={{fontSize:10,fontWeight:500,color:active?"#B45309":FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"monospace"}}>{sub}</span>
+    </button>
+  );
   return (
     <div className="inv-scroll" style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
-      {options.map(opt=>{
-        const active = selected===opt.value;
-        return (
-          <button key={opt.value} onClick={()=>onChange(opt.value)} style={{
-            flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1,
-            padding:"8px 14px", borderRadius:12,
-            border:`1.5px solid ${active?SOLAR:BORDER}`,
-            background:active?"#FFFBEB":CARD,
-            cursor:"pointer", fontFamily:SANS,
-            boxShadow: active ? `0 0 0 3px rgba(217,119,6,0.1)` : SHADOW_SM,
-            minWidth:56,
-          }}>
-            <span style={{fontSize:12,fontWeight:700,color:active?SOLAR:TEXT,whiteSpace:"nowrap"}}>{opt.label}{opt.power&&<span style={{fontWeight:500,color:active?SOLAR:MUTED}}>{" · "}{opt.power}</span>}</span>
-            <span style={{fontSize:10,fontWeight:500,color:active?"#B45309":FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"monospace"}}>{opt.sub}</span>
-          </button>
-        );
+      {pill(allSelected, onAll, "all", "All", `${inverters.length} inverters`, null)}
+      {inverters.map(inv=>{
+        const s = statuses.find(x=>x.sn===inv.sn);
+        const pv = s?.data?.photovoltaic?.power?.totalDc;
+        return pill(selectedSns.includes(inv.sn), ()=>onToggle(inv.sn), inv.sn, inv.label, inv.sn.slice(-8), pv!=null?fmt(pv):null);
       })}
     </div>
   );
@@ -898,6 +891,41 @@ const CONS_SHADES = ["#EA580C","#F97316","#FB923C","#FDBA74","#FED7AA","#C2410C"
 const GRID_LINE = "#0D9488";
 const BAT_LINE = "#EAB308";
 const SOC_LINE = "#16A34A";
+
+function DayTooltip({active, payload, label}) {
+  if(!active||!payload||!payload.length) return null;
+  const prod = payload.filter(p=>p.dataKey&&p.dataKey.startsWith("pv"));
+  const cons = payload.filter(p=>p.dataKey&&p.dataKey.startsWith("loadNeg"));
+  const grid = payload.find(p=>p.dataKey==="gridNet");
+  const bat  = payload.find(p=>p.dataKey==="batNet");
+  const soc  = payload.find(p=>p.dataKey==="soc");
+  const prodTot = prod.reduce((s,p)=>s+(p.value||0),0);
+  const consTot = cons.reduce((s,p)=>s+Math.abs(p.value||0),0);
+  const Row = ({c,l,v,bold}) => (
+    <div style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:11,fontWeight:bold?700:500,padding:"1px 0"}}>
+      <span style={{color:bold?TEXT:MUTED,display:"flex",alignItems:"center",gap:5}}>{c&&<span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>}{l}</span>
+      <span style={{color:bold?TEXT:MUTED,fontVariantNumeric:"tabular-nums"}}>{v}</span>
+    </div>
+  );
+  return (
+    <div style={{...TOOLTIP_S, padding:"8px 10px", minWidth:150}}>
+      <div style={{color:MUTED,fontSize:10,marginBottom:5}}>{label}</div>
+      {prod.length>0&&<>
+        {prod.map(p=><Row key={p.dataKey} c={p.color} l={p.name} v={fmt(p.value||0)}/>)}
+        {prod.length>1&&<Row l="Total Solar" v={fmt(prodTot)} bold/>}
+      </>}
+      {cons.length>0&&<div style={{marginTop:prod.length?4:0}}>
+        {cons.map(p=><Row key={p.dataKey} c={p.color} l={p.name} v={fmt(Math.abs(p.value||0))}/>)}
+        {cons.length>1&&<Row l="Total Load" v={fmt(consTot)} bold/>}
+      </div>}
+      {(grid||bat||soc)&&<div style={{marginTop:4,borderTop:`1px solid ${BORDER}`,paddingTop:4}}>
+        {grid&&grid.value!=null&&<Row c={GRID_LINE} l={grid.value>=0?"Grid import":"Grid export"} v={fmt(Math.abs(grid.value))}/>}
+        {bat&&bat.value!=null&&<Row c={BAT_LINE} l={bat.value>=0?"Battery charge":"Battery discharge"} v={fmt(Math.abs(bat.value))}/>}
+        {soc&&soc.value!=null&&<Row c={SOC_LINE} l="SOC" v={`${Number(soc.value).toFixed(0)}%`}/>}
+      </div>}
+    </div>
+  );
+}
 
 function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
   const [showProduced, setShowProduced] = useState(true);
@@ -948,7 +976,7 @@ function DayChart({date, onDateChange, data, loading, summary, inverters=[]}) {
             <YAxis yAxisId="power" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
             <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
             <ReferenceLine yAxisId="power" y={0} stroke={BORDER} strokeWidth={1}/>
-            <Tooltip contentStyle={TOOLTIP_S} formatter={(v,nm)=> v==null?["--",nm] : (nm==="SOC"?[`${Number(v).toFixed(0)}%`,nm]:[fmt(Math.abs(v)),nm])} labelStyle={{color:MUTED,marginBottom:4}} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
+            <Tooltip content={<DayTooltip/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
             {showProduced&&inverters.map((inv,i)=>(
               <Area key={"pv"+i} yAxisId="power" type="monotone" dataKey={"pv"+i} stackId="prod" stroke={PROD_SHADES[i%PROD_SHADES.length]} strokeWidth={single?1.5:0.5} fill={PROD_SHADES[i%PROD_SHADES.length]} fillOpacity={0.55} name={single?"Solar":`${inv.label} Solar`} isAnimationActive={false} dot={false}/>
             ))}
@@ -1276,7 +1304,7 @@ export default function Dashboard() {
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [selectedInv, setSelectedInv] = useState("all");
+  const [selectedSns, setSelectedSns] = useState([]);
 
   const [dayDate, setDayDate] = useState(today);
   const [dayData, setDayData] = useState([]);
@@ -1334,7 +1362,7 @@ export default function Dashboard() {
   }
 
   function handleSelectSite(s) {
-    setSite(s); setStatuses([]); setLiveLoading(true); setSelectedInv("all");
+    setSite(s); setStatuses([]); setLiveLoading(true);
     localStorage.setItem("midnite_selected_site", s.name);
     setAuthState("dashboard");
   }
@@ -1361,7 +1389,13 @@ export default function Dashboard() {
 
   useEffect(() => { if(!site) return; setLiveLoading(true); fetchLive(); const t=setInterval(fetchLive,60000); return()=>clearInterval(t); }, [fetchLive]);
 
-  const chartInverters = site ? (selectedInv==="all" ? site.inverters : site.inverters.filter(i=>i.sn===selectedInv)) : [];
+  // Multi-select: selectedSns holds the serials currently shown. Default to all when a site loads.
+  useEffect(() => { if(site) setSelectedSns(site.inverters.map(i=>i.sn)); }, [site]);
+  const chartInverters = site ? site.inverters.filter(i=>selectedSns.includes(i.sn)) : [];
+  const allSelected = site ? selectedSns.length===site.inverters.length && selectedSns.length>0 : false;
+  const toggleInv = (sn) => setSelectedSns(prev=>{ const has=prev.includes(sn); if(has){ const next=prev.filter(x=>x!==sn); return next.length?next:prev; } return [...prev,sn]; });
+  const selectAllInv = () => site && setSelectedSns(site.inverters.map(i=>i.sn));
+  const snKey = selectedSns.join(",");
 
   useEffect(() => {
     if(tab!=="day"||!site) return;
@@ -1383,11 +1417,11 @@ export default function Dashboard() {
       } : null);
       setDayLoading(false);
     });
-  }, [tab,dayDate,selectedInv,site]);
-  useEffect(() => { if(tab!=="month"||!site) return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); }, [tab,monthDate,selectedInv,site]);
-  useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,selectedInv,site]);
+  }, [tab,dayDate,snKey,site]);
+  useEffect(() => { if(tab!=="month"||!site) return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); }, [tab,monthDate,snKey,site]);
+  useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,snKey,site]);
 
-  const visibleStatuses = selectedInv==="all" ? statuses : statuses.filter(s=>s.sn===selectedInv);
+  const visibleStatuses = statuses.filter(s=>selectedSns.includes(s.sn));
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="login") return <LoginForm onLogin={handleLogin} error={loginError} loading={loginLoading}/>;
@@ -1428,7 +1462,7 @@ export default function Dashboard() {
 
         {/* Content */}
         <div className="page-pad" style={{maxWidth:960,margin:"0 auto",padding:"16px 16px 24px",animation:"fadeUp 0.35s ease"}}>
-          <InverterSelector selected={selectedInv} onChange={setSelectedInv} statuses={statuses} inverters={site.inverters}/>
+          <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>
 
           {tab==="live"&&(
             <>
@@ -1436,23 +1470,23 @@ export default function Dashboard() {
               {liveLoading
                 ? <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting to Midnite portal…</div>
                 : <>
-                  {selectedInv==="all"&&<SiteHero statuses={statuses}/>}
-                  {selectedInv==="all"&&<BatteryPanel statuses={statuses}/>}
-                  {selectedInv==="all"&&<LifetimePanel statuses={statuses}/>}
-                  {selectedInv==="all" ? (
+                  {allSelected&&<SiteHero statuses={statuses}/>}
+                  {allSelected&&<BatteryPanel statuses={statuses}/>}
+                  {allSelected&&<LifetimePanel statuses={statuses}/>}
+                  {selectedSns.length===1 ? (
+                    visibleStatuses.map(s=>{
+                      const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
+                      return <InverterDetailPanel key={s.sn} inv={inv} status={s}/>;
+                    })
+                  ) : (
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
                       {visibleStatuses.map(s=>{
                         const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
                         return <InverterCard key={s.sn} inv={inv} status={s}/>;
                       })}
                     </div>
-                  ) : (
-                    visibleStatuses.map(s=>{
-                      const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
-                      return <InverterDetailPanel key={s.sn} inv={inv} status={s}/>;
-                    })
                   )}
-                  {selectedInv==="all"&&<FaultPanel site={site}/>}
+                  {allSelected&&<FaultPanel site={site}/>}
                 </>
               }
             </>
