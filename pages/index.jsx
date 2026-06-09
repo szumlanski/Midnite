@@ -1144,6 +1144,8 @@ function MonthDebugPanel({inverters, month}) {
       const r = await api("vendorsrc", {});
       lines.push(`root: ${r.rootStatus} (${r.rootLen} bytes)`);
       (r.fetched||[]).forEach(f => lines.push(`  ${f.err?"ERR":"ok"} ${f.len||""} ${f.u}`));
+      if (r.rootHtml) { lines.push(`\n=== root HTML ===\n${r.rootHtml}`); }
+      (r.smallFiles||[]).forEach(s => lines.push(`\n=== small file ${s.u} ===\n${s.raw}`));
       lines.push(`\n=== API paths ===`);
       (r.apiPaths||[]).forEach(p => lines.push("  " + p));
       lines.push(`\n=== method/chart string literals ===`);

@@ -400,18 +400,45 @@ export default async function handler(req, res) {
         const grab = async (u) => { const r = await fetch(u, { headers: UA }); return { status: r.status, text: await r.text() }; };
         const out = { root: ROOT };
         try {
+          const origin = new URL(ROOT).origin;
+          const abs = (s, baseDir) => {
+            if (s.startsWith("http")) return s;
+            s = s.replace(/^\.\//, "");
+            if (s.startsWith("/")) return origin + s;
+            return (baseDir || origin + "/") + s;
+          };
           const home = await grab(ROOT);
           out.rootStatus = home.status; out.rootLen = home.text.length;
-          // all <script src> and module preloads
+          out.rootHtml = home.text.slice(0, 1500);
           const srcs = [...home.text.matchAll(/(?:src|href)=["']([^"']+\.js[^"']*)["']/gi)].map(m => m[1]);
-          out.scripts = [...new Set(srcs)];
-          const abs = (s) => s.startsWith("http") ? s : ROOT.replace(/\/$/, "") + (s.startsWith("/") ? s : "/" + s);
-          const targets = out.scripts.slice(0, 20).map(abs);
-          const results = await Promise.all(targets.map(async (u) => {
-            try { const r = await grab(u); return { u, len: r.text.length, js: r.text }; }
-            catch (e) { return { u, err: e.message }; }
-          }));
+
+          // BFS-crawl same-origin .js chunks (follow the webpack/umi chunk graph)
+          const seen = new Set();
+          const queue = [...new Set(srcs)].map(s => abs(s)).filter(u => u.startsWith(origin));
+          const results = [];
+          let totalBytes = 0;
+          while (queue.length && seen.size < 50 && totalBytes < 30_000_000) {
+            const batch = queue.splice(0, 8).filter(u => !seen.has(u));
+            batch.forEach(u => seen.add(u));
+            const rs = await Promise.all(batch.map(async (u) => {
+              try { const r = await grab(u); return { u, text: r.text }; }
+              catch (e) { return { u, err: e.message }; }
+            }));
+            for (const r of rs) {
+              if (!r.text) { results.push({ u: r.u, err: r.err }); continue; }
+              results.push({ u: r.u, len: r.text.length, js: r.text });
+              totalBytes += r.text.length;
+              const baseDir = r.u.slice(0, r.u.lastIndexOf("/") + 1);
+              // discover more .js filenames referenced inside this file
+              for (const m of r.text.matchAll(/["'`]([A-Za-z0-9_\-./]{2,80}?\.(?:async\.)?js)["'`]/g)) {
+                const u = abs(m[1], baseDir);
+                if (u.startsWith(origin) && !seen.has(u) && !queue.includes(u)) queue.push(u);
+              }
+            }
+          }
           out.fetched = results.map(r => ({ u: r.u, len: r.len, err: r.err }));
+          // dump tiny runtime/manifest files raw so we can see the chunk-URL pattern
+          out.smallFiles = results.filter(r => r.js && r.js.length < 4000).map(r => ({ u: r.u, raw: r.js }));
           const big = results.map(r => r.js || "").join("\n");
 
           // 1) full API paths (broad: any /Word/(web/)?vN/Word/Word)
