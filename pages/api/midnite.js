@@ -407,23 +407,43 @@ export default async function handler(req, res) {
           out.scripts = [...new Set(srcs)];
           const abs = (s) => s.startsWith("http") ? s : ROOT.replace(/\/$/, "") + (s.startsWith("/") ? s : "/" + s);
           const targets = out.scripts.slice(0, 20).map(abs);
-          const pathSet = new Set(), methodSet = new Set();
-          const pathPat = /\/(?:Senergytec|Eagle)\/[A-Za-z0-9_./]+/g;
-          const methPat = /[A-Za-z]*(?:Production|Consumption|Energy)[A-Za-z]*/g;
-          const periodPat = /\b(?:month|year|day|week)[A-Za-z]{3,}/g;
           const results = await Promise.all(targets.map(async (u) => {
             try { const r = await grab(u); return { u, len: r.text.length, js: r.text }; }
             catch (e) { return { u, err: e.message }; }
           }));
           out.fetched = results.map(r => ({ u: r.u, len: r.len, err: r.err }));
-          for (const r of results) {
-            if (!r.js) continue;
-            for (const m of r.js.matchAll(pathPat)) pathSet.add(m[0]);
-            for (const m of r.js.matchAll(methPat)) if (m[0].length > 8) methodSet.add(m[0]);
-            for (const m of r.js.matchAll(periodPat)) methodSet.add(m[0]);
+          const big = results.map(r => r.js || "").join("\n");
+
+          // 1) full API paths (broad: any /Word/(web/)?vN/Word/Word)
+          const pathSet = new Set();
+          for (const m of big.matchAll(/\/[A-Za-z]+\/(?:web\/)?v[0-9]+\/[A-Za-z0-9_]+\/[A-Za-z0-9_]+/g)) pathSet.add(m[0]);
+
+          // 2) quoted string literals that look like API method names / chart keys
+          const KW = /(Production|Consumption|Area|Energy|Chart|Statistic|Histor|Kpi|Report|Overview|Generation|PowerCurve|Electric|Income|Revenue)/;
+          const litSet = new Set();
+          for (const m of big.matchAll(/["'`]([A-Za-z][A-Za-z0-9_]{4,60})["'`]/g)) {
+            if (KW.test(m[1])) litSet.add(m[1]);
           }
+          // 3) period-prefixed identifiers (monthXxx / yearXxx / dayXxx)
+          const periodSet = new Set();
+          for (const m of big.matchAll(/["'`]((?:month|year|day|week)[A-Z][A-Za-z0-9_]{2,50})["'`]/g)) periodSet.add(m[1]);
+
+          // 4) base-URL / host clues
+          const baseSet = new Set();
+          for (const m of big.matchAll(/["'`]([^"'`]*(?:CodeIgniter|index\.php|appsrv|midnite[a-z]*\.com|\/API\/)[^"'`]*)["'`]/gi)) baseSet.add(m[1].slice(0, 120));
+
+          // 5) context around the first few "AndConsumption" / "Area(" occurrences
+          const ctx = [];
+          for (const key of ["AndConsumption", "ProductionAnd", "ConsumptionArea", "AreaTime", "dayLoadConsumption", "EnergyFlow", "getChart", "Statistic"]) {
+            let i = big.indexOf(key);
+            if (i >= 0) ctx.push(`[${key}] …${big.slice(Math.max(0, i - 70), i + 90).replace(/\s+/g, " ")}…`);
+          }
+
           out.apiPaths = [...pathSet].sort();
-          out.methodNames = [...methodSet].sort();
+          out.methodLiterals = [...litSet].sort();
+          out.periodIdentifiers = [...periodSet].sort();
+          out.baseClues = [...baseSet].sort().slice(0, 40);
+          out.context = ctx;
         } catch (e) { out.error = e.message; }
         return res.json(out);
       }

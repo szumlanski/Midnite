@@ -1143,12 +1143,17 @@ function MonthDebugPanel({inverters, month}) {
     try {
       const r = await api("vendorsrc", {});
       lines.push(`root: ${r.rootStatus} (${r.rootLen} bytes)`);
-      lines.push(`scripts found: ${(r.scripts||[]).length}`);
       (r.fetched||[]).forEach(f => lines.push(`  ${f.err?"ERR":"ok"} ${f.len||""} ${f.u}`));
-      lines.push(`\n=== API paths referenced ===`);
+      lines.push(`\n=== API paths ===`);
       (r.apiPaths||[]).forEach(p => lines.push("  " + p));
-      lines.push(`\n=== month/year/production method names ===`);
-      (r.methodNames||[]).forEach(m => lines.push("  " + m));
+      lines.push(`\n=== method/chart string literals ===`);
+      (r.methodLiterals||[]).forEach(m => lines.push("  " + m));
+      lines.push(`\n=== month/year/day identifiers ===`);
+      (r.periodIdentifiers||[]).forEach(m => lines.push("  " + m));
+      lines.push(`\n=== base/host clues ===`);
+      (r.baseClues||[]).forEach(m => lines.push("  " + m));
+      lines.push(`\n=== context snippets ===`);
+      (r.context||[]).forEach(m => lines.push("  " + m));
       if (r.error) lines.push("ERROR: " + r.error);
     } catch (e) { lines.push("ERROR: " + String(e)); }
     setOut(lines.join("\n"));
