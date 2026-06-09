@@ -395,7 +395,7 @@ export default async function handler(req, res) {
         // TEMPORARY — fetch the vendor's own web dashboard and its JS bundles, then extract
         // every API path / method name they reference. Reveals which month/year endpoint the
         // manufacturer's site actually calls. Remove after the correct source is found.
-        const ROOT = "https://service.midnitepower.com/";
+        const ROOT = (req.body && req.body.url) || "https://view.midnitepower.com/";
         const UA = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0 Safari/537.36" };
         const grab = async (u) => { const r = await fetch(u, { headers: UA }); return { status: r.status, text: await r.text() }; };
         const out = { root: ROOT };
