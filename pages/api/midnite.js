@@ -226,8 +226,14 @@ function normalizeDetail(raw, sn) {
 // in-memory buffer (resets on cold start / redeploy — add a KV store for durability).
 const ADMIN_USER = "flosol2";
 let _accessLog = [];
+function kvEnv() {
+  return {
+    url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+    tok: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+  };
+}
 async function kvCmd(cmd) {
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  const { url, tok } = kvEnv();
   if (!url || !tok) return null;
   try {
     const r = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify(cmd) });
@@ -268,7 +274,7 @@ export default async function handler(req, res) {
       }
       case "adminlog": {
         if ((auth.username || "").trim().toLowerCase() !== ADMIN_USER) return res.status(403).json({ error: "forbidden" });
-        return res.json({ log: await readAccessLog(), persistent: !!process.env.KV_REST_API_URL });
+        return res.json({ log: await readAccessLog(), persistent: !!kvEnv().url });
       }
       case "sites": {
         if (auth.accountType === "installer") {

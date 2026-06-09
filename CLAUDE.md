@@ -23,7 +23,7 @@
 ## Accounts
 
 - **End-user (Wise Naples)**: username `Wise Naples`, password `921551`. Logs in via Senergytec API. Sees only their own site.
-- **Installer (FLOSOL2)**: username `FLOSOL2`, password `F78qq13m!`. Logs in via Eagle API. Sees all managed sites via `terminaluserinfo`.
+- **Installer / admin (FLOSOL2)**: username `FLOSOL2`, password `F78qq13m!`. Logs in via Eagle API. Sees all managed sites via `terminaluserinfo`. **This is also the admin account** — when the logged-in username is `FLOSOL2` (case-insensitive, constant `ADMIN_USER` in the proxy / `isAdmin` in the frontend) the **Admin tab** appears. No other account sees it.
 
 ## Site Data (Wise Naples)
 
@@ -88,12 +88,20 @@ All actions accept optional `username` and `password` in the request body. Falls
 | `sites` | `terminaluserinfo` (installer) | `username`, `password` |
 | `status` | `InverterDetailInfoNewone` | `serials: string[]` |
 | `day` | `dayProductionAndConsumptionAreaTime` | `sn`, `date` (YYYY-MM-DD) |
+| `dayexcel` | `Eagle/v1//Excel/hybridStatusExcelMidNite` (GET, CSV) | `sn`, `date` (YYYY-MM-DD), `memberId` |
 | `month` | `monthProductionAndConsumptionArea` | `sn`, `date` (YYYY-MM) |
 | `year` | `yearProductionAndConsumptionArea` | `sn`, `date` (YYYY) |
+| `logview` | (none — writes access log) | `site` |
+| `adminlog` | (none — reads access log) | — (gated to `FLOSOL2`) |
 
 **Critical**: All actions must exist in the proxy switch statement. If `status` is missing, the live tab crashes with a 400 error.
 
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
+
+**Debug actions** (used by the Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`, `installertest`, `flow`, `rawstatus`, `debug`.
+
+### `dayexcel` — per-MPPT intraday (the day-chart CSV export)
+The day endpoint has **no per-MPPT** breakdown. The installer site's day-chart **Download** button hits a signed GET that returns a CSV with `MPPT1/2/3` (V/A/W), per-phase grid/load, battery, etc. at 5-min resolution. `dayexcel` calls it (sign over `{MemberID, inDate, GoodsID}`; **no token needed** — sign-authorized), parses the CSV, and returns `{ rows:[{time, mppt:[w1,w2,w3]}], activeMppts }`. Used only when **one inverter** is selected on the Day tab → production splits into stacked MPPT bands. `memberId` = `site.name` (the end-user MemberID, e.g. `Dotsikas, Konstantinos`).
 
 ### Response field names
 
@@ -161,22 +169,58 @@ Design: navy `#0D1F33` rounded-rect background → 8 amber `#F59E0B` pill rays r
 ## Frontend Data Flow
 
 ```
-aggregateDayData(all)   — all = array of per-inverter responses, keyed by r.inTime
+aggregateDayData(all)   — per-inverter responses, keyed by r.inTime; keeps per-inverter series pv{i}/loadNeg{i}
+aggregateDayMppt(...)   — single-inverter: merges dayexcel MPPT (pv0/pv1/pv2) with day load/grid/battery/soc
 aggregateMonthData(all) — keyed by r.day
 aggregateYearData(all)  — keyed by r.month (integer), mapped to Jan/Feb/etc
 ```
 
-Day view data is in **watts** (live power readings). Summary card totals use `* (5/60)` to convert to Wh.
-Month and year data is in **kWh**. Summary card totals use `* 1000` to convert to Wh for display.
+Day view data is in **watts**. Month and year data is in **kWh**.
+
+### !! CRITICAL: month/year production is RECONSTRUCTED, do NOT use the `Production` field
+The month/year endpoint's `Production` field is **unreliable** on some inverter firmwares (mode 795 / AIO):
+it comes back far too low — even **less than `ConsumedDirectly`**, which is physically impossible. Host,
+token, login, and `MemberAutoID` make **no** difference (the consumer `view.midnitepower.com` reads the same
+broken field). PV production is physically `ConsumedDirectly + powerToBattery + powerToGrid` (where PV energy
+goes), which holds on every inverter — so `rollupProduction(r)` reconstructs it. Battery charge/discharge come
+straight from `powerToBattery`/`powerFromBattery` (not a net heuristic). **Never revert month/year production to
+`r.Production`.**
+
+### Day summary totals come from the MONTH rollup (so Day == Month exactly)
+The Day chart shows the intraday power *shape*, but the Day **summary tiles** (Produced/Consumed/etc.) are read
+from `aggregateMonthData(...)`'s entry for that day (`daySummary`), not by integrating power. This guarantees the
+Day tab matches the Month tab. Integration (`* 5/60`) is only a fallback when the month rollup is unavailable.
+
+### Load is balance-derived everywhere (`balanceLoad`)
+AIO inverters serve the house through a smart/EPS port, so the AC `load` register reads 0. `balanceLoad(d) =
+PV + gridImport + batteryDischarge − charge − export` recovers the true house load on all inverter types. Used by
+SiteHero, InverterCard, InverterDetailPanel, and the Live flow diagram's Home node.
+
+### Caching
+`api()` has a session cache (`_apiCache`) for **historical, immutable** data only (`day`/`dayexcel`/`month`/`year`
+where the date is before today/this-month/this-year). Current periods are never cached; live `status` is never
+cached. Cleared on logout.
 
 ---
 
-## !! BAR CHART — DO NOT TOUCH THESE PROPS !!
+## Charts
 
-This is the #1 recurring regression in this codebase. Every time these get "cleaned up" the bars break. They are defined as named constants at the top of `index.jsx` and must not be changed:
+**Day** is a Recharts **`ComposedChart`** (NOT a bar chart anymore): per-inverter **stacked Areas** —
+production above zero (`pv{i}`, blue shades `PROD_SHADES`), consumption below zero (`loadNeg{i}`, orange
+`CONS_SHADES`) — plus Grid / Battery net **Lines** and an SOC **Line** on a right axis, a draggable `<Brush>`
+for zoom, the custom `DayTooltip` (per-inverter + totals), and the multi-toggle series legend. When exactly one
+inverter is selected it renders **stacked per-MPPT** production instead (`dayMode.type === "mppt"`); a note below
+the chart prompts this on multi-inverter sites (suppressed on single-inverter sites). The chart takes generic
+`prodSeries`/`consSeries` descriptors so the same component handles inverters or MPPTs.
+
+**Month** and **Year** are still `BarChart` (mirrored pos/neg). The bar-prop rules below apply to **them only**.
+
+### !! MONTH/YEAR BAR CHART — DO NOT TOUCH THESE PROPS !!
+
+Recurring regression: every time these get "cleaned up" the bars break. Named constants at the top of `index.jsx`:
 
 ```js
-const BAR_DAY   = { barCategoryGap: -100,  barSize: 12, barGap: -12 };
+const BAR_DAY   = { barCategoryGap: -100,  barSize: 12, barGap: -12 };  // legacy — Day is no longer a BarChart
 const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
 const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
 ```
@@ -194,7 +238,37 @@ const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
 
 ---
 
+## Live — Power Flow Diagram
+Animated SVG (`FlowDiagram`/`FlowNode`/`FlowEdge`) with Solar / Grid / Battery / Home around a center hub; moving
+dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`) show direction. Built from the **same `status` detail
+data** as the cards (NOT a second `getHybridFlowgraphRealTimeData` call) so every node matches the cards exactly:
+`grid.netW` (+import/−export), battery net (`charge−discharge`), Home = `balanceLoad`. Aggregates the **selected**
+inverters (the multi-toggle selector doubles as per-inverter toggles).
+
+## Inverter Selector — multi-toggle
+`selectedSns` (array). Each pill toggles in/out (can't deselect the last); **All** selects everything. Applies to
+Day/Month/Year/Live. `chartInverters` = inverters whose sn ∈ `selectedSns`; `allSelected` gates the aggregate
+Live panels. Effects key on `snKey` (the joined sns).
+
+## Battery Panel
+- Capacity kWh uses **nominal 51.2 V** (`capacityAh * 51.2 / 1000`), not live voltage.
+- Shows live **rate** (`±%/hr` of rated capacity) and **ETA** (`fmtHrs` → time to full / time remaining), or `Idle`.
+
+## Admin Page (FLOSOL2 only)
+- `AdminPanel` renders on the `admin` tab; tab only shown when `isAdmin` (username `FLOSOL2`). `adminlog` is also
+  server-gated (`403` otherwise).
+- **Access Log**: `logAccess()` records `{type:"login"|"view", user, site, ts}`. `login` action logs logins;
+  `logview` action (called from a `useEffect` on `site`) logs site views. `adminlog` reads it back.
+- **Persistence**: uses **Vercel KV / Upstash Redis** REST when `KV_REST_API_URL`+`KV_REST_API_TOKEN` (or the
+  `UPSTASH_REDIS_REST_URL`+`UPSTASH_REDIS_REST_TOKEN`) env vars exist; otherwise an in-memory buffer that resets on
+  cold start/redeploy. Add the store via Vercel **Storage → Marketplace → Upstash (Redis/KV)** → connect → redeploy.
+- **API Debug runner**: generic `action` + JSON-body caller + preset buttons for the debug actions.
+
 ## Known Issues / History
+- **Month/year "didn't match Day" saga**: root cause was the broken `Production` field (see CRITICAL note above),
+  not units or auth. Fixed by `rollupProduction`. The vendor's own consumer site shows the same broken field.
+- No per-MPPT **history** endpoint exists on the JSON API (18 names probed → all `405`); per-MPPT day data is only
+  available via the **CSV export** (`dayexcel`). Live per-MPPT is in `getInverterStatus` (`photovoltaic.mppts`).
 
 ---
 
