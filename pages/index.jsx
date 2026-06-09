@@ -1120,6 +1120,23 @@ function MonthDebugPanel({inverters, month}) {
     setOut(lines.join("\n"));
     setBusy(false);
   };
+  const probe = async () => {
+    setBusy(true); setOut(null);
+    const sn = inverters[0]?.sn;
+    const lines = [`Probing month/year endpoints for ${inverters[0]?.label} (${sn}), month ${month}`];
+    lines.push(`(true day-8 production for INV-1 ≈ 51 kWh — look for a candidate whose day8 Production matches)\n`);
+    try {
+      const resp = await api("probemonth", { sn, date: month });
+      for (const c of resp.probe || []) {
+        if (!c.ok) { lines.push(`✗ ${c.label}: ERR ${c.err}`); continue; }
+        if (c.count === 0) { lines.push(`• ${c.label}: ${c.note || "empty"} ${c.body || ""}`); continue; }
+        lines.push(`✓ ${c.label}: ${c.count} records | keys: ${(c.keys||[]).join(", ")}`);
+        lines.push(`    day8: ${JSON.stringify(c.day8)}`);
+      }
+    } catch (e) { lines.push("ERROR: " + String(e)); }
+    setOut(lines.join("\n"));
+    setBusy(false);
+  };
   return (
     <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
@@ -1127,7 +1144,8 @@ function MonthDebugPanel({inverters, month}) {
         <label style={{color:"#D6D3D1",fontSize:12,fontFamily:SANS}}>Day&nbsp;
           <input value={day} onChange={e=>setDay(e.target.value.padStart(2,"0"))} style={{width:44,background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"4px 6px",fontFamily:SANS}}/>
         </label>
-        <button onClick={run} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"Running…":"Run"}</button>
+        <button onClick={run} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Run day vs month"}</button>
+        <button onClick={probe} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe endpoints"}</button>
       </div>
       {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
     </div>

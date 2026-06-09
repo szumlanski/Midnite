@@ -350,6 +350,47 @@ export default async function handler(req, res) {
         body.sign = makeSign(body);
         return res.json(await midnitePost("/Senergytec/web/v2/Inverterapi/yearProductionAndConsumptionArea", body, auth.token));
       }
+      case "probemonth": {
+        // TEMPORARY endpoint-discovery probe — tries candidate month/year endpoints +
+        // param/token variants and reports what each returns, so we can find the source
+        // that yields a day-8 production near the true ~51 kWh/inverter. Remove after fix.
+        const { sn, date } = req.body || {};
+        if (!sn) return res.status(400).json({ error: "sn required" });
+        const ym = date || "2026-06";
+        const yr = ym.split("-")[0];
+        const eagle = auth.token;
+        const sen = auth.senToken || auth.token;
+        const SEN = "/Senergytec/web/v2/Inverterapi/";
+        const EAG = "/Eagle/v1/Inverterapi/";
+        const candidates = [
+          ["monthArea (current)",        SEN+"monthProductionAndConsumptionArea",     {GoodsID:sn,date:ym},        eagle],
+          ["monthAreaTime",              SEN+"monthProductionAndConsumptionAreaTime", {GoodsID:sn,date:ym},        eagle],
+          ["monthArea senToken",         SEN+"monthProductionAndConsumptionArea",     {GoodsID:sn,date:ym},        sen],
+          ["monthArea date=YYYY-MM-01",  SEN+"monthProductionAndConsumptionArea",     {GoodsID:sn,date:ym+"-01"}, eagle],
+          ["monthArea +MemberAutoID",    SEN+"monthProductionAndConsumptionArea",     {GoodsID:sn,date:ym,MemberAutoID:auth.memberAutoId}, eagle],
+          ["monthEnergy",                SEN+"monthEnergy",                            {GoodsID:sn,date:ym},        eagle],
+          ["getMonthProduction",         SEN+"getMonthProduction",                     {GoodsID:sn,date:ym},        eagle],
+          ["Eagle monthArea",            EAG+"monthProductionAndConsumptionArea",     {GoodsID:sn,date:ym},        eagle],
+          ["Eagle monthAreaTime",        EAG+"monthProductionAndConsumptionAreaTime", {GoodsID:sn,date:ym},        eagle],
+          ["yearArea (current)",         SEN+"yearProductionAndConsumptionArea",      {GoodsID:sn,date:yr},        eagle],
+          ["yearAreaTime",               SEN+"yearProductionAndConsumptionAreaTime",  {GoodsID:sn,date:yr},        eagle],
+        ];
+        const out = [];
+        for (const [label, path, body, tok] of candidates) {
+          const b = { ...body }; b.sign = makeSign(b);
+          try {
+            const r = await midnitePost(path, b, tok);
+            const data = Array.isArray(r?.Data) ? r.Data : (Array.isArray(r?.data) ? r.data : null);
+            if (data) {
+              const d8 = data.find(x => String(x.day) === "8");
+              out.push({ label, ok: true, count: data.length, keys: data[0] ? Object.keys(data[0]) : [], day8: d8 || data[0] || null });
+            } else {
+              out.push({ label, ok: true, count: 0, note: "no Data[] array", body: JSON.stringify(r).slice(0, 300) });
+            }
+          } catch (e) { out.push({ label, ok: false, err: e.message.slice(0, 160) }); }
+        }
+        return res.json({ probe: out });
+      }
       case "logsearch": {
         const {serials:ls,startDate,endDate}=req.body||{};
         if(!ls?.length) return res.status(400).json({error:"serials required"});
