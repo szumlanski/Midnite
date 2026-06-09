@@ -575,12 +575,11 @@ export default async function handler(req, res) {
         const d = date || new Date().toISOString().split("T")[0];
         const SEN = "/Senergytec/web/v2/Inverterapi/";
         const cand = [
-          "dayProductionAndConsumptionAreaTime",
-          "dayPVAreaTime","dayPvAreaTime","dayPVPowerAreaTime","dayPVPowerArea",
-          "dayMPPTAreaTime","dayMpptAreaTime","dayMPPTPowerAreaTime",
-          "dayStringAreaTime","dayPVStringAreaTime","dayPVProductionAreaTime",
-          "dayInputAreaTime","dayPVInputAreaTime","getDayMPPTData","getDayPVPower",
-          "dayPowerAreaTime","dayPVCurve","getPVDay",
+          "getInverterHistoryData","getInverterHistory","getHistoryData","historyData",
+          "dayHistoryData","getDayHistory","getDayDetailData","getDayDetail","dayDetailData",
+          "dayDetailAreaTime","getInverterDayDetail","inverterDayHistory","historyDayData",
+          "exportDayData","downloadDayData","dayDataExport","exportInverterData","getDayData",
+          "getInverterRunData","InverterRunData","getRunData","dayRunDataAreaTime","getDayRunData",
         ];
         const out = [];
         for (const m of cand) {
@@ -589,8 +588,15 @@ export default async function handler(req, res) {
             const r = await midnitePost(SEN + m, body, auth.token);
             const data = Array.isArray(r?.Data) ? r.Data : (Array.isArray(r?.data) ? r.data : null);
             if (data) out.push({ m, ok: true, count: data.length, keys: data[0] ? Object.keys(data[0]) : [], sample: data[Math.floor(data.length/2)] || data[0] });
-            else out.push({ m, ok: true, count: 0, note: JSON.stringify(r).slice(0, 120) });
+            else out.push({ m, ok: true, count: 0, note: JSON.stringify(r).slice(0, 160) });
           } catch (e) { out.push({ m, ok: false, err: e.message.slice(0, 80) }); }
+        }
+        // Also try the Eagle namespace for a couple of the likeliest export names
+        for (const [ns,m] of [["/Eagle/v1/Inverterapi/","getInverterHistoryData"],["/Eagle/v1/Inverterapi/","exportDayData"]]) {
+          const body = { GoodsID: sn, date: d }; body.sign = makeSign(body);
+          try { const r = await midnitePost(ns + m, body, auth.token); const data=Array.isArray(r?.Data)?r.Data:(Array.isArray(r?.data)?r.data:null);
+            out.push({ m:"Eagle:"+m, ok:true, count:data?data.length:0, keys:data&&data[0]?Object.keys(data[0]):[], note:data?"":JSON.stringify(r).slice(0,120) });
+          } catch(e){ out.push({ m:"Eagle:"+m, ok:false, err:e.message.slice(0,80) }); }
         }
         return res.json({ probe: out });
       }
