@@ -8,6 +8,10 @@ const thisYear = today.slice(0,4);
 
 const fmt = (w,d=1) => { if(w==null) return "--"; if(Math.abs(w)>=1000) return `${(w/1000).toFixed(d)} kW`; return `${Math.round(w)} W`; };
 const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1000000).toFixed(2)} MWh`; if(wh>=1000) return `${(wh/1000).toFixed(1)} kWh`; return `${Math.round(wh)} Wh`; };
+// House load derived from the energy balance: PV + grid-import + battery-discharge − charge − export.
+// Robust across inverter types — AIO units serve load through a smart/EPS port, so the AC load
+// register reads 0 and the real consumption only shows up in this balance.
+const balanceLoad = (d) => d ? Math.max(0, (d.photovoltaic?.power?.totalDc||0) + (d.grid?.netW||0) + (d.battery?.discharge||0) - (d.battery?.charge||0)) : null;
 
 async function api(action, body=null) {
   const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
@@ -292,7 +296,7 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
 function SiteHero({statuses}) {
   const v = statuses.filter(s=>s?.ok&&s?.data);
   const totalPv = v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
-  const totalLoad = v.reduce((s,i)=>s+i.data.load.lines.reduce((a,l)=>a+(l.power||0),0),0);
+  const totalLoad = v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
   const totalGrid = v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
   const totalBat = v.reduce((s,i)=>s+(i.data.battery?.charge||0)-(i.data.battery?.discharge||0),0);
   const avgSoc = v.length ? v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length : null;
@@ -500,7 +504,7 @@ function FaultPanel({site}) {
 function InverterCard({inv, status}) {
   const d = status?.data;
   const pv = d?.photovoltaic?.power?.totalDc ?? null;
-  const load = d ? d.load.lines.reduce((s,l)=>s+(l.power||0),0) : null;
+  const load = balanceLoad(d);
   const gridNet = d?.grid?.netW ?? null;
   const soc = d?.battery?.soc ?? null;
   const batChg = d?.battery?.charge ?? null;
@@ -658,7 +662,7 @@ function InverterDetailPanel({inv, status}) {
   const isImporting  = gridNetW > 50;
   const gridFreq     = gridLines.find(l=>l.frequency>0)?.frequency || 0;
   const loadLines    = d.load?.lines || [];
-  const loadW        = loadLines.reduce((s,l)=>s+(l.power||0),0);
+  const loadW        = balanceLoad(d) || 0;
   const loadFreq     = loadLines.find(l=>l.frequency>0)?.frequency || 0;
   const smartPorts   = d.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&((p.lines||[]).some(l=>l.power>0)||(p.power?.total||0)>0)) : [];
   const hasGen       = d.gen && (d.gen.lines||[]).some(l=>(l.power||0)>0);
@@ -1469,13 +1473,15 @@ export default function Dashboard() {
   const visibleStatuses = statuses.filter(s=>selectedSns.includes(s.sn));
 
   const selFlow = flowData.filter(f=>f&&f.ok&&selectedSns.includes(f.sn));
-  const flowAgg = selFlow.length ? {
-    pv: selFlow.reduce((s,f)=>s+(f.pv||0),0),
-    grid: selFlow.reduce((s,f)=>s+(f.grid||0),0),
-    load: selFlow.reduce((s,f)=>s+(f.load||0),0),
-    battery: selFlow.reduce((s,f)=>s+(f.battery||0),0),
-    soc: (()=>{ const w=selFlow.filter(f=>f.soc>0); return w.length? w.reduce((s,f)=>s+f.soc,0)/w.length : null; })(),
-  } : null;
+  const flowAgg = selFlow.length ? (()=>{
+    const pv = selFlow.reduce((s,f)=>s+(f.pv||0),0);
+    const grid = selFlow.reduce((s,f)=>s+(f.grid||0),0);     // + import, − export
+    const battery = selFlow.reduce((s,f)=>s+(f.battery||0),0); // + charge, − discharge
+    const w = selFlow.filter(f=>f.soc>0);
+    // Home load from the balance — AIO inverters serve load off a smart/EPS port so loadCurrpac=0.
+    const load = Math.max(0, pv + grid - battery);
+    return { pv, grid, battery, load, soc: w.length? w.reduce((s,f)=>s+f.soc,0)/w.length : null };
+  })() : null;
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="login") return <LoginForm onLogin={handleLogin} error={loginError} loading={loginLoading}/>;
