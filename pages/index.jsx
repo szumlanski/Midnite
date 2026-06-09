@@ -128,6 +128,9 @@ const PageHead = () => (
       input[type=date]::-webkit-calendar-picker-indicator,input[type=month]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:0.5}
       @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
       @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+      @keyframes flowdash{to{stroke-dashoffset:-16}}
+      .flow-anim{animation:flowdash 0.8s linear infinite}
+      .flow-rev{animation:flowdash 0.8s linear infinite reverse}
       .tab-btn{transition:all 0.15s ease}
       .site-card{transition:box-shadow 0.2s,transform 0.2s}
       .site-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.1)!important}
@@ -849,6 +852,46 @@ function InverterDetailPanel({inv, status}) {
   );
 }
 
+function FlowEdge({from, to, active, reverse, color}) {
+  return <line x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+    stroke={active?color:"#E5E2DD"} strokeWidth={active?2.5:2}
+    strokeDasharray="2 6" strokeLinecap="round"
+    className={active?(reverse?"flow-rev":"flow-anim"):""}/>;
+}
+function FlowNode({x, y, color, icon, label, value, sub}) {
+  return (
+    <g>
+      <text x={x} y={y-32} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
+      <circle cx={x} cy={y} r={23} fill={color}/>
+      <text x={x} y={y+6} textAnchor="middle" fontSize="18">{icon}</text>
+      <text x={x} y={y+43} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
+      {sub&&<text x={x} y={y+57} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
+    </g>
+  );
+}
+function FlowDiagram({flow}) {
+  if(!flow) return null;
+  const P = {solar:{x:74,y:72}, grid:{x:326,y:72}, batt:{x:74,y:248}, home:{x:326,y:248}, hub:{x:200,y:160}};
+  const A = 20; const green = "#16A34A";
+  return (
+    <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
+      <div style={{fontSize:11,fontWeight:700,color:FAINT,padding:"4px 8px 0",letterSpacing:"0.06em"}}>POWER FLOW</div>
+      <svg viewBox="0 0 400 320" style={{width:"100%",height:"auto",display:"block"}}>
+        <FlowEdge from={P.solar} to={P.hub} active={flow.pv>A} reverse={false} color={green}/>
+        <FlowEdge from={P.grid} to={P.hub} active={Math.abs(flow.grid)>A} reverse={flow.grid<0} color={green}/>
+        <FlowEdge from={P.batt} to={P.hub} active={Math.abs(flow.battery)>A} reverse={flow.battery>0} color={green}/>
+        <FlowEdge from={P.hub} to={P.home} active={flow.load>A} reverse={false} color={green}/>
+        <circle cx={P.hub.x} cy={P.hub.y} r={15} fill="#0D1F33"/>
+        <text x={P.hub.x} y={P.hub.y+5} textAnchor="middle" fontSize="14">⚡</text>
+        <FlowNode {...P.solar} color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
+        <FlowNode {...P.grid} color={flow.grid<0?GRID_OUT:GRID_IN} icon="🏛️" label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
+        <FlowNode {...P.batt} color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:(flow.battery>0?"charging":flow.battery<0?"discharging":null)}/>
+        <FlowNode {...P.home} color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
+      </svg>
+    </div>
+  );
+}
+
 function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, inverters}) {
   const pill = (active, onClick, key, label, sub, power) => (
     <button key={key} onClick={onClick} style={{
@@ -1301,6 +1344,7 @@ export default function Dashboard() {
 
   const [tab, setTab] = useState("live");
   const [statuses, setStatuses] = useState([]);
+  const [flowData, setFlowData] = useState([]);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -1376,12 +1420,13 @@ export default function Dashboard() {
   const fetchLive = useCallback(async () => {
     if(!site) return;
     try {
-      const {results} = await api("status", {
-        serials: site.inverters.map(i=>i.sn),
-        autoIds: site.inverters.map(i=>i.autoId),
-        memberAutoId: site.memberAutoId,
-      });
-      setStatuses(results.map((r,idx)=>({...r,label:site.inverters[idx]?.label})));
+      const serials = site.inverters.map(i=>i.sn);
+      const [statusResp, flowResp] = await Promise.all([
+        api("status", { serials, autoIds: site.inverters.map(i=>i.autoId), memberAutoId: site.memberAutoId }),
+        api("flow", { serials }).catch(()=>({results:[]})),
+      ]);
+      setStatuses(statusResp.results.map((r,idx)=>({...r,label:site.inverters[idx]?.label})));
+      setFlowData(flowResp.results||[]);
       setLastUpdate(new Date()); setLiveError(null);
     } catch(e) { setLiveError(e.message); }
     finally { setLiveLoading(false); }
@@ -1422,6 +1467,15 @@ export default function Dashboard() {
   useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,snKey,site]);
 
   const visibleStatuses = statuses.filter(s=>selectedSns.includes(s.sn));
+
+  const selFlow = flowData.filter(f=>f&&f.ok&&selectedSns.includes(f.sn));
+  const flowAgg = selFlow.length ? {
+    pv: selFlow.reduce((s,f)=>s+(f.pv||0),0),
+    grid: selFlow.reduce((s,f)=>s+(f.grid||0),0),
+    load: selFlow.reduce((s,f)=>s+(f.load||0),0),
+    battery: selFlow.reduce((s,f)=>s+(f.battery||0),0),
+    soc: (()=>{ const w=selFlow.filter(f=>f.soc>0); return w.length? w.reduce((s,f)=>s+f.soc,0)/w.length : null; })(),
+  } : null;
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="login") return <LoginForm onLogin={handleLogin} error={loginError} loading={loginLoading}/>;
@@ -1470,6 +1524,7 @@ export default function Dashboard() {
               {liveLoading
                 ? <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting to Midnite portal…</div>
                 : <>
+                  {flowAgg&&<FlowDiagram flow={flowAgg}/>}
                   {allSelected&&<SiteHero statuses={statuses}/>}
                   {allSelected&&<BatteryPanel statuses={statuses}/>}
                   {allSelected&&<LifetimePanel statuses={statuses}/>}

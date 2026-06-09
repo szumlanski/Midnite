@@ -347,6 +347,30 @@ export default async function handler(req, res) {
         }));
         return res.json({results});
       }
+      case "flow": {
+        // Real-time power-flow snapshot per inverter — the endpoint the consumer site uses for
+        // its animated flow graphic. Returns PV / grid / battery / load instantaneous power.
+        const { serials } = req.body || {};
+        if(!serials?.length) return res.status(400).json({error:"serials required"});
+        const results = await Promise.all(serials.map(async sn=>{
+          const body = { GoodsID: sn }; body.sign = makeSign(body);
+          try {
+            const r = await midnitePost("/Eagle/v1/Inverterapi/getHybridFlowgraphRealTimeData", body, auth.token);
+            return {
+              sn, ok: true, online: r?.online ?? false,
+              pv: parseFloat(r?.TotalDCpower || 0),
+              grid: parseFloat(r?.gridCurrpac || 0),   // + import, − export
+              load: parseFloat(r?.loadCurrpac || 0),
+              eps: parseFloat(r?.epsCurrpac || 0),
+              gen: parseFloat(r?.genCurrpac || 0),
+              battery: parseFloat(r?.Pbat || 0),         // + charge, − discharge
+              soc: parseFloat(r?.SOC || 0),
+              time: r?.SystemTime || "",
+            };
+          } catch(e){ return { sn, ok:false, error:e.message }; }
+        }));
+        return res.json({ results });
+      }
       case "day": {
         const { sn, date } = req.body || {};
         if (!sn || !date) return res.status(400).json({ error: "sn and date required" });
