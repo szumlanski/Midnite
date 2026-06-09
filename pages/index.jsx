@@ -874,17 +874,19 @@ function ChartCard({children, loading, minHeight=300}) {
   );
 }
 
-function DayChart({date, onDateChange, data, loading}) {
+function DayChart({date, onDateChange, data, loading, summary}) {
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
   const [showBattery, setShowBattery] = useState(true);
-  const produced = data.reduce((s,d)=>s+((d.pv||0)*(5/60)),0);
-  const consumed = data.reduce((s,d)=>s+((d.load||0)*(5/60)),0);
-  const imported = data.reduce((s,d)=>s+((d.gridImport||0)*(5/60)),0);
-  const exported = data.reduce((s,d)=>s+((d.gridExport||0)*(5/60)),0);
-  const charged = data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
-  const discharged = data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
+  // Summary totals come from the month rollup for this day (energy registers) so the Day tab
+  // matches the Month tab exactly. Fall back to integrating the intraday power if unavailable.
+  const produced   = summary ? summary.produced   : data.reduce((s,d)=>s+((d.pv||0)*(5/60)),0);
+  const consumed   = summary ? summary.consumed   : data.reduce((s,d)=>s+((d.load||0)*(5/60)),0);
+  const imported   = summary ? summary.imported   : data.reduce((s,d)=>s+((d.gridImport||0)*(5/60)),0);
+  const exported   = summary ? summary.exported   : data.reduce((s,d)=>s+((d.gridExport||0)*(5/60)),0);
+  const charged    = summary ? summary.charged    : data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
+  const discharged = summary ? summary.discharged : data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
   const chartData = data.map(d=>({
     ...d,
     pvPos: d.pv||0,
@@ -1269,6 +1271,7 @@ export default function Dashboard() {
 
   const [dayDate, setDayDate] = useState(today);
   const [dayData, setDayData] = useState([]);
+  const [daySummary, setDaySummary] = useState(null);
   const [dayLoading, setDayLoading] = useState(false);
   const [monthDate, setMonthDate] = useState(thisMonth);
   const [monthData, setMonthData] = useState([]);
@@ -1351,7 +1354,27 @@ export default function Dashboard() {
 
   const chartInverters = site ? (selectedInv==="all" ? site.inverters : site.inverters.filter(i=>i.sn===selectedInv)) : [];
 
-  useEffect(() => { if(tab!=="day"||!site) return; setDayLoading(true); Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))).then(all=>{setDayData(aggregateDayData(all));setDayLoading(false);}); }, [tab,dayDate,selectedInv,site]);
+  useEffect(() => {
+    if(tab!=="day"||!site) return;
+    setDayLoading(true); setDaySummary(null);
+    const dayNum = Number(dayDate.slice(8,10));
+    const monthStr = dayDate.slice(0,7);
+    // Fetch the intraday power curve (for the chart shape) AND the month rollup (for the summary
+    // totals). The summary uses the month register value for this day so Day matches Month exactly.
+    Promise.all([
+      Promise.all(chartInverters.map(inv=>api("day",{sn:inv.sn,date:dayDate}).catch(()=>null))),
+      Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthStr}).catch(()=>null))),
+    ]).then(([dayAll, monthAll])=>{
+      setDayData(aggregateDayData(dayAll));
+      const md = aggregateMonthData(monthAll).find(r=>Number(r.day)===dayNum);
+      setDaySummary(md ? {
+        produced: md.production*1000, consumed: md.consumption*1000,
+        imported: md.fromGrid*1000, exported: md.toGrid*1000,
+        charged: md.batCharge*1000, discharged: md.batDischarge*1000,
+      } : null);
+      setDayLoading(false);
+    });
+  }, [tab,dayDate,selectedInv,site]);
   useEffect(() => { if(tab!=="month"||!site) return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); }, [tab,monthDate,selectedInv,site]);
   useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,selectedInv,site]);
 
@@ -1425,7 +1448,7 @@ export default function Dashboard() {
               }
             </>
           )}
-          {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading}/>}
+          {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary}/>}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
           {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate} site={site}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
