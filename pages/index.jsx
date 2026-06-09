@@ -1402,7 +1402,7 @@ export default function Dashboard() {
     setLoginLoading(true); setLoginError(null);
     try {
       localStorage.setItem("midnite_creds", JSON.stringify({username, password}));
-      setIsAdmin((username||"").trim().toLowerCase()==="flsolardesign");
+      setIsAdmin((username||"").trim().toLowerCase()==="flosol2");
       await api("login");
       const sitesData = await api("sites");
       handleSitesResponse(sitesData);
@@ -1430,7 +1430,7 @@ export default function Dashboard() {
   useEffect(() => {
     const creds = JSON.parse(localStorage.getItem("midnite_creds") || "null");
     if(!creds) { setAuthState("login"); return; }
-    setIsAdmin((creds.username||"").trim().toLowerCase()==="flsolardesign");
+    setIsAdmin((creds.username||"").trim().toLowerCase()==="flosol2");
     api("sites").then(data=>handleSitesResponse(data)).catch(()=>{ localStorage.removeItem("midnite_creds"); setAuthState("login"); });
   }, []);
 

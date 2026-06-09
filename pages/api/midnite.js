@@ -224,7 +224,7 @@ function normalizeDetail(raw, sn) {
 // ---- Access log (admin) ----------------------------------------------------
 // Persists to Vercel KV when KV_REST_API_URL/TOKEN are set; otherwise keeps a recent
 // in-memory buffer (resets on cold start / redeploy — add a KV store for durability).
-const ADMIN_USER = "flsolardesign";
+const ADMIN_USER = "flosol2";
 let _accessLog = [];
 async function kvCmd(cmd) {
   const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
