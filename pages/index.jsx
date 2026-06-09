@@ -24,13 +24,13 @@ function aggregateDayData(all) {
 }
 function aggregateMonthData(all) {
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; map[k].toGrid+=r.powerToGrid||0; } }
+  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=parseFloat(r.Production||0); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); } }
   return Object.values(map).sort((a,b)=>a.day-b.day).map(r=>{const batNet=r.production-r.consumption-r.toGrid+r.fromGrid; return {...r,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
 }
 function aggregateYearData(all) {
   const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=r.Production||0; map[k].consumption+=r.Consumption||0; map[k].fromGrid+=r.powerFromGrid||0; map[k].toGrid+=r.powerToGrid||0; } }
+  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,production:0,consumption:0,fromGrid:0,toGrid:0}; map[k].production+=parseFloat(r.Production||0); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); } }
   return Object.values(map).sort((a,b)=>a.month-b.month).map(r=>{const batNet=r.production-r.consumption-r.toGrid+r.fromGrid; return {...r,batCharge:Math.max(0,batNet),batDischarge:Math.max(0,-batNet)};});
 }
 
