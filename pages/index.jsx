@@ -1348,7 +1348,6 @@ export default function Dashboard() {
 
   const [tab, setTab] = useState("live");
   const [statuses, setStatuses] = useState([]);
-  const [flowData, setFlowData] = useState([]);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -1424,13 +1423,12 @@ export default function Dashboard() {
   const fetchLive = useCallback(async () => {
     if(!site) return;
     try {
-      const serials = site.inverters.map(i=>i.sn);
-      const [statusResp, flowResp] = await Promise.all([
-        api("status", { serials, autoIds: site.inverters.map(i=>i.autoId), memberAutoId: site.memberAutoId }),
-        api("flow", { serials }).catch(()=>({results:[]})),
-      ]);
-      setStatuses(statusResp.results.map((r,idx)=>({...r,label:site.inverters[idx]?.label})));
-      setFlowData(flowResp.results||[]);
+      const {results} = await api("status", {
+        serials: site.inverters.map(i=>i.sn),
+        autoIds: site.inverters.map(i=>i.autoId),
+        memberAutoId: site.memberAutoId,
+      });
+      setStatuses(results.map((r,idx)=>({...r,label:site.inverters[idx]?.label})));
       setLastUpdate(new Date()); setLiveError(null);
     } catch(e) { setLiveError(e.message); }
     finally { setLiveLoading(false); }
@@ -1472,15 +1470,17 @@ export default function Dashboard() {
 
   const visibleStatuses = statuses.filter(s=>selectedSns.includes(s.sn));
 
-  const selFlow = flowData.filter(f=>f&&f.ok&&selectedSns.includes(f.sn));
-  const flowAgg = selFlow.length ? (()=>{
-    const pv = selFlow.reduce((s,f)=>s+(f.pv||0),0);
-    const grid = selFlow.reduce((s,f)=>s+(f.grid||0),0);     // + import, − export
-    const battery = selFlow.reduce((s,f)=>s+(f.battery||0),0); // + charge, − discharge
-    const w = selFlow.filter(f=>f.soc>0);
-    // Home load from the balance — AIO inverters serve load off a smart/EPS port so loadCurrpac=0.
-    const load = Math.max(0, pv + grid - battery);
-    return { pv, grid, battery, load, soc: w.length? w.reduce((s,f)=>s+f.soc,0)/w.length : null };
+  // Flow diagram is built from the SAME detail data as the cards/site card, so every node matches
+  // exactly (no second endpoint sampled a moment apart). grid.netW is +import/−export; battery is
+  // net (+charge/−discharge); Home comes from the balance to handle smart/EPS-port AIO inverters.
+  const selStatus = statuses.filter(s=>s&&s.ok&&s.data&&selectedSns.includes(s.sn));
+  const flowAgg = selStatus.length ? (()=>{
+    const pv = selStatus.reduce((s,x)=>s+(x.data.photovoltaic?.power?.totalDc||0),0);
+    const grid = selStatus.reduce((s,x)=>s+(x.data.grid?.netW||0),0);
+    const battery = selStatus.reduce((s,x)=>s+((x.data.battery?.charge||0)-(x.data.battery?.discharge||0)),0);
+    const load = selStatus.reduce((s,x)=>s+(balanceLoad(x.data)||0),0);
+    const w = selStatus.filter(x=>(x.data.battery?.soc||0)>0);
+    return { pv, grid, battery, load, soc: w.length? w.reduce((s,x)=>s+x.data.battery.soc,0)/w.length : null };
   })() : null;
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
