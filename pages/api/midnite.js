@@ -15,6 +15,24 @@ function makeSign(params) {
   return CryptoJS.AES.encrypt(plaintext,key,{iv,mode:CryptoJS.mode.CBC,padding:CryptoJS.pad.Pkcs7}).toString();
 }
 
+// Generic poster to an absolute URL (used to talk to the consumer "view" host as
+// well as the installer "service" host). origin/referer must match the target site.
+async function hostPost(fullUrl, body, token, origin, referer) {
+  const headers = {
+    "Content-Type": "application/json;charset=UTF-8",
+    "Accept": "application/json",
+    "Origin": origin,
+    "Referer": referer || (origin + "/"),
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "Cookie": "timezone=America%2FNew_York",
+  };
+  if (token) headers["authorization"] = token;
+  const res = await fetch(fullUrl, { method: "POST", headers, body: JSON.stringify(body) });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${res.status}: ${text.slice(0, 200)}`);
+  try { return JSON.parse(text); } catch { return { raw: text.slice(0, 200) }; }
+}
+
 async function midnitePost(path, body, token = null) {
   const headers = {
     "Content-Type": "application/json;charset=UTF-8",
@@ -472,6 +490,32 @@ export default async function handler(req, res) {
           out.baseClues = [...baseSet].sort().slice(0, 40);
           out.context = ctx;
         } catch (e) { out.error = e.message; }
+        return res.json(out);
+      }
+      case "viewtest": {
+        // TEMPORARY — prove the consumer "view" host returns correct month data by logging
+        // into BOTH hosts as the same end-user and pulling month for the SAME inverter.
+        const sn = (req.body && req.body.sn) || "2426-90190114PH"; // Wise Naples INV-1
+        const date = (req.body && req.body.date) || "2026-06";
+        const u = process.env.MIDNITE_USERNAME || "Wise Naples";
+        const p = process.env.MIDNITE_PASSWORD || "921551";
+        const VIEW = "https://view.midnitepower.com/dist/server/api/CodeIgniter/index.php";
+        const SVC = BASE;
+        const out = { sn, date, account: u };
+        const doHost = async (label, base, origin, referer) => {
+          const lb = { MemberID: u, Password: p, type: "1" }; lb.sign = makeSign(lb);
+          const lr = await hostPost(base + "/Senergytec/web/v2/Inverterapi/UserLogin", { ...lb, remember: false }, null, origin, referer);
+          const tok = lr.token;
+          out[label + "Login"] = { status: lr.status, tokenPresent: !!tok, memberAutoId: lr.MemberAutoID };
+          if (!tok) return;
+          const mb = { GoodsID: sn, date }; mb.sign = makeSign(mb);
+          const mr = await hostPost(base + "/Senergytec/web/v2/Inverterapi/monthProductionAndConsumptionArea", mb, tok, origin, referer);
+          out[label + "Month"] = (mr.Data || []).slice(0, 9).map(d => ({ day: d.day, Production: d.Production, Consumption: d.Consumption, toGrid: d.powerToGrid, fromGrid: d.powerFromGrid, ConsumedDirectly: d.ConsumedDirectly }));
+        };
+        try { await doHost("service", SVC, "https://service.midnitepower.com", "https://service.midnitepower.com/"); }
+        catch (e) { out.serviceErr = e.message; }
+        try { await doHost("view", VIEW, "https://view.midnitepower.com", "https://view.midnitepower.com/dist/"); }
+        catch (e) { out.viewErr = e.message; }
         return res.json(out);
       }
       case "logsearch": {

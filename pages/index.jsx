@@ -1161,6 +1161,25 @@ function MonthDebugPanel({inverters, month}) {
     setOut(lines.join("\n"));
     setBusy(false);
   };
+  const viewtest = async () => {
+    setBusy(true); setOut(null);
+    const lines = ["Same inverter (Wise Naples 2426-90190114PH), month — service vs view host:\n"];
+    try {
+      const r = await api("viewtest", {});
+      lines.push(`service login: ${JSON.stringify(r.serviceLogin)} ${r.serviceErr?("ERR "+r.serviceErr):""}`);
+      lines.push(`view login:    ${JSON.stringify(r.viewLogin)} ${r.viewErr?("ERR "+r.viewErr):""}`);
+      lines.push(`\nday | SERVICE (Prod/Cons/toGrid) | VIEW (Prod/Cons/toGrid)`);
+      const sm = r.serviceMonth||[], vm = r.viewMonth||[];
+      for (let i=0;i<Math.max(sm.length,vm.length);i++){
+        const s=sm[i], v=vm[i];
+        const sd = s?`${s.Production}/${s.Consumption}/${s.toGrid}`:"—";
+        const vd = v?`${v.Production}/${v.Consumption}/${v.toGrid}`:"—";
+        lines.push(`  ${(s?.day||v?.day||i+1).toString().padStart(2)} | ${sd.padEnd(16)} | ${vd}`);
+      }
+    } catch (e) { lines.push("ERROR: " + String(e)); }
+    setOut(lines.join("\n"));
+    setBusy(false);
+  };
   return (
     <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
@@ -1171,6 +1190,7 @@ function MonthDebugPanel({inverters, month}) {
         <button onClick={run} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Run day vs month"}</button>
         <button onClick={probe} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe endpoints"}</button>
         <button onClick={vendor} disabled={busy} style={{background:"#16A34A",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Read vendor JS"}</button>
+        <button onClick={viewtest} disabled={busy} style={{background:"#DC2626",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Service vs View"}</button>
       </div>
       {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
     </div>
