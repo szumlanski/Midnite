@@ -1289,6 +1289,23 @@ function MonthDebugPanel({inverters, month, site}) {
     setOut(lines.join("\n"));
     setBusy(false);
   };
+  const probeMppt = async () => {
+    setBusy(true); setOut(null);
+    const sn = inverters[0]?.sn;
+    const date = `${month}-08`;
+    const lines = [`Probing per-MPPT day endpoints — ${inverters[0]?.label} (${sn}) ${date}\n`];
+    try {
+      const r = await api("probemppt", { sn, date });
+      for (const c of r.probe || []) {
+        if (!c.ok) { lines.push(`✗ ${c.m}: ${c.err}`); continue; }
+        if (!c.count) { lines.push(`• ${c.m}: empty ${c.note||""}`); continue; }
+        lines.push(`✓ ${c.m}: ${c.count} recs | keys: ${(c.keys||[]).join(", ")}`);
+        lines.push(`    sample: ${JSON.stringify(c.sample)}`);
+      }
+    } catch (e) { lines.push("ERROR: " + String(e)); }
+    setOut(lines.join("\n"));
+    setBusy(false);
+  };
   return (
     <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
@@ -1301,6 +1318,7 @@ function MonthDebugPanel({inverters, month, site}) {
         <button onClick={vendor} disabled={busy} style={{background:"#16A34A",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Read vendor JS"}</button>
         <button onClick={viewtest} disabled={busy} style={{background:"#DC2626",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Service vs View"}</button>
         <button onClick={installertest} disabled={busy} style={{background:"#7C3AED",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Installer test"}</button>
+        <button onClick={probeMppt} disabled={busy} style={{background:"#0891B2",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe MPPT"}</button>
       </div>
       {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
     </div>

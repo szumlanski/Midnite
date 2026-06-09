@@ -568,6 +568,32 @@ export default async function handler(req, res) {
         }
         return res.json(out);
       }
+      case "probemppt": {
+        // TEMPORARY — hunt for a per-MPPT/PV-string intraday history endpoint for the day chart.
+        const { sn, date } = req.body || {};
+        if (!sn) return res.status(400).json({ error: "sn required" });
+        const d = date || new Date().toISOString().split("T")[0];
+        const SEN = "/Senergytec/web/v2/Inverterapi/";
+        const cand = [
+          "dayProductionAndConsumptionAreaTime",
+          "dayPVAreaTime","dayPvAreaTime","dayPVPowerAreaTime","dayPVPowerArea",
+          "dayMPPTAreaTime","dayMpptAreaTime","dayMPPTPowerAreaTime",
+          "dayStringAreaTime","dayPVStringAreaTime","dayPVProductionAreaTime",
+          "dayInputAreaTime","dayPVInputAreaTime","getDayMPPTData","getDayPVPower",
+          "dayPowerAreaTime","dayPVCurve","getPVDay",
+        ];
+        const out = [];
+        for (const m of cand) {
+          const body = { GoodsID: sn, date: d }; body.sign = makeSign(body);
+          try {
+            const r = await midnitePost(SEN + m, body, auth.token);
+            const data = Array.isArray(r?.Data) ? r.Data : (Array.isArray(r?.data) ? r.data : null);
+            if (data) out.push({ m, ok: true, count: data.length, keys: data[0] ? Object.keys(data[0]) : [], sample: data[Math.floor(data.length/2)] || data[0] });
+            else out.push({ m, ok: true, count: 0, note: JSON.stringify(r).slice(0, 120) });
+          } catch (e) { out.push({ m, ok: false, err: e.message.slice(0, 80) }); }
+        }
+        return res.json({ probe: out });
+      }
       case "logsearch": {
         const {serials:ls,startDate,endDate}=req.body||{};
         if(!ls?.length) return res.status(400).json({error:"serials required"});
