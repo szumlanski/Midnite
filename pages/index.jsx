@@ -12,6 +12,7 @@ const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1
 // Robust across inverter types — AIO units serve load through a smart/EPS port, so the AC load
 // register reads 0 and the real consumption only shows up in this balance.
 const balanceLoad = (d) => d ? Math.max(0, (d.photovoltaic?.power?.totalDc||0) + (d.grid?.netW||0) + (d.battery?.discharge||0) - (d.battery?.charge||0)) : null;
+const fmtHrs = (h) => { if(!isFinite(h)||h<=0) return "--"; if(h>=48) return `${(h/24).toFixed(1)} days`; const H=Math.floor(h), M=Math.round((h-H)*60); return M? `${H}h ${M}m` : `${H}h`; };
 
 async function api(action, body=null) {
   const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
@@ -355,10 +356,25 @@ function BatteryPanel({statuses}) {
   const avgHealth  = valid.reduce((s,i) => s + (i.data.battery.healthPercent  || 0), 0) / n;
   const avgTemp    = valid.reduce((s,i) => s + (i.data.battery.temperature    || 0), 0) / n;
 
-  // Capacity: use first inverter (each reports its own bank; topology varies per site)
+  // Capacity: use first inverter (each reports its own bank; topology varies per site).
+  // kWh is based on NOMINAL pack voltage (51.2 V), not the live voltage, so the rated capacity
+  // is stable instead of drifting with state of charge.
   const firstBat = valid[0].data.battery;
   const capacityAh = firstBat.capacityAh;
-  const capacityKwh = capacityAh > 0 ? ((capacityAh * avgVoltage) / 1000).toFixed(1) : null;
+  const NOMINAL_V = 51.2;
+  const capacityKwhNum = capacityAh > 0 ? (capacityAh * NOMINAL_V) / 1000 : null;
+  const capacityKwh = capacityKwhNum != null ? capacityKwhNum.toFixed(1) : null;
+
+  // Live charge/discharge rate (% of rated capacity per hour) and time to full / time remaining.
+  const netW = totalCharge - totalDischarge; // + = charging
+  const energyNowKwh = capacityKwhNum != null ? capacityKwhNum * (avgSoc/100) : null;
+  let rate = null;
+  if (capacityKwhNum && Math.abs(netW) > 20) {
+    const pctHr = (Math.abs(netW)/1000) / capacityKwhNum * 100;
+    rate = netW > 0
+      ? { sign:"+", pct:pctHr, hrs:(capacityKwhNum - energyNowKwh)/(netW/1000), label:"to full", color:BATTERY }
+      : { sign:"−", pct:pctHr, hrs:energyNowKwh/(Math.abs(netW)/1000), label:"remaining", color:SOLAR };
+  }
 
   // Open loop = no BMS brand on any inverter
   const closedLoop = valid.some(s => !!s.data.battery.brand);
@@ -397,6 +413,9 @@ function BatteryPanel({statuses}) {
         <div style={{height:10,background:"#F1F5F9",borderRadius:5,overflow:"hidden"}}>
           <div style={{width:`${avgSoc}%`,height:"100%",background:`linear-gradient(90deg,${socColor},${socColor}CC)`,borderRadius:5,transition:"width 0.5s ease"}}/>
         </div>
+        {rate
+          ? <div style={{marginTop:8,fontSize:12,fontWeight:600,color:rate.color}}>{rate.sign}{rate.pct.toFixed(1)}%/hr · {fmtHrs(rate.hrs)} {rate.label}</div>
+          : capacityKwhNum && <div style={{marginTop:8,fontSize:12,fontWeight:500,color:FAINT}}>Idle</div>}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8}}>
