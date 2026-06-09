@@ -391,6 +391,42 @@ export default async function handler(req, res) {
         }
         return res.json({ probe: out });
       }
+      case "vendorsrc": {
+        // TEMPORARY — fetch the vendor's own web dashboard and its JS bundles, then extract
+        // every API path / method name they reference. Reveals which month/year endpoint the
+        // manufacturer's site actually calls. Remove after the correct source is found.
+        const ROOT = "https://service.midnitepower.com/";
+        const UA = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0 Safari/537.36" };
+        const grab = async (u) => { const r = await fetch(u, { headers: UA }); return { status: r.status, text: await r.text() }; };
+        const out = { root: ROOT };
+        try {
+          const home = await grab(ROOT);
+          out.rootStatus = home.status; out.rootLen = home.text.length;
+          // all <script src> and module preloads
+          const srcs = [...home.text.matchAll(/(?:src|href)=["']([^"']+\.js[^"']*)["']/gi)].map(m => m[1]);
+          out.scripts = [...new Set(srcs)];
+          const abs = (s) => s.startsWith("http") ? s : ROOT.replace(/\/$/, "") + (s.startsWith("/") ? s : "/" + s);
+          const targets = out.scripts.slice(0, 20).map(abs);
+          const pathSet = new Set(), methodSet = new Set();
+          const pathPat = /\/(?:Senergytec|Eagle)\/[A-Za-z0-9_./]+/g;
+          const methPat = /[A-Za-z]*(?:Production|Consumption|Energy)[A-Za-z]*/g;
+          const periodPat = /\b(?:month|year|day|week)[A-Za-z]{3,}/g;
+          const results = await Promise.all(targets.map(async (u) => {
+            try { const r = await grab(u); return { u, len: r.text.length, js: r.text }; }
+            catch (e) { return { u, err: e.message }; }
+          }));
+          out.fetched = results.map(r => ({ u: r.u, len: r.len, err: r.err }));
+          for (const r of results) {
+            if (!r.js) continue;
+            for (const m of r.js.matchAll(pathPat)) pathSet.add(m[0]);
+            for (const m of r.js.matchAll(methPat)) if (m[0].length > 8) methodSet.add(m[0]);
+            for (const m of r.js.matchAll(periodPat)) methodSet.add(m[0]);
+          }
+          out.apiPaths = [...pathSet].sort();
+          out.methodNames = [...methodSet].sort();
+        } catch (e) { out.error = e.message; }
+        return res.json(out);
+      }
       case "logsearch": {
         const {serials:ls,startDate,endDate}=req.body||{};
         if(!ls?.length) return res.status(400).json({error:"serials required"});

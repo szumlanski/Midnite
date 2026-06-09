@@ -1137,6 +1137,23 @@ function MonthDebugPanel({inverters, month}) {
     setOut(lines.join("\n"));
     setBusy(false);
   };
+  const vendor = async () => {
+    setBusy(true); setOut(null);
+    const lines = ["Reading vendor dashboard JS for API endpoint names…\n"];
+    try {
+      const r = await api("vendorsrc", {});
+      lines.push(`root: ${r.rootStatus} (${r.rootLen} bytes)`);
+      lines.push(`scripts found: ${(r.scripts||[]).length}`);
+      (r.fetched||[]).forEach(f => lines.push(`  ${f.err?"ERR":"ok"} ${f.len||""} ${f.u}`));
+      lines.push(`\n=== API paths referenced ===`);
+      (r.apiPaths||[]).forEach(p => lines.push("  " + p));
+      lines.push(`\n=== month/year/production method names ===`);
+      (r.methodNames||[]).forEach(m => lines.push("  " + m));
+      if (r.error) lines.push("ERROR: " + r.error);
+    } catch (e) { lines.push("ERROR: " + String(e)); }
+    setOut(lines.join("\n"));
+    setBusy(false);
+  };
   return (
     <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
@@ -1146,6 +1163,7 @@ function MonthDebugPanel({inverters, month}) {
         </label>
         <button onClick={run} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Run day vs month"}</button>
         <button onClick={probe} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe endpoints"}</button>
+        <button onClick={vendor} disabled={busy} style={{background:"#16A34A",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Read vendor JS"}</button>
       </div>
       {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
     </div>
