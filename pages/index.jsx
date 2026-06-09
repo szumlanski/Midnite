@@ -1081,6 +1081,59 @@ function YearChart({year, onYearChange, data, loading}) {
   );
 }
 
+// TEMPORARY DEBUG PANEL — compares the day endpoint (integrated) against the
+// month endpoint for one chosen day, per inverter, and dumps raw records on
+// screen. Remove once the month/year totals discrepancy is resolved.
+function MonthDebugPanel({inverters, month}) {
+  const [day, setDay] = useState("08");
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true); setOut(null);
+    const date = `${month}-${day}`;
+    const lines = [];
+    try {
+      for (const inv of inverters) {
+        const sn = inv.sn;
+        const [dayResp, monthResp] = await Promise.all([
+          api("day", {sn, date}).catch(e=>({error:String(e)})),
+          api("month", {sn, date: month}).catch(e=>({error:String(e)})),
+        ]);
+        const dd = dayResp?.Data || [];
+        let pvW = 0, loadW = 0, impW = 0, expW = 0;
+        for (const r of dd) {
+          pvW += parseFloat(r.Production||0); loadW += parseFloat(r.Consumption||0);
+          impW += parseFloat(r.powerFromGrid||0); expW += parseFloat(r.powerToGrid||0);
+        }
+        const md = monthResp?.Data || [];
+        const dN = md.find(r => String(r.day) === String(Number(day)));
+        lines.push(`========== ${inv.label} (${sn}) ==========`);
+        lines.push(`DAY ${date}: points=${dd.length}`);
+        lines.push(`  sample raw record: ${JSON.stringify(dd[Math.floor(dd.length/2)] || {})}`);
+        lines.push(`  DAY summed x(5/60): Prod=${(pvW*5/60/1000).toFixed(2)}kWh Cons=${(loadW*5/60/1000).toFixed(2)}kWh Imp=${(impW*5/60/1000).toFixed(2)}kWh Exp=${(expW*5/60/1000).toFixed(2)}kWh`);
+        lines.push(`MONTH ${month}: records=${md.length}`);
+        lines.push(`  field keys: ${md[0] ? Object.keys(md[0]).join(", ") : "none"}`);
+        lines.push(`  day-${Number(day)} raw record: ${JSON.stringify(dN || "MISSING")}`);
+        lines.push("");
+      }
+    } catch (e) { lines.push("ERROR: " + String(e)); }
+    setOut(lines.join("\n"));
+    setBusy(false);
+  };
+  return (
+    <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
+        <span style={{color:"#F59E0B",fontWeight:700,fontSize:13,fontFamily:SANS}}>🔧 Debug: day vs month</span>
+        <label style={{color:"#D6D3D1",fontSize:12,fontFamily:SANS}}>Day&nbsp;
+          <input value={day} onChange={e=>setDay(e.target.value.padStart(2,"0"))} style={{width:44,background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"4px 6px",fontFamily:SANS}}/>
+        </label>
+        <button onClick={run} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"Running…":"Run"}</button>
+      </div>
+      {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
+    </div>
+  );
+}
+
 function Legend({color, label}) {
   return (
     <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -1287,6 +1340,7 @@ export default function Dashboard() {
           )}
           {tab==="day"&&<DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading}/>}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
+          {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
         </div>
 
