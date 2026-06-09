@@ -1231,157 +1231,6 @@ function YearChart({year, onYearChange, data, loading}) {
   );
 }
 
-// TEMPORARY DEBUG PANEL — compares the day endpoint (integrated) against the
-// month endpoint for one chosen day, per inverter, and dumps raw records on
-// screen. Remove once the month/year totals discrepancy is resolved.
-function MonthDebugPanel({inverters, month, site}) {
-  const [day, setDay] = useState("08");
-  const [out, setOut] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const run = async () => {
-    setBusy(true); setOut(null);
-    const date = `${month}-${day}`;
-    const lines = [];
-    try {
-      for (const inv of inverters) {
-        const sn = inv.sn;
-        const [dayResp, monthResp] = await Promise.all([
-          api("day", {sn, date}).catch(e=>({error:String(e)})),
-          api("month", {sn, date: month}).catch(e=>({error:String(e)})),
-        ]);
-        const dd = dayResp?.Data || [];
-        let pvW = 0, loadW = 0, impW = 0, expW = 0;
-        for (const r of dd) {
-          pvW += parseFloat(r.Production||0); loadW += parseFloat(r.Consumption||0);
-          impW += parseFloat(r.powerFromGrid||0); expW += parseFloat(r.powerToGrid||0);
-        }
-        const md = monthResp?.Data || [];
-        const dN = md.find(r => String(r.day) === String(Number(day)));
-        lines.push(`========== ${inv.label} (${sn}) ==========`);
-        lines.push(`DAY ${date}: points=${dd.length}`);
-        lines.push(`  sample raw record: ${JSON.stringify(dd[Math.floor(dd.length/2)] || {})}`);
-        lines.push(`  DAY summed x(5/60): Prod=${(pvW*5/60/1000).toFixed(2)}kWh Cons=${(loadW*5/60/1000).toFixed(2)}kWh Imp=${(impW*5/60/1000).toFixed(2)}kWh Exp=${(expW*5/60/1000).toFixed(2)}kWh`);
-        lines.push(`MONTH ${month}: records=${md.length}`);
-        lines.push(`  field keys: ${md[0] ? Object.keys(md[0]).join(", ") : "none"}`);
-        lines.push(`  day-${Number(day)} raw record: ${JSON.stringify(dN || "MISSING")}`);
-        lines.push("");
-      }
-    } catch (e) { lines.push("ERROR: " + String(e)); }
-    setOut(lines.join("\n"));
-    setBusy(false);
-  };
-  const probe = async () => {
-    setBusy(true); setOut(null);
-    const sn = inverters[0]?.sn;
-    const lines = [`Probing month/year endpoints for ${inverters[0]?.label} (${sn}), month ${month}`];
-    lines.push(`(true day-8 production for INV-1 ≈ 51 kWh — look for a candidate whose day8 Production matches)\n`);
-    try {
-      const resp = await api("probemonth", { sn, date: month });
-      for (const c of resp.probe || []) {
-        if (!c.ok) { lines.push(`✗ ${c.label}: ERR ${c.err}`); continue; }
-        if (c.count === 0) { lines.push(`• ${c.label}: ${c.note || "empty"} ${c.body || ""}`); continue; }
-        lines.push(`✓ ${c.label}: ${c.count} records | keys: ${(c.keys||[]).join(", ")}`);
-        lines.push(`    day8: ${JSON.stringify(c.day8)}`);
-      }
-    } catch (e) { lines.push("ERROR: " + String(e)); }
-    setOut(lines.join("\n"));
-    setBusy(false);
-  };
-  const vendor = async () => {
-    setBusy(true); setOut(null);
-    const lines = ["Reading vendor dashboard JS for API endpoint names…\n"];
-    try {
-      const r = await api("vendorsrc", {});
-      lines.push(`root: ${r.rootStatus} (${r.rootLen} bytes)`);
-      (r.fetched||[]).forEach(f => lines.push(`  ${f.err?"ERR":"ok"} ${f.len||""} ${f.u}`));
-      if (r.rootHtml) { lines.push(`\n=== root HTML ===\n${r.rootHtml}`); }
-      (r.smallFiles||[]).forEach(s => lines.push(`\n=== small file ${s.u} ===\n${s.raw}`));
-      lines.push(`\n=== API paths ===`);
-      (r.apiPaths||[]).forEach(p => lines.push("  " + p));
-      lines.push(`\n=== method/chart string literals ===`);
-      (r.methodLiterals||[]).forEach(m => lines.push("  " + m));
-      lines.push(`\n=== month/year/day identifiers ===`);
-      (r.periodIdentifiers||[]).forEach(m => lines.push("  " + m));
-      lines.push(`\n=== base/host clues ===`);
-      (r.baseClues||[]).forEach(m => lines.push("  " + m));
-      lines.push(`\n=== context snippets ===`);
-      (r.context||[]).forEach(m => lines.push("  " + m));
-      if (r.error) lines.push("ERROR: " + r.error);
-    } catch (e) { lines.push("ERROR: " + String(e)); }
-    setOut(lines.join("\n"));
-    setBusy(false);
-  };
-  const viewtest = async () => {
-    setBusy(true); setOut(null);
-    const lines = ["Same inverter (Wise Naples 2426-90190114PH), month — service vs view host:\n"];
-    try {
-      const r = await api("viewtest", {});
-      lines.push(`service login: ${JSON.stringify(r.serviceLogin)} ${r.serviceErr?("ERR "+r.serviceErr):""}`);
-      lines.push(`view login:    ${JSON.stringify(r.viewLogin)} ${r.viewErr?("ERR "+r.viewErr):""}`);
-      lines.push(`\nday | SERVICE (Prod/Cons/toGrid) | VIEW (Prod/Cons/toGrid)`);
-      const sm = r.serviceMonth||[], vm = r.viewMonth||[];
-      for (let i=0;i<Math.max(sm.length,vm.length);i++){
-        const s=sm[i], v=vm[i];
-        const sd = s?`${s.Production}/${s.Consumption}/${s.toGrid}`:"—";
-        const vd = v?`${v.Production}/${v.Consumption}/${v.toGrid}`:"—";
-        lines.push(`  ${(s?.day||v?.day||i+1).toString().padStart(2)} | ${sd.padEnd(16)} | ${vd}`);
-      }
-    } catch (e) { lines.push("ERROR: " + String(e)); }
-    setOut(lines.join("\n"));
-    setBusy(false);
-  };
-  const installertest = async () => {
-    setBusy(true); setOut(null);
-    const sn = inverters[0]?.sn;
-    const lines = [`Installer month test — ${inverters[0]?.label} (${sn})`,
-      `site memberAutoId: ${site?.memberAutoId}`,
-      `(correct when "balance" ≈ Prod; broken when balance > Prod)\n`];
-    try {
-      const r = await api("installertest", { sn, memberAutoId: site?.memberAutoId, date: month });
-      lines.push(`accountType: ${r.accountType} | token memberAutoId: ${r.tokenMemberAutoId}\n`);
-      for (const k of Object.keys(r)) {
-        if (k.match(/^[A-D]:/)) lines.push(`${k}\n    ${JSON.stringify(r[k])}`);
-      }
-    } catch (e) { lines.push("ERROR: " + String(e)); }
-    setOut(lines.join("\n"));
-    setBusy(false);
-  };
-  const probeMppt = async () => {
-    setBusy(true); setOut(null);
-    const sn = inverters[0]?.sn;
-    const date = `${month}-08`;
-    const lines = [`Probing per-MPPT day endpoints — ${inverters[0]?.label} (${sn}) ${date}\n`];
-    try {
-      const r = await api("probemppt", { sn, date });
-      for (const c of r.probe || []) {
-        if (!c.ok) { lines.push(`✗ ${c.m}: ${c.err}`); continue; }
-        if (!c.count) { lines.push(`• ${c.m}: empty ${c.note||""}`); continue; }
-        lines.push(`✓ ${c.m}: ${c.count} recs | keys: ${(c.keys||[]).join(", ")}`);
-        lines.push(`    sample: ${JSON.stringify(c.sample)}`);
-      }
-    } catch (e) { lines.push("ERROR: " + String(e)); }
-    setOut(lines.join("\n"));
-    setBusy(false);
-  };
-  return (
-    <div style={{background:"#1C1917",borderRadius:14,padding:16,marginBottom:24,boxShadow:SHADOW_SM}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
-        <span style={{color:"#F59E0B",fontWeight:700,fontSize:13,fontFamily:SANS}}>🔧 Debug: day vs month</span>
-        <label style={{color:"#D6D3D1",fontSize:12,fontFamily:SANS}}>Day&nbsp;
-          <input value={day} onChange={e=>setDay(e.target.value.padStart(2,"0"))} style={{width:44,background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"4px 6px",fontFamily:SANS}}/>
-        </label>
-        <button onClick={run} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Run day vs month"}</button>
-        <button onClick={probe} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe endpoints"}</button>
-        <button onClick={vendor} disabled={busy} style={{background:"#16A34A",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Read vendor JS"}</button>
-        <button onClick={viewtest} disabled={busy} style={{background:"#DC2626",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Service vs View"}</button>
-        <button onClick={installertest} disabled={busy} style={{background:"#7C3AED",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Installer test"}</button>
-        <button onClick={probeMppt} disabled={busy} style={{background:"#0891B2",border:"none",borderRadius:8,color:"#FFFFFF",fontWeight:700,padding:"6px 14px",cursor:busy?"default":"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Probe MPPT"}</button>
-      </div>
-      {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace, monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
-    </div>
-  );
-}
-
 function Legend({color, label}) {
   return (
     <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -1413,6 +1262,90 @@ const TABS = [
   { id:"month",label:"Month",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
   { id:"year", label:"Year", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg> },
 ];
+const ADMIN_TAB = { id:"admin", label:"Admin", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg> };
+
+function AdminPanel({site, inverters}) {
+  const [log, setLog] = useState(null);
+  const [logErr, setLogErr] = useState(null);
+  const [persistent, setPersistent] = useState(false);
+  const [action, setAction] = useState("status");
+  const [bodyText, setBodyText] = useState("{}");
+  const [out, setOut] = useState("");
+  const [busy, setBusy] = useState(false);
+  const sn = inverters[0]?.sn || "";
+  const darkInput = {background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"6px 8px",fontFamily:SANS,fontSize:12};
+
+  const loadLog = async () => {
+    setLogErr(null);
+    try { const r = await api("adminlog", {}); setLog(r.log||[]); setPersistent(!!r.persistent); }
+    catch(e){ setLogErr(String(e)); setLog([]); }
+  };
+  useEffect(()=>{ loadLog(); }, []);
+
+  const run = async (a, b) => {
+    const act = a || action;
+    let body = b;
+    if(!body){ try { body = JSON.parse(bodyText||"{}"); } catch { setOut("Invalid JSON body"); return; } }
+    if(a){ setAction(a); setBodyText(JSON.stringify(body)); }
+    setBusy(true); setOut("Running…");
+    try { const r = await api(act, body); setOut(JSON.stringify(r, null, 2)); }
+    catch(e){ setOut("ERROR: "+String(e)); }
+    setBusy(false);
+  };
+
+  const presets = [
+    {label:"Raw status", action:"rawstatus", body:{serials:[sn]}},
+    {label:"Probe month", action:"probemonth", body:{sn, date:thisMonth}},
+    {label:"Probe MPPT", action:"probemppt", body:{sn, date:`${thisMonth}-08`}},
+    {label:"Service vs View", action:"viewtest", body:{}},
+    {label:"Installer test", action:"installertest", body:{sn, memberAutoId:site?.memberAutoId, date:thisMonth}},
+    {label:"Vendor JS", action:"vendorsrc", body:{}},
+    {label:"Day excel", action:"dayexcel", body:{sn, date:today, memberId:site?.name}},
+  ];
+  const fmtTs = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Access Log</div>
+            <div style={{fontSize:11,color:FAINT}}>{persistent? "Persistent (Vercel KV)" : "In-memory — recent activity only; add a KV store to persist across restarts"}</div>
+          </div>
+          <button onClick={loadLog} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Refresh</button>
+        </div>
+        {logErr && <div style={{color:GRID_IN,fontSize:12}}>{logErr}</div>}
+        {log && log.length===0 && !logErr && <div style={{fontSize:12,color:FAINT}}>No events yet.</div>}
+        {log && log.length>0 && (
+          <div style={{maxHeight:300,overflow:"auto"}}>
+            {log.map((e,i)=>(
+              <div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline"}}>
+                <span style={{color:FAINT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtTs(e.ts)}</span>
+                <span style={{fontWeight:700,color:e.type==="login"?BATTERY:LOAD_C,textTransform:"uppercase",fontSize:10}}>{e.type}</span>
+                <span style={{color:TEXT,fontWeight:600}}>{e.user}</span>
+                {e.site && <span style={{color:MUTED}}>· {e.site}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{background:"#1C1917",borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{color:"#F59E0B",fontWeight:700,fontSize:13,marginBottom:10,fontFamily:SANS}}>🔧 API Debug</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+          {presets.map(p=>(
+            <button key={p.label} onClick={()=>run(p.action, p.body)} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#fff",fontWeight:600,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:SANS}}>{p.label}</button>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+          <input value={action} onChange={e=>setAction(e.target.value)} placeholder="action" style={{...darkInput,width:130}}/>
+          <input value={bodyText} onChange={e=>setBodyText(e.target.value)} placeholder='{"sn":"…"}' style={{...darkInput,flex:1,minWidth:160,fontFamily:"ui-monospace,monospace"}}/>
+          <button onClick={()=>run()} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Run"}</button>
+        </div>
+        {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace,monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [authState, setAuthState] = useState("loading");
@@ -1422,6 +1355,7 @@ export default function Dashboard() {
   const [site, setSite] = useState(null);
 
   const [tab, setTab] = useState("live");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
@@ -1468,6 +1402,7 @@ export default function Dashboard() {
     setLoginLoading(true); setLoginError(null);
     try {
       localStorage.setItem("midnite_creds", JSON.stringify({username, password}));
+      setIsAdmin((username||"").trim().toLowerCase()==="flsolardesign");
       await api("login");
       const sitesData = await api("sites");
       handleSitesResponse(sitesData);
@@ -1482,6 +1417,7 @@ export default function Dashboard() {
     localStorage.removeItem("midnite_creds");
     localStorage.removeItem("midnite_selected_site");
     _apiCache.clear();
+    setIsAdmin(false); if(tab==="admin") setTab("live");
     setSite(null); setSites([]); setStatuses([]); setAuthState("login");
   }
 
@@ -1494,8 +1430,12 @@ export default function Dashboard() {
   useEffect(() => {
     const creds = JSON.parse(localStorage.getItem("midnite_creds") || "null");
     if(!creds) { setAuthState("login"); return; }
+    setIsAdmin((creds.username||"").trim().toLowerCase()==="flsolardesign");
     api("sites").then(data=>handleSitesResponse(data)).catch(()=>{ localStorage.removeItem("midnite_creds"); setAuthState("login"); });
   }, []);
+
+  // Log site views (admin access log). Fires once per site selection.
+  useEffect(() => { if(site) api("logview", { site: site.name }).catch(()=>{}); }, [site]);
 
   const fetchLive = useCallback(async () => {
     if(!site) return;
@@ -1590,7 +1530,7 @@ export default function Dashboard() {
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {/* Desktop tabs */}
             <div className="top-tabs" style={{gap:2,background:"#F1F5F9",borderRadius:10,padding:3}}>
-              {TABS.map(t=>(
+              {(isAdmin?[...TABS,ADMIN_TAB]:TABS).map(t=>(
                 <button key={t.id} onClick={()=>setTab(t.id)} className="tab-btn" style={{
                   padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:SANS,
                   background:tab===t.id?CARD:"transparent",
@@ -1650,13 +1590,13 @@ export default function Dashboard() {
             return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>;
           })()}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
-          {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate} site={site}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
+          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters}/>}
         </div>
 
         {/* Mobile bottom nav */}
         <div className="bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:CARD,borderTop:`1px solid ${BORDER}`,padding:"8px 0 max(8px, env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>
-          {TABS.map(t=>(
+          {(isAdmin?[...TABS,ADMIN_TAB]:TABS).map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
               display:"flex",flexDirection:"column",alignItems:"center",gap:3,
               padding:"4px 16px",border:"none",background:"transparent",cursor:"pointer",fontFamily:SANS,

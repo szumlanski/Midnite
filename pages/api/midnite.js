@@ -221,6 +221,31 @@ function normalizeDetail(raw, sn) {
   };
 }
 
+// ---- Access log (admin) ----------------------------------------------------
+// Persists to Vercel KV when KV_REST_API_URL/TOKEN are set; otherwise keeps a recent
+// in-memory buffer (resets on cold start / redeploy — add a KV store for durability).
+const ADMIN_USER = "flsolardesign";
+let _accessLog = [];
+async function kvCmd(cmd) {
+  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  if (!url || !tok) return null;
+  try {
+    const r = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify(cmd) });
+    return await r.json();
+  } catch (e) { console.log("[kv]", e.message); return null; }
+}
+async function logAccess(evt) {
+  const rec = { ...evt, ts: new Date().toISOString() };
+  const kv = await kvCmd(["lpush", "accesslog", JSON.stringify(rec)]);
+  if (kv) { await kvCmd(["ltrim", "accesslog", "0", "999"]); }
+  else { _accessLog.unshift(rec); if (_accessLog.length > 500) _accessLog.length = 500; }
+}
+async function readAccessLog() {
+  const kv = await kvCmd(["lrange", "accesslog", "0", "499"]);
+  if (kv && Array.isArray(kv.result)) return kv.result.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+  return _accessLog;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -234,7 +259,16 @@ export default async function handler(req, res) {
 
     switch (action) {
       case "login": {
+        await logAccess({ type: "login", user: auth.username, account: auth.accountType });
         return res.json({ ok: true, memberAutoId: auth.memberAutoId, accountType: auth.accountType });
+      }
+      case "logview": {
+        await logAccess({ type: "view", user: auth.username, site: (req.body?.site || "").slice(0, 80) });
+        return res.json({ ok: true });
+      }
+      case "adminlog": {
+        if ((auth.username || "").trim().toLowerCase() !== ADMIN_USER) return res.status(403).json({ error: "forbidden" });
+        return res.json({ log: await readAccessLog(), persistent: !!process.env.KV_REST_API_URL });
       }
       case "sites": {
         if (auth.accountType === "installer") {
