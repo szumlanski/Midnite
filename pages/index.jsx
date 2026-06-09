@@ -1088,7 +1088,13 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
       </ChartCard>
-      {mpptHint&&<div style={{fontSize:11,color:FAINT,textAlign:"center",marginTop:8}}>Select a single inverter to break production out by MPPT string.</div>}
+      {mpptHint&&(
+        <div style={{display:"flex",justifyContent:"center",marginTop:10}}>
+          <div style={{fontSize:11.5,fontWeight:500,color:MUTED,background:BG,border:`1px solid ${BORDER}`,borderRadius:20,padding:"5px 12px"}}>
+            {mpptActive ? "📊 Showing per-MPPT (string) production for this inverter" : "💡 Select a single inverter to see production broken out per MPPT string"}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1641,7 +1647,7 @@ export default function Dashboard() {
               prodSeries = chartInverters.map((inv,i)=>({key:`pv${i}`, name:single?"Solar":`${inv.label} Solar`, color:PROD_SHADES[i%PROD_SHADES.length]}));
               consSeries = chartInverters.map((inv,i)=>({key:`loadNeg${i}`, name:single?"Load":`${inv.label} Load`, color:CONS_SHADES[i%CONS_SHADES.length]}));
             }
-            return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1 && chartInverters.length>1}/>;
+            return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>;
           })()}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
           {tab==="month"&&<MonthDebugPanel inverters={chartInverters} month={monthDate} site={site}/>}
