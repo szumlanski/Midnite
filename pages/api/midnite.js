@@ -639,38 +639,18 @@ export default async function handler(req, res) {
         return res.json(out);
       }
       case "shadow": {
-        // Probe the device-shadow (inverter settings/config) endpoints to discover which one returns
-        // the parameter set, and in what shape — so we can build a settings comparison.
+        // Read the inverter's cached device-shadow (settings) — hex attribute codes → values.
+        // Populate the full set first by opening the inverter's Settings page in the installer app,
+        // then read it here. Returns the complete data object so it can be diffed across inverters.
         const { sn, autoId, memberAutoId } = req.body || {};
         const mid = String(memberAutoId || auth.memberAutoId || "");
         const aid = String(autoId || "");
-        const candidates = [
-          ["Eagle getDeviceShadowResult", "/Eagle/v1/Inverterapi/getDeviceShadowResult"],
-          ["Eagle readDeviceShadow_RA_New_AutoID", "/Eagle/v1/Inverterapi/readDeviceShadow_RA_New_AutoID"],
-          ["Sen v2 getDeviceShadow_RA", "/Senergytec/v2/Inverterapi/getDeviceShadow_RA"],
-          ["Sen v2 readDeviceShadow_RA", "/Senergytec/v2/Inverterapi/readDeviceShadow_RA"],
-          ["Sen v2 getDeviceShadowStatus_RA", "/Senergytec/v2/Inverterapi/getDeviceShadowStatus_RA"],
-          ["Sen web getDeviceShadow_RA", "/Senergytec/web/v2/Inverterapi/getDeviceShadow_RA"],
-          ["Eagle getDeviceShadow_RA", "/Eagle/v1/Inverterapi/getDeviceShadow_RA"],
-        ];
-        const bodies = [
-          { AutoId: aid, GoodsID: sn, memberAutoID: mid },
-          { AutoID: aid, GoodsID: sn, MemberAutoID: mid },
-          { GoodsID: sn, memberAutoID: mid },
-        ];
-        const out = [];
-        for (const [label, path] of candidates) {
-          for (let bi=0; bi<bodies.length; bi++) {
-            const b = { ...bodies[bi] }; b.sign = makeSign(b);
-            try {
-              const r = await midnitePost(path, b, auth.token);
-              const big = JSON.stringify(r);
-              out.push({ label, body: bi, ok: true, keys: Object.keys(r||{}).slice(0,50), len: big.length, sample: big.slice(0, 600) });
-              break; // got a response for this endpoint; move on
-            } catch (e) { if (bi===bodies.length-1) out.push({ label, ok: false, err: e.message.slice(0,120) }); }
-          }
-        }
-        return res.json({ shadow: out });
+        const body = { AutoId: aid, GoodsID: sn, memberAutoID: mid }; body.sign = makeSign(body);
+        try {
+          const r = await midnitePost("/Senergytec/v2/Inverterapi/getDeviceShadowStatus_RA", body, auth.token);
+          const data = r?.data || {};
+          return res.json({ ok: true, sn, busy: r?.busy ?? null, count: Object.keys(data).length, data });
+        } catch (e) { return res.json({ ok: false, sn, err: e.message }); }
       }
       case "probemppt": {
         // TEMPORARY — hunt for a per-MPPT/PV-string intraday history endpoint for the day chart.
