@@ -1538,10 +1538,16 @@ export default function Dashboard() {
         setDayData(aggregateDayData(dayAll));
         setDayMode({type:"inverter"});
       }
+      // Grid export integrated from the (reliable) intraday feed — used when the month rollup's
+      // toGrid is broken/0 for certain inverter firmwares (e.g. Dotsikas / mode 795).
+      let dayExpWh = 0;
+      for(const inv of dayAll) for(const r of (inv?.Data||[])) dayExpWh += parseFloat(r.powerToGrid||0);
+      dayExpWh *= (5/60);
       const md = aggregateMonthData(monthAll).find(r=>Number(r.day)===dayNum);
       setDaySummary(md ? {
         produced: md.production*1000, consumed: md.consumption*1000,
-        imported: md.fromGrid*1000, exported: md.toGrid*1000,
+        imported: md.fromGrid*1000,
+        exported: md.toGrid>0 ? md.toGrid*1000 : dayExpWh,
         charged: md.batCharge*1000, discharged: md.batDischarge*1000,
       } : null);
       setDayLoading(false);
