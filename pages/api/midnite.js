@@ -647,37 +647,15 @@ export default async function handler(req, res) {
           "1A18","5101","5000","5001","5019","5029","5002","5003","5004","5005","5006","5007","5008","5009","500A","500B","500C","500D","500E","500F","5010","5011","501A","5021","507F","5017","511D","2125","501F","5020","5025","5026","506C","506D","5033","5030","5031","5121","5059","5034","5035","5036","5037","5038","5039","503A","503B","503C","503D","503E","503F","5040","5041","5042","5043","505A","505B","505C","505D","505E","505F","5060","5061","5027","5028","5012","5013","507A","507B","5078","5079",
           "30B0","30B1","30B2","30B3","30B4","30B5","30B9","30BA","308E","3089","2100","2141","215B","214C","1A48","1A5A","2124","2110","2101","2102","2103","2104","2105","2106","2107","2108","2109","210A","210B","210C","210D","210E","210F","2168","2169","216C","216D","2170","2171","2174","2175","2178","2179","217C","217D","216A","216B","216E","216F","2172","2173","2176","2177","217A","217B","217E","217F","2122","2520","2540","256E","256F","2570","2571","2568","2569","256A","256B","2138","2139","213A","213B","213C","212A","2129","2134","2135","2127","2126","2136","2137","2151","2156","2152","2153","2154","2155","212C","212D","2130","2131","213F","219B",
         ])];
-        const aid = String(autoId), mid = String(memberAutoId || auth.memberAutoId || "");
+        const aid = String(autoId);
+        // readDeviceShadow_RA_New_AutoID with Force:1 returns the register values synchronously,
+        // in r.data.data ({code: value}), with reachability flags in r.data.status.
         const rb = { AutoId: aid, ModbusArr: JSON.stringify(REG), Force: 1 }; rb.sign = makeSign(rb);
-        let trigger;
-        try { trigger = await midnitePost("/Eagle/v1/Inverterapi/readDeviceShadow_RA_New_AutoID", rb, auth.token); }
-        catch (e) { trigger = { err: e.message }; }
-        // The values land in a separate result endpoint — probe the candidates to find which returns them.
-        const RES = JSON.stringify(REG);
-        const candidates = [
-          ["Eagle Result {AutoId}", "/Eagle/v1/Inverterapi/getDeviceShadowResult", { AutoId: aid }],
-          ["Eagle Result {AutoId,ModbusArr}", "/Eagle/v1/Inverterapi/getDeviceShadowResult", { AutoId: aid, ModbusArr: RES }],
-          ["Eagle Result {AutoId,GoodsID,mid}", "/Eagle/v1/Inverterapi/getDeviceShadowResult", { AutoId: aid, GoodsID: sn || "", memberAutoID: mid }],
-          ["Eagle Result_New {AutoId}", "/Eagle/v1/Inverterapi/getDeviceShadowResult_New_AutoID", { AutoId: aid }],
-          ["Sen Result {AutoId}", "/Senergytec/v2/Inverterapi/getDeviceShadowResult", { AutoId: aid }],
-          ["StatusRA", "/Senergytec/v2/Inverterapi/getDeviceShadowStatus_RA", { AutoId: aid, GoodsID: sn || "", memberAutoID: mid }],
-        ];
-        const probe = []; let best = {};
-        for (let round = 0; round < 3; round++) {
-          await new Promise(r => setTimeout(r, 1200));
-          for (const [label, path, body] of candidates) {
-            const b = { ...body }; b.sign = makeSign(b);
-            try {
-              const r = await midnitePost(path, b, auth.token);
-              const d = (r && r.data && typeof r.data === "object" && !Array.isArray(r.data)) ? r.data : null;
-              const cnt = d ? Object.keys(d).length : 0;
-              if (cnt > Object.keys(best).length) best = d;
-              if (round === 0) probe.push({ label, status: r?.status, busy: r?.busy, dataCount: cnt, sample: JSON.stringify(r).slice(0, 180) });
-            } catch (e) { if (round === 0) probe.push({ label, err: e.message.slice(0, 90) }); }
-          }
-          if (Object.keys(best).length >= 20) break;
-        }
-        return res.json({ autoId: aid, trigger, requested: REG.length, bestCount: Object.keys(best).length, probe, data: best });
+        let r;
+        try { r = await midnitePost("/Eagle/v1/Inverterapi/readDeviceShadow_RA_New_AutoID", rb, auth.token); }
+        catch (e) { return res.json({ autoId: aid, err: e.message }); }
+        const data = r?.data?.data || {};
+        return res.json({ autoId: aid, ok: r?.status ?? null, requested: REG.length, count: Object.keys(data).length, data, statusFlags: r?.data?.status || {} });
       }
       case "shadow": {
         // Read the inverter's cached device-shadow (settings) — hex attribute codes → values.
