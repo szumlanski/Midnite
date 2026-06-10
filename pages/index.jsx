@@ -914,14 +914,20 @@ function FlowEdge({d, active, reverse, value=0, color="#16A34A"}) {
     className={active?(reverse?"flow-rev":"flow-anim"):""}
     style={active?{animationDuration:`${dur}s`}:undefined}/>;
 }
-function FlowNode({x, y, r=22, color, icon, label, value, sub}) {
+function FlowNode({x, y, r=22, color, icon, label, value, sub, place="below"}) {
+  // All text sits on the side AWAY from the inverter (above for top nodes, below for bottom ones)
+  // so the connector line — which exits the icon toward the center — never crosses the labels.
+  const above = place==="above";
+  const labelY = above ? y-r-38 : y+r+15;
+  const valueY = above ? y-r-21 : y+r+31;
+  const subY   = above ? y-r-7  : y+r+45;
   return (
     <g>
-      <text x={x} y={y-r-9} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
       <circle cx={x} cy={y} r={r} fill={color}/>
       <text x={x} y={y+r*0.28} textAnchor="middle" fontSize={r-4}>{icon}</text>
-      <text x={x} y={y+r+18} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
-      {sub&&<text x={x} y={y+r+32} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
+      <text x={x} y={labelY} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
+      <text x={x} y={valueY} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
+      {sub&&<text x={x} y={subY} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
     </g>
   );
 }
@@ -951,29 +957,29 @@ function InverterGraphic({count}) {
 function FlowDiagram({flow}) {
   if(!flow) return null;
   const A = 20;
-  const L=170, R=230, T=130, B=234, fy1=156, fy2=208;
+  const L=170, R=230, T=130, B=234, fy1=158, fy2=206;
   const edges = [
-    { d:`M56,78 L56,${fy1} L${L},${fy1}`, active:flow.pv>A, reverse:false, value:flow.pv },
-    { d:`M344,78 L344,${fy1} L${R},${fy1}`, active:Math.abs(flow.grid)>A, reverse:flow.grid<0, value:flow.grid },
-    { d:`M56,290 L56,${fy2} L${L},${fy2}`, active:Math.abs(flow.battery)>A, reverse:flow.battery>0, value:flow.battery },
-    { d:`M344,290 L344,${fy2} L${R},${fy2}`, active:flow.load>A, reverse:true, value:flow.load },
+    { d:`M56,92 L56,${fy1} L${L},${fy1}`, active:flow.pv>A, reverse:false, value:flow.pv },
+    { d:`M344,92 L344,${fy1} L${R},${fy1}`, active:Math.abs(flow.grid)>A, reverse:flow.grid<0, value:flow.grid },
+    { d:`M56,300 L56,${fy2} L${L},${fy2}`, active:Math.abs(flow.battery)>A, reverse:flow.battery>0, value:flow.battery },
+    { d:`M344,300 L344,${fy2} L${R},${fy2}`, active:flow.load>A, reverse:true, value:flow.load },
   ];
-  if(flow.gen>A)       edges.push({ d:`M200,56 L200,${T}`, active:true, reverse:false, value:flow.gen });
-  if(flow.smartLoad>A) edges.push({ d:`M200,308 L200,${B}`, active:true, reverse:true, value:flow.smartLoad });
-  if(flow.couple>A)    edges.push({ d:`M58,188 L${L},188`, active:true, reverse:flow.couple<0, value:flow.couple });
+  if(flow.gen>A)       edges.push({ d:`M200,81 L200,${T}`, active:true, reverse:false, value:flow.gen });
+  if(flow.smartLoad>A) edges.push({ d:`M200,305 L200,${B}`, active:true, reverse:true, value:flow.smartLoad });
+  if(flow.couple>A)    edges.push({ d:`M56,182 L${L},182`, active:true, reverse:flow.couple<0, value:flow.couple });
   return (
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:700,color:FAINT,padding:"4px 8px 0",letterSpacing:"0.06em"}}>POWER FLOW</div>
-      <svg viewBox="0 0 400 382" style={{width:"100%",height:"auto",display:"block"}}>
+      <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
         <InverterGraphic count={flow.count}/>
-        <FlowNode x={56} y={78} color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
-        <FlowNode x={344} y={78} color={flow.grid<0?GRID_OUT:GRID_IN} icon="🏛️" label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
-        <FlowNode x={56} y={290} color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:null}/>
-        <FlowNode x={344} y={290} color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
-        {flow.gen>A      && <FlowNode x={200} y={34} r={17} color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
-        {flow.smartLoad>A&& <FlowNode x={200} y={332} r={17} color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
-        {flow.couple>A   && <FlowNode x={38} y={188} r={16} color="#0891B2" icon="🔗" label="AC" value={fmt(Math.abs(flow.couple))}/>}
+        <FlowNode x={56} y={92} place="above" color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
+        <FlowNode x={344} y={92} place="above" color={flow.grid<0?GRID_OUT:GRID_IN} icon="🏛️" label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
+        <FlowNode x={56} y={300} place="below" color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:null}/>
+        <FlowNode x={344} y={300} place="below" color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
+        {flow.gen>A      && <FlowNode x={200} y={64} r={17} place="above" color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
+        {flow.smartLoad>A&& <FlowNode x={200} y={322} r={17} place="below" color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
+        {flow.couple>A   && <FlowNode x={40} y={182} r={16} place="below" color="#0891B2" icon="🔗" label="AC" value={fmt(Math.abs(flow.couple))}/>}
       </svg>
     </div>
   );
