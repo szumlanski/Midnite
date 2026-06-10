@@ -118,15 +118,12 @@ const CHART_CONS = "#F97316";
 const CHART_BAT = "#22C55E";
 const CHART_GRID = "#94A3B8";
 
-// DO NOT change these without reading CLAUDE.md "Bar chart alignment".
-// BAR_DAY: NO barSize — when barSize is set and sum >= bandSize, Recharts 3.x resets barGap to 0,
-//   making pos/neg groups render side-by-side. Without barSize, Recharts uses the else branch where
-//   barCategoryGap="0%" fills the full category and barGap="-100%" collapses both groups to offset=0.
-// BAR_MONTH/YEAR: barSize IS set and barSize < bandSize, so the barGap reset never triggers.
-//   barGap must equal -barSize to align pos/neg stacks flush over the zero line.
-const BAR_DAY   = { barCategoryGap: "0%", barGap: "-100%" };
-const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
-const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
+// MONTH/YEAR bar alignment — the permanent fix is a SINGLE shared stackId ("a") on every Bar
+// (positives and negatives). Recharts stacks positives up and negatives down at the SAME x, so
+// pos/neg are always flush over the zero line — no barGap/barSize hacks, robust to any bar width.
+// DO NOT split pos/neg into separate stackIds (that puts them in side-by-side groups → misaligned).
+const BAR_MONTH = { barCategoryGap: "20%", maxBarSize: 22 };
+const BAR_YEAR  = { barCategoryGap: "20%", maxBarSize: 44 };
 const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
 
 const WORK_MODE_LABELS = {0:"Self Consumption",1:"Feed-In Priority",2:"Backup Priority",3:"Time of Use",4:"Peak Shaving",5:"Off Grid"};
@@ -1150,12 +1147,12 @@ function MonthChart({month, onMonthChange, data, loading}) {
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
-            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
+            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false}/>}
+            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="a" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="a" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="a" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
@@ -1217,12 +1214,12 @@ function YearChart({year, onYearChange, data, loading}) {
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="pos" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="pos" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="pos" activeBar={false}/>}
-            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="neg" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="neg" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="neg" activeBar={false}/>}
+            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false}/>}
+            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="a" activeBar={false}/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="a" activeBar={false}/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="a" activeBar={false}/>}
           </BarChart>
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>

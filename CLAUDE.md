@@ -215,15 +215,23 @@ the chart prompts this on multi-inverter sites (suppressed on single-inverter si
 
 **Month** and **Year** are still `BarChart` (mirrored pos/neg). The bar-prop rules below apply to **them only**.
 
-### !! MONTH/YEAR BAR CHART — DO NOT TOUCH THESE PROPS !!
+### !! MONTH/YEAR BAR ALIGNMENT — THE PERMANENT FIX !!
 
-Recurring regression: every time these get "cleaned up" the bars break. Named constants at the top of `index.jsx`:
+Recurring regression: the up (production) and down (consumption) bars render **side-by-side** instead of
+flush over the zero line. The bulletproof fix is already in place and must stay:
+
+**Every `<Bar>` (positive AND negative) shares ONE `stackId="a"`.** Recharts stacks positives upward and
+negatives downward at the *same* x — so they're always aligned, regardless of bar width or data count.
 
 ```js
-const BAR_DAY   = { barCategoryGap: -100,  barSize: 12, barGap: -12 };  // legacy — Day is no longer a BarChart
-const BAR_MONTH = { barCategoryGap: "20%", barSize: 20, barGap: -20 };
-const BAR_YEAR  = { barCategoryGap: "20%", barSize: 40, barGap: -40 };
+const BAR_MONTH = { barCategoryGap: "20%", maxBarSize: 22 };
+const BAR_YEAR  = { barCategoryGap: "20%", maxBarSize: 44 };
 ```
+
+- **DO NOT** split positives and negatives into separate stackIds (`"pos"`/`"neg"`). Different stackIds become
+  side-by-side groups → misalignment. This was the old bug; the `barGap = -barSize` hack that "fixed" it was
+  fragile and broke whenever sizing changed. The single shared stackId needs no `barGap`/`barSize` tricks.
+- Day is a `ComposedChart` (areas/lines), so this does not apply to it.
 
 **Why `BAR_DAY` has NO `barSize`**: In Recharts 3.x (`combineAllBarPositions.js`), when `barSize` IS set, the positioning code checks `if (sum >= bandSize) { realBarGap = 0; }`. With 288 data points, `bandSize ≈ 3px` and any reasonable `barSize` makes `sum >> bandSize`, so Recharts **always resets barGap to 0**, rendering pos and neg groups side-by-side. The `barCategoryGap` prop is also only consulted in the else branch (no barSize). Fix: omit `barSize` entirely. Recharts then uses `originalSize = (bandSize - 0 - 1*(-bandSize)) / 2 = bandSize`, and both group offsets collapse to 0 — perfect overlap.
 
