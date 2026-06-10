@@ -962,7 +962,7 @@ function FlowDiagram({flow}) {
   return (
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:700,color:FAINT,padding:"4px 8px 0",letterSpacing:"0.06em"}}>POWER FLOW</div>
-      <svg viewBox="0 0 400 360" style={{width:"100%",height:"auto",display:"block"}}>
+      <svg viewBox="0 0 400 382" style={{width:"100%",height:"auto",display:"block"}}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
         <InverterGraphic count={flow.count}/>
         <FlowNode x={56} y={78} color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
