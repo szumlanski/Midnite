@@ -905,41 +905,73 @@ function InverterDetailPanel({inv, status}) {
   );
 }
 
-function FlowEdge({from, to, active, reverse, color}) {
-  return <line x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-    stroke={active?color:"#E5E2DD"} strokeWidth={active?2.5:2}
-    strokeDasharray="2 6" strokeLinecap="round"
-    className={active?(reverse?"flow-rev":"flow-anim"):""}/>;
+function FlowEdge({d, active, reverse, value=0, color="#16A34A"}) {
+  // Dot speed ∝ power: animation period is inversely proportional to watts (10kW flows 2× faster
+  // than 5kW), clamped so it never crawls or strobes. Period moves one dash cycle (16px keyframe).
+  const dur = Math.max(0.3, Math.min(3, 4000/Math.max(Math.abs(value),1)));
+  return <path d={d} fill="none" stroke={active?color:"#E6E3DE"} strokeWidth={active?2.5:2}
+    strokeDasharray="2 6" strokeLinecap="round" strokeLinejoin="round"
+    className={active?(reverse?"flow-rev":"flow-anim"):""}
+    style={active?{animationDuration:`${dur}s`}:undefined}/>;
 }
-function FlowNode({x, y, color, icon, label, value, sub}) {
+function FlowNode({x, y, r=22, color, icon, label, value, sub}) {
   return (
     <g>
-      <text x={x} y={y-32} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
-      <circle cx={x} cy={y} r={23} fill={color}/>
-      <text x={x} y={y+6} textAnchor="middle" fontSize="18">{icon}</text>
-      <text x={x} y={y+43} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
-      {sub&&<text x={x} y={y+57} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
+      <text x={x} y={y-r-9} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
+      <circle cx={x} cy={y} r={r} fill={color}/>
+      <text x={x} y={y+r*0.28} textAnchor="middle" fontSize={r-4}>{icon}</text>
+      <text x={x} y={y+r+18} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
+      {sub&&<text x={x} y={y+r+32} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
+    </g>
+  );
+}
+// Stylised white inverter cabinet (matches the hardware) used as the diagram's center hub.
+// Swap for a photo later by dropping a <image href="/inverter.png"/> in place of this group.
+function InverterGraphic({count}) {
+  const x=170, y=130, w=60, h=104;
+  return (
+    <g>
+      <rect x={x-4} y={y+24} width="4" height="12" rx="1.5" fill="#CBD5E1"/>
+      <rect x={x-4} y={y+h-36} width="4" height="12" rx="1.5" fill="#CBD5E1"/>
+      <rect x={x+w} y={y+24} width="4" height="12" rx="1.5" fill="#CBD5E1"/>
+      <rect x={x+w} y={y+h-36} width="4" height="12" rx="1.5" fill="#CBD5E1"/>
+      <rect x={x} y={y} width={w} height={h} rx="9" fill="#FCFCFD" stroke="#CBD5E1" strokeWidth="1.5"/>
+      {[0,1,2,3,4,5].map(i=><circle key={i} cx={x+12+i*7.2} cy={y+11} r="1.7" fill={i<2?"#22C55E":i<4?"#F59E0B":"#CBD5E1"}/>)}
+      <rect x={x+15} y={y+19} width={w-30} height="15" rx="2.5" fill="#111827"/>
+      <line x1={x} y1={y+h*0.5} x2={x+w} y2={y+h*0.5} stroke="#E2E8F0" strokeWidth="1.5"/>
+      {count>1&&<g>
+        <circle cx={x+w-1} cy={y+1} r="12" fill="#0D1F33"/>
+        <text x={x+w-1} y={y+5} textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily={SANS}>×{count}</text>
+      </g>}
     </g>
   );
 }
 function FlowDiagram({flow}) {
   if(!flow) return null;
-  const P = {solar:{x:74,y:72}, grid:{x:326,y:72}, batt:{x:74,y:248}, home:{x:326,y:248}, hub:{x:200,y:160}};
-  const A = 20; const green = "#16A34A";
+  const A = 20;
+  const L=170, R=230, T=130, B=234, fy1=156, fy2=208;
+  const edges = [
+    { d:`M56,78 L56,${fy1} L${L},${fy1}`, active:flow.pv>A, reverse:false, value:flow.pv },
+    { d:`M344,78 L344,${fy1} L${R},${fy1}`, active:Math.abs(flow.grid)>A, reverse:flow.grid<0, value:flow.grid },
+    { d:`M56,290 L56,${fy2} L${L},${fy2}`, active:Math.abs(flow.battery)>A, reverse:flow.battery>0, value:flow.battery },
+    { d:`M344,290 L344,${fy2} L${R},${fy2}`, active:flow.load>A, reverse:true, value:flow.load },
+  ];
+  if(flow.gen>A)       edges.push({ d:`M200,56 L200,${T}`, active:true, reverse:false, value:flow.gen });
+  if(flow.smartLoad>A) edges.push({ d:`M200,308 L200,${B}`, active:true, reverse:true, value:flow.smartLoad });
+  if(flow.couple>A)    edges.push({ d:`M58,188 L${L},188`, active:true, reverse:flow.couple<0, value:flow.couple });
   return (
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:700,color:FAINT,padding:"4px 8px 0",letterSpacing:"0.06em"}}>POWER FLOW</div>
-      <svg viewBox="0 0 400 320" style={{width:"100%",height:"auto",display:"block"}}>
-        <FlowEdge from={P.solar} to={P.hub} active={flow.pv>A} reverse={false} color={green}/>
-        <FlowEdge from={P.grid} to={P.hub} active={Math.abs(flow.grid)>A} reverse={flow.grid<0} color={green}/>
-        <FlowEdge from={P.batt} to={P.hub} active={Math.abs(flow.battery)>A} reverse={flow.battery>0} color={green}/>
-        <FlowEdge from={P.hub} to={P.home} active={flow.load>A} reverse={false} color={green}/>
-        <circle cx={P.hub.x} cy={P.hub.y} r={15} fill="#0D1F33"/>
-        <text x={P.hub.x} y={P.hub.y+5} textAnchor="middle" fontSize="14">⚡</text>
-        <FlowNode {...P.solar} color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
-        <FlowNode {...P.grid} color={flow.grid<0?GRID_OUT:GRID_IN} icon="🏛️" label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
-        <FlowNode {...P.batt} color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:(flow.battery>0?"charging":flow.battery<0?"discharging":null)}/>
-        <FlowNode {...P.home} color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
+      <svg viewBox="0 0 400 360" style={{width:"100%",height:"auto",display:"block"}}>
+        {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
+        <InverterGraphic count={flow.count}/>
+        <FlowNode x={56} y={78} color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
+        <FlowNode x={344} y={78} color={flow.grid<0?GRID_OUT:GRID_IN} icon="🏛️" label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
+        <FlowNode x={56} y={290} color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:null}/>
+        <FlowNode x={344} y={290} color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
+        {flow.gen>A      && <FlowNode x={200} y={34} r={17} color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
+        {flow.smartLoad>A&& <FlowNode x={200} y={332} r={17} color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
+        {flow.couple>A   && <FlowNode x={38} y={188} r={16} color="#0891B2" icon="🔗" label="AC" value={fmt(Math.abs(flow.couple))}/>}
       </svg>
     </div>
   );
@@ -1497,12 +1529,18 @@ export default function Dashboard() {
   // net (+charge/−discharge); Home comes from the balance to handle smart/EPS-port AIO inverters.
   const selStatus = statuses.filter(s=>s&&s.ok&&s.data&&selectedSns.includes(s.sn));
   const flowAgg = selStatus.length ? (()=>{
-    const pv = selStatus.reduce((s,x)=>s+(x.data.photovoltaic?.power?.totalDc||0),0);
-    const grid = selStatus.reduce((s,x)=>s+(x.data.grid?.netW||0),0);
-    const battery = selStatus.reduce((s,x)=>s+((x.data.battery?.charge||0)-(x.data.battery?.discharge||0)),0);
-    const load = selStatus.reduce((s,x)=>s+(balanceLoad(x.data)||0),0);
+    const sum = (fn)=>selStatus.reduce((s,x)=>s+(fn(x.data)||0),0);
+    const portW = (p)=> (p?.lines||[]).reduce((b,l)=>b+(l.power||0),0);
+    const pv = sum(d=>d.photovoltaic?.power?.totalDc);
+    const grid = sum(d=>d.grid?.netW);
+    const battery = sum(d=>(d.battery?.charge||0)-(d.battery?.discharge||0));
+    const load = sum(d=>balanceLoad(d));
+    const gen = sum(d=>portW(d.gen));
+    const smartLoad = sum(d=>{const sp=d.smartPorts||{}; return portW(sp.A)+portW(sp.B)+portW(sp.C);});
+    const couple = sum(d=>d.couple?.netW||d.couple?.power||0); // provision — shows when the API exposes it
     const w = selStatus.filter(x=>(x.data.battery?.soc||0)>0);
-    return { pv, grid, battery, load, soc: w.length? w.reduce((s,x)=>s+x.data.battery.soc,0)/w.length : null };
+    return { pv, grid, battery, load, gen, smartLoad, couple, count: selStatus.length,
+      soc: w.length? w.reduce((s,x)=>s+x.data.battery.soc,0)/w.length : null };
   })() : null;
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
