@@ -982,10 +982,10 @@ function ChartCard({children, loading, minHeight=300}) {
   );
 }
 
-const PROD_SHADES = ["#2563EB","#3B82F6","#60A5FA","#93C5FD","#BFDBFE","#1D4ED8"];
-const CONS_SHADES = ["#EA580C","#F97316","#FB923C","#FDBA74","#FED7AA","#C2410C"];
-const GRID_LINE = "#0D9488";
-const BAT_LINE = "#EAB308";
+const PROD_SHADES = ["#3B82F6","#60A5FA","#2563EB","#93C5FD","#1D4ED8","#BFDBFE"];
+const CONS_SHADES = ["#F97316","#FB923C","#EA580C","#FDBA74","#C2410C","#FED7AA"];
+const GRID_LINE = "#94A3B8";
+const BAT_LINE = "#22C55E";
 const SOC_LINE = "#16A34A";
 
 function DayTooltip({active, payload, label}) {
