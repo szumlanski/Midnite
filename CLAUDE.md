@@ -25,10 +25,24 @@
 - **End-user (Wise Naples)**: username `Wise Naples`, password `921551`. Logs in via Senergytec API. Sees only their own site.
 - **Installer / admin (FLOSOL2)**: username `FLOSOL2`, password `F78qq13m!`. Logs in via Eagle API. Sees all managed sites via `terminaluserinfo`. **This is also the admin account** — when the logged-in username is `FLOSOL2` (case-insensitive, constant `ADMIN_USER` in the proxy / `isAdmin` in the frontend) the **Admin tab** appears. No other account sees it.
 
-## Site Data (Wise Naples)
+## Site Data
 
-- Group ID: `47031`
-- 4 inverters: `2426-90190114PH`, `2426-90190151PH`, `2426-90190186PH`, `2426-90190187PH`
+- **Wise Naples** (reference "good" site): Group ID `47031`; 4 inverters `2426-90190114PH`, `2426-90190151PH`,
+  `2426-90190186PH`, `2426-90190187PH`. Feed-in/export metering works correctly.
+- **FLOSOL2 manages a fleet** (~8 sites): Wise Naples, Daggett Cayo Costa, Bochan, Mark Gorovoy, Jaime Theobald,
+  OffTheHook, GaleanaFrank, **Dotsikas, Konstantinos** (the one with the export-metering quirk — see Known Issues).
+- Inverter model in play: `MN 15-12KW-AIO` (AIO = all-in-one; serves house load through a smart/EPS port, so the
+  AC `load` register reads 0 — hence `balanceLoad`).
+
+## Current state / handoff (2026-06)
+Stable and deployed to `master` (auto-deploys to Vercel). Recent work this cycle: month/year production
+reconstruction; Day == Month consistency; Day chart rebuilt as ComposedChart (per-inverter or per-MPPT stacked
+areas + lines + zoom brush + per-inverter/total tooltip); multi-toggle inverter selector; balance-derived load;
+session caching; battery card (nominal-V capacity + rate/ETA); redesigned Live flow diagram (SVG inverter,
+squared connectors, value-relative speed, optional gen/smart-load/AC-couple nodes); **month/year bar alignment
+permanent fix** (single `stackId` + `stackOffset="sign"`); Admin page (access log on Vercel KV, energy-register
+read-out + fleet scan, full API debug runner + inverter-settings reader). **No open code tasks** — the Dotsikas
+export issue is diagnosed as inverter-side and intentionally left alone in the app.
 
 ---
 
@@ -98,7 +112,19 @@ All actions accept optional `username` and `password` in the request body. Falls
 
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
 
-**Debug actions** (used by the Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`, `installertest`, `flow`, `rawstatus`, `debug`.
+**Debug actions** (Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`,
+`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `codelookup`.
+
+### Reading inverter settings (device shadow / Modbus registers)
+The installer app's Remote-Setting dialog reads/writes inverter parameters via **device-shadow** endpoints.
+- **Read all settings** (`readsettings` action): `POST /Eagle/v1/Inverterapi/readDeviceShadow_RA_New_AutoID`
+  with `{ AutoId, ModbusArr: "[\"30B0\",\"2122\",…]" (JSON string of hex register codes), Force: 1, sign }`.
+  With `Force:1` it returns the values **synchronously** in `r.data.data` (`{code: value}`) plus reachability
+  flags in `r.data.status`. `readsettings` ships a default ~164-register set (Power-Control + Grid tabs).
+- `getDeviceShadowStatus_RA` returns only ~5 cached status flags (`1A18/1A44/1A45/1A46/1A4E`) — NOT the full set.
+- `shadow` action = the quick 5-flag read; `codelookup` searches the installer JS bundle for a code's label
+  (note: register labels are NOT in the bundle, so this returns nothing useful — map codes via the UI instead).
+- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`. Writes would use `setDeviceShadow_WA` — **do not write.**
 
 ### `dayexcel` — per-MPPT intraday (the day-chart CSV export)
 The day endpoint has **no per-MPPT** breakdown. The installer site's day-chart **Download** button hits a signed GET that returns a CSV with `MPPT1/2/3` (V/A/W), per-phase grid/load, battery, etc. at 5-min resolution. `dayexcel` calls it (sign over `{MemberID, inDate, GoodsID}`; **no token needed** — sign-authorized), parses the CSV, and returns `{ rows:[{time, mppt:[w1,w2,w3]}], activeMppts }`. Used only when **one inverter** is selected on the Day tab → production splits into stacked MPPT bands. `memberId` = `site.name` (the end-user MemberID, e.g. `Dotsikas, Konstantinos`).
@@ -257,11 +283,21 @@ If a color genuinely needs changing, confirm with Jason first.
 ---
 
 ## Live — Power Flow Diagram
-Animated SVG (`FlowDiagram`/`FlowNode`/`FlowEdge`) with Solar / Grid / Battery / Home around a center hub; moving
-dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`) show direction. Built from the **same `status` detail
-data** as the cards (NOT a second `getHybridFlowgraphRealTimeData` call) so every node matches the cards exactly:
-`grid.netW` (+import/−export), battery net (`charge−discharge`), Home = `balanceLoad`. Aggregates the **selected**
-inverters (the multi-toggle selector doubles as per-inverter toggles).
+Animated SVG (`FlowDiagram`/`FlowNode`/`FlowEdge`/`InverterGraphic`). Solar (top-left), Grid (top-right),
+Battery (bottom-left), Home (bottom-right) around a center **SVG inverter cabinet** (`InverterGraphic`, a drawn
+white unit — NOT a photo; user explicitly chose the SVG). Connectors are **squared/orthogonal elbows** (not
+diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **dot speed ∝ watts**
+(`animationDuration = clamp(4000/|W|, 0.3, 3)s` — 10kW flows 2× faster than 5kW).
+- Built from the **same `status` detail data** as the cards (NOT `getHybridFlowgraphRealTimeData`) so every node
+  matches: `grid.netW` (+import/−export), battery net (`charge−discharge`), Home = `balanceLoad`. Aggregates the
+  **selected** inverters; `flow.count` drives a **×N badge** on the inverter.
+- Node text sits on the side **away** from the inverter (`place="above"` top nodes / `"below"` bottom) so
+  connectors never cross labels.
+- Grid icon = drawn **transmission pylon** (`gridPylon`, passed via `iconSvg`), not a bank emoji.
+- **Optional nodes** appear only when active (>20 W): **Generator** (top-center, from `gen` smart-port power),
+  **Smart Load** (bottom-center) and **AC Couple** (left). Smart Load is **suppressed when it ≈ Home**
+  (`|smartLoad − load| < max(80, load*0.1)`) — on AIO units the house is served through a smart port, so the
+  reading IS Home and must not be shown twice.
 
 ## Inverter Selector — multi-toggle
 `selectedSns` (array). Each pill toggles in/out (can't deselect the last); **All** selects everything. Applies to
@@ -280,13 +316,31 @@ Live panels. Effects key on `snKey` (the joined sns).
 - **Persistence**: uses **Vercel KV / Upstash Redis** REST when `KV_REST_API_URL`+`KV_REST_API_TOKEN` (or the
   `UPSTASH_REDIS_REST_URL`+`UPSTASH_REDIS_REST_TOKEN`) env vars exist; otherwise an in-memory buffer that resets on
   cold start/redeploy. Add the store via Vercel **Storage → Marketplace → Upstash (Redis/KV)** → connect → redeploy.
-- **API Debug runner**: generic `action` + JSON-body caller + preset buttons for the debug actions.
+- **Energy Registers read-out**: per-inverter table (Grid now, Export today/total, Import today, PV today/total)
+  from the live `status` feed, with a ⚠ flag = **exporting now but Export-Today ≈ 0** (stuck feed-in counter).
+- **Scan all sites**: sweeps every managed site's live status and flags ones exporting but logging ~0 feed-in.
+  Only meaningful while a site is **actively exporting** (run midday ET); "idle ✓" just means "can't tell now".
+- **API Debug runner**: generic `action` + JSON-body caller + preset buttons (incl. `Read settings`,
+  `Device shadow`, `Lookup codes`) for the debug actions.
 
 ## Known Issues / History
 - **Month/year "didn't match Day" saga**: root cause was the broken `Production` field (see CRITICAL note above),
   not units or auth. Fixed by `rollupProduction`. The vendor's own consumer site shows the same broken field.
 - No per-MPPT **history** endpoint exists on the JSON API (18 names probed → all `405`); per-MPPT day data is only
   available via the **CSV export** (`dayexcel`). Live per-MPPT is in `getInverterStatus` (`photovoltaic.mppts`).
+- **Dotsikas zero-export (RESOLVED — inverter-side, not the app)**: the Dotsikas site (Naples FL) shows **0
+  grid export** in month/year (and the stuck ⚠ flag) even though it clearly exports (the day feed `powerToGrid`
+  is correct). Cause: the inverter's **feed-in energy counter is frozen** (Total Feed-In stuck; the day CT reads
+  export instantaneously but the energy register doesn't accumulate). The monthly/yearly API faithfully reports
+  that 0 — verified by comparing the raw `monthProductionAndConsumptionArea` for Dotsikas (all `powerToGrid:0`)
+  vs Wise (correct). A full **164-register settings diff** (Dotsikas `56076` vs Wise `65856`) showed the **only**
+  differences are the **generator configuration** (`2122=1` vs 0, `2156=1` vs 0, plus gen power/SOC params
+  `2125/2126/2129`); every grid/feed-in/meter register is identical. So a generator-config flag (likely
+  "Generator on grid side") gates feed-in accounting. **Fix is on-site only** (changing gen settings needs the
+  inverter in standby — not remote). **Decision: do nothing in the app** — Day/Month/Year all show the honest `0`
+  from the rollup (consistent). When a tech fixes it on-site, re-run Admin → Scan all sites to confirm. The day
+  feed has the real export if an integrated workaround is ever wanted (rejected for now — "not changing the whole
+  app over one site").
 
 ---
 
