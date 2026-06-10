@@ -939,6 +939,8 @@ function InverterGraphic({count}) {
       {[0,1,2,3,4,5].map(i=><circle key={i} cx={x+12+i*7.2} cy={y+11} r="1.7" fill={i<2?"#22C55E":i<4?"#F59E0B":"#CBD5E1"}/>)}
       <rect x={x+15} y={y+19} width={w-30} height="15" rx="2.5" fill="#111827"/>
       <line x1={x} y1={y+h*0.5} x2={x+w} y2={y+h*0.5} stroke="#E2E8F0" strokeWidth="1.5"/>
+      {/* real product photo — overlays the SVG fallback once /AIO.png is in the repo (404 → renders nothing) */}
+      <image href="/AIO.png" x={x-6} y={y-6} width={w+12} height={h+12} preserveAspectRatio="xMidYMid meet"/>
       {count>1&&<g>
         <circle cx={x+w-1} cy={y+1} r="12" fill="#0D1F33"/>
         <text x={x+w-1} y={y+5} textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily={SANS}>×{count}</text>
