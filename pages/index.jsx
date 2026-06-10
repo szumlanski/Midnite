@@ -1393,6 +1393,7 @@ function AdminPanel({site, inverters, statuses=[]}) {
     {label:"Installer test", action:"installertest", body:{sn, memberAutoId:site?.memberAutoId, date:thisMonth}},
     {label:"Vendor JS", action:"vendorsrc", body:{}},
     {label:"Day excel", action:"dayexcel", body:{sn, date:today, memberId:site?.name}},
+    {label:"Device shadow", action:"shadow", body:{sn, autoId:inverters[0]?.autoId, memberAutoId:site?.memberAutoId}},
   ];
   const fmtTs = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 
