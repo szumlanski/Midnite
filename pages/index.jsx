@@ -945,8 +945,6 @@ function InverterGraphic({count}) {
       {[0,1,2,3,4,5].map(i=><circle key={i} cx={x+12+i*7.2} cy={y+11} r="1.7" fill={i<2?"#22C55E":i<4?"#F59E0B":"#CBD5E1"}/>)}
       <rect x={x+15} y={y+19} width={w-30} height="15" rx="2.5" fill="#111827"/>
       <line x1={x} y1={y+h*0.5} x2={x+w} y2={y+h*0.5} stroke="#E2E8F0" strokeWidth="1.5"/>
-      {/* real product photo — overlays the SVG fallback once /AIO.png is in the repo (404 → renders nothing) */}
-      <image href="/AIO.png" x={x-6} y={y-6} width={w+12} height={h+12} preserveAspectRatio="xMidYMid meet"/>
       {count>1&&<g>
         <circle cx={x+w-1} cy={y+1} r="12" fill="#0D1F33"/>
         <text x={x+w-1} y={y+5} textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily={SANS}>×{count}</text>
@@ -958,15 +956,19 @@ function FlowDiagram({flow}) {
   if(!flow) return null;
   const A = 20;
   const L=170, R=230, T=130, B=234, fy1=158, fy2=206;
+  // A smart-port reading that ≈ the whole house load IS the house (AIO inverters serve the house
+  // through a smart port), not a separate controllable load. Only show Smart Load when it's
+  // genuinely distinct from Home — otherwise it's just Home shown twice.
+  const showSmart = flow.smartLoad>A && Math.abs(flow.smartLoad-flow.load) > Math.max(80, flow.load*0.1);
   const edges = [
     { d:`M56,92 L56,${fy1} L${L},${fy1}`, active:flow.pv>A, reverse:false, value:flow.pv },
     { d:`M344,92 L344,${fy1} L${R},${fy1}`, active:Math.abs(flow.grid)>A, reverse:flow.grid<0, value:flow.grid },
     { d:`M56,300 L56,${fy2} L${L},${fy2}`, active:Math.abs(flow.battery)>A, reverse:flow.battery>0, value:flow.battery },
     { d:`M344,300 L344,${fy2} L${R},${fy2}`, active:flow.load>A, reverse:true, value:flow.load },
   ];
-  if(flow.gen>A)       edges.push({ d:`M200,81 L200,${T}`, active:true, reverse:false, value:flow.gen });
-  if(flow.smartLoad>A) edges.push({ d:`M200,305 L200,${B}`, active:true, reverse:true, value:flow.smartLoad });
-  if(flow.couple>A)    edges.push({ d:`M56,182 L${L},182`, active:true, reverse:flow.couple<0, value:flow.couple });
+  if(flow.gen>A)  edges.push({ d:`M200,81 L200,${T}`, active:true, reverse:false, value:flow.gen });
+  if(showSmart)   edges.push({ d:`M200,305 L200,${B}`, active:true, reverse:true, value:flow.smartLoad });
+  if(flow.couple>A) edges.push({ d:`M56,182 L${L},182`, active:true, reverse:flow.couple<0, value:flow.couple });
   return (
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:700,color:FAINT,padding:"4px 8px 0",letterSpacing:"0.06em"}}>POWER FLOW</div>
@@ -978,7 +980,7 @@ function FlowDiagram({flow}) {
         <FlowNode x={56} y={300} place="below" color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:null}/>
         <FlowNode x={344} y={300} place="below" color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
         {flow.gen>A      && <FlowNode x={200} y={64} r={17} place="above" color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
-        {flow.smartLoad>A&& <FlowNode x={200} y={322} r={17} place="below" color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
+        {showSmart      && <FlowNode x={200} y={322} r={17} place="below" color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
         {flow.couple>A   && <FlowNode x={40} y={182} r={16} place="below" color="#0891B2" icon="🔗" label="AC" value={fmt(Math.abs(flow.couple))}/>}
       </svg>
     </div>
