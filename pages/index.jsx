@@ -914,7 +914,25 @@ function FlowEdge({d, active, reverse, value=0, color="#16A34A"}) {
     className={active?(reverse?"flow-rev":"flow-anim"):""}
     style={active?{animationDuration:`${dur}s`}:undefined}/>;
 }
-function FlowNode({x, y, r=22, color, icon, label, value, sub, place="below"}) {
+// High-tension transmission tower (lattice pylon) drawn in white for the GRID node.
+const gridPylon = (cx, cy) => (
+  <g stroke="#fff" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none">
+    <line x1={cx-7} y1={cy+12} x2={cx-2.5} y2={cy-11}/>
+    <line x1={cx+7} y1={cy+12} x2={cx+2.5} y2={cy-11}/>
+    <line x1={cx-5.4} y1={cy+3.5} x2={cx+5.4} y2={cy+3.5}/>
+    <line x1={cx-3.7} y1={cy-4.5} x2={cx+3.7} y2={cy-4.5}/>
+    <path d={`M${cx-7},${cy+12} L${cx+5.4},${cy+3.5} M${cx+7},${cy+12} L${cx-5.4},${cy+3.5}`}/>
+    <path d={`M${cx-5.4},${cy+3.5} L${cx+3.7},${cy-4.5} M${cx+5.4},${cy+3.5} L${cx-3.7},${cy-4.5}`}/>
+    <line x1={cx-10} y1={cy-7} x2={cx+10} y2={cy-7}/>
+    <line x1={cx-7} y1={cy-10.5} x2={cx+7} y2={cy-10.5}/>
+    <line x1={cx} y1={cy-10.5} x2={cx} y2={cy-13}/>
+    <line x1={cx-10} y1={cy-7} x2={cx-10} y2={cy-5}/>
+    <line x1={cx+10} y1={cy-7} x2={cx+10} y2={cy-5}/>
+    <line x1={cx-7} y1={cy-10.5} x2={cx-7} y2={cy-8.5}/>
+    <line x1={cx+7} y1={cy-10.5} x2={cx+7} y2={cy-8.5}/>
+  </g>
+);
+function FlowNode({x, y, r=22, color, icon, iconSvg, label, value, sub, place="below"}) {
   // All text sits on the side AWAY from the inverter (above for top nodes, below for bottom ones)
   // so the connector line — which exits the icon toward the center — never crosses the labels.
   const above = place==="above";
@@ -924,7 +942,7 @@ function FlowNode({x, y, r=22, color, icon, label, value, sub, place="below"}) {
   return (
     <g>
       <circle cx={x} cy={y} r={r} fill={color}/>
-      <text x={x} y={y+r*0.28} textAnchor="middle" fontSize={r-4}>{icon}</text>
+      {iconSvg ? iconSvg(x, y) : <text x={x} y={y+r*0.28} textAnchor="middle" fontSize={r-4}>{icon}</text>}
       <text x={x} y={labelY} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
       <text x={x} y={valueY} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
       {sub&&<text x={x} y={subY} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
@@ -976,7 +994,7 @@ function FlowDiagram({flow}) {
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
         <InverterGraphic count={flow.count}/>
         <FlowNode x={56} y={92} place="above" color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
-        <FlowNode x={344} y={92} place="above" color={flow.grid<0?GRID_OUT:GRID_IN} icon="🏛️" label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
+        <FlowNode x={344} y={92} place="above" color={flow.grid<0?GRID_OUT:GRID_IN} iconSvg={gridPylon} label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
         <FlowNode x={56} y={300} place="below" color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:null}/>
         <FlowNode x={344} y={300} place="below" color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
         {flow.gen>A      && <FlowNode x={200} y={64} r={17} place="above" color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
