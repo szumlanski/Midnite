@@ -664,6 +664,7 @@ export default async function handler(req, res) {
         }
         return res.json({ autoId, trigger: trig?.status ?? trig, busy, polls, requested: REG.length, count: Object.keys(data).length, data });
       }
+      case "shadow": {
         // Read the inverter's cached device-shadow (settings) — hex attribute codes → values.
         // Populate the full set first by opening the inverter's Settings page in the installer app,
         // then read it here. Returns the complete data object so it can be diffed across inverters.
