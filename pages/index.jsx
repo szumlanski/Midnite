@@ -1321,7 +1321,7 @@ const TABS = [
 ];
 const ADMIN_TAB = { id:"admin", label:"Admin", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg> };
 
-function AdminPanel({site, inverters}) {
+function AdminPanel({site, inverters, statuses=[]}) {
   const [log, setLog] = useState(null);
   const [logErr, setLogErr] = useState(null);
   const [persistent, setPersistent] = useState(false);
@@ -1329,8 +1329,43 @@ function AdminPanel({site, inverters}) {
   const [bodyText, setBodyText] = useState("{}");
   const [out, setOut] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scan, setScan] = useState(null);
+  const [scanning, setScanning] = useState(false);
   const sn = inverters[0]?.sn || "";
   const darkInput = {background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"6px 8px",fontFamily:SANS,fontSize:12};
+
+  // Per-inverter energy registers for the CURRENT site (from the live status feed). A "stuck" feed-in
+  // register = exporting power right now (grid net < 0) but Export Today ≈ 0 — the Dotsikas symptom.
+  const regs = statuses.filter(s=>s?.ok&&s?.data).map(s=>{
+    const d=s.data, netW=d.grid?.netW||0, expToday=d.grid?.sold?.today||0;
+    return { sn:s.sn, label:s.label, netW,
+      pvToday:d.photovoltaic?.production?.today, pvTotal:d.photovoltaic?.production?.total,
+      expToday, expTotal:d.grid?.sold?.total, impToday:d.grid?.consumption?.today,
+      stuck: netW < -100 && expToday < 50 };
+  });
+
+  // Sweep every managed site and flag ones exporting power but logging ~0 feed-in (run midday).
+  const runScan = async () => {
+    setScanning(true); setScan(null);
+    try {
+      const sr = await api("sites", {});
+      const sites = (sr.sites || (Array.isArray(sr)?sr:[])).filter(s=>s.GoodsID?.length);
+      const out=[];
+      for(const s of sites){
+        const serials = s.GoodsID.map(g=>typeof g==="string"?g:g.GoodsID);
+        const autoIds = s.GoodsID.map(g=>typeof g==="object"?g.AutoID:null);
+        try {
+          const r = await api("status", { serials, autoIds, memberAutoId: s.MemberAutoID });
+          const inv = (r.results||[]).filter(x=>x.ok&&x.data);
+          const exportingNow = inv.some(x=>(x.data.grid?.netW||0) < -100);
+          const expTodayWh = inv.reduce((a,x)=>a+(x.data.grid?.sold?.today||0),0);
+          out.push({ name:s.MemberID, n:inv.length, exportingNow, expTodayKwh:expTodayWh/1000, stuck: exportingNow && expTodayWh<50 });
+        } catch(e){ out.push({ name:s.MemberID, err:String(e).slice(0,60) }); }
+        setScan([...out]);
+      }
+    } catch(e){ setScan([{name:"ERROR: "+String(e)}]); }
+    setScanning(false);
+  };
 
   const loadLog = async () => {
     setLogErr(null);
@@ -1361,8 +1396,44 @@ function AdminPanel({site, inverters}) {
   ];
   const fmtTs = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 
+  const Th = ({children, a="right"}) => <th style={{textAlign:a,padding:"4px 8px",fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap"}}>{children}</th>;
+  const Td = ({children, a="right", c=TEXT, b=false}) => <td style={{textAlign:a,padding:"4px 8px",fontSize:12,color:c,fontWeight:b?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{children}</td>;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
+      {/* Energy registers — spot stuck feed-in counters */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Energy Registers — {site?.name||"site"}</div>
+            <div style={{fontSize:11,color:FAINT}}>⚠ = exporting now but Export-Today ≈ 0 (stuck feed-in counter)</div>
+          </div>
+          <button onClick={runScan} disabled={scanning} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#0EA5E9",color:"#fff",fontSize:11,fontWeight:700,fontFamily:SANS,cursor:scanning?"default":"pointer"}}>{scanning?"Scanning…":"Scan all sites"}</button>
+        </div>
+        {regs.length===0
+          ? <div style={{fontSize:12,color:FAINT}}>No live inverter data yet (open the Live tab once).</div>
+          : <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr>
+              <Th a="left">Inverter</Th><Th>Grid now</Th><Th>Export today</Th><Th>Export total</Th><Th>Import today</Th><Th>PV today</Th><Th>PV total</Th><Th a="center">Flag</Th>
+            </tr></thead><tbody>
+              {regs.map(r=>(<tr key={r.sn} style={{borderTop:`1px solid ${BORDER}`}}>
+                <Td a="left" b>{r.label} <span style={{color:FAINT,fontWeight:400,fontFamily:"monospace",fontSize:10}}>{r.sn.slice(-8)}</span></Td>
+                <Td c={r.netW<-50?GRID_OUT:r.netW>50?GRID_IN:MUTED}>{fmt(Math.abs(r.netW))}{r.netW<-50?" ⤴":r.netW>50?" ⤵":""}</Td>
+                <Td c={r.stuck?GRID_IN:TEXT} b={r.stuck}>{fmtE(r.expToday)}</Td>
+                <Td c={MUTED}>{fmtE(r.expTotal)}</Td>
+                <Td>{fmtE(r.impToday)}</Td>
+                <Td>{fmtE(r.pvToday)}</Td>
+                <Td c={MUTED}>{fmtE(r.pvTotal)}</Td>
+                <Td a="center">{r.stuck?<span style={{color:GRID_IN,fontWeight:800}}>⚠</span>:<span style={{color:BATTERY}}>✓</span>}</Td>
+              </tr>))}
+            </tbody></table></div>}
+        {scan && <div style={{marginTop:12,borderTop:`1px solid ${BORDER}`,paddingTop:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:MUTED,marginBottom:6}}>FLEET SCAN ({scan.length} sites){scanning?" …":""}</div>
+          {scan.map((s,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12,padding:"3px 0"}}>
+            <span style={{color:s.stuck?GRID_IN:TEXT,fontWeight:s.stuck?700:500}}>{s.stuck?"⚠ ":s.err?"⛔ ":"✓ "}{s.name}</span>
+            <span style={{color:MUTED,fontVariantNumeric:"tabular-nums"}}>{s.err?s.err:`${s.exportingNow?"exporting":"idle"} · today ${(s.expTodayKwh||0).toFixed(1)} kWh`}</span>
+          </div>))}
+        </div>}
+      </div>
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
           <div>
@@ -1538,16 +1609,13 @@ export default function Dashboard() {
         setDayData(aggregateDayData(dayAll));
         setDayMode({type:"inverter"});
       }
-      // Grid export integrated from the (reliable) intraday feed — used when the month rollup's
-      // toGrid is broken/0 for certain inverter firmwares (e.g. Dotsikas / mode 795).
-      let dayExpWh = 0;
-      for(const inv of dayAll) for(const r of (inv?.Data||[])) dayExpWh += parseFloat(r.powerToGrid||0);
-      dayExpWh *= (5/60);
+      // Day summary tiles read straight from the month rollup so Day == Month == Year for every
+      // field (export included). If a site's rollup reports 0 export (stuck feed-in register on the
+      // inverter), Day shows 0 too — consistent, and the Admin register read-out surfaces the cause.
       const md = aggregateMonthData(monthAll).find(r=>Number(r.day)===dayNum);
       setDaySummary(md ? {
         produced: md.production*1000, consumed: md.consumption*1000,
-        imported: md.fromGrid*1000,
-        exported: md.toGrid>0 ? md.toGrid*1000 : dayExpWh,
+        imported: md.fromGrid*1000, exported: md.toGrid*1000,
         charged: md.batCharge*1000, discharged: md.batDischarge*1000,
       } : null);
       setDayLoading(false);
@@ -1660,7 +1728,7 @@ export default function Dashboard() {
           })()}
           {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
-          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters}/>}
+          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses}/>}
         </div>
 
         {/* Mobile bottom nav */}
