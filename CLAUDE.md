@@ -220,8 +220,11 @@ the chart prompts this on multi-inverter sites (suppressed on single-inverter si
 Recurring regression: the up (production) and down (consumption) bars render **side-by-side** instead of
 flush over the zero line. The bulletproof fix is already in place and must stay:
 
-**Every `<Bar>` (positive AND negative) shares ONE `stackId="a"`.** Recharts stacks positives upward and
-negatives downward at the *same* x — so they're always aligned, regardless of bar width or data count.
+**Every `<Bar>` (positive AND negative) shares ONE `stackId="a"`, and the `<BarChart>` MUST set
+`stackOffset="sign"`.** With `stackOffset="sign"` Recharts stacks positives upward from 0 and negatives
+downward from 0 at the *same* x — aligned, and each series keeps its own colour. **Without `stackOffset="sign"`
+the default cumulative stacking draws the negative (orange consumption) bar *over* the positive (blue
+production) one — production disappears.** Both pieces are required together.
 
 ```js
 const BAR_MONTH = { barCategoryGap: "20%", maxBarSize: 22 };

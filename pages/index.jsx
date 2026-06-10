@@ -1141,7 +1141,7 @@ function MonthChart({month, onMonthChange, data, loading}) {
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={340}>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
+          <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="day" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
@@ -1208,7 +1208,7 @@ function YearChart({year, onYearChange, data, loading}) {
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={320}>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
+          <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="month" tick={{fill:FAINT,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
