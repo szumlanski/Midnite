@@ -1394,6 +1394,7 @@ function AdminPanel({site, inverters, statuses=[]}) {
     {label:"Vendor JS", action:"vendorsrc", body:{}},
     {label:"Day excel", action:"dayexcel", body:{sn, date:today, memberId:site?.name}},
     {label:"Device shadow", action:"shadow", body:{sn, autoId:inverters[0]?.autoId, memberAutoId:site?.memberAutoId}},
+    {label:"Lookup codes", action:"codelookup", body:{codes:["1A18","1A44"]}},
   ];
   const fmtTs = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 

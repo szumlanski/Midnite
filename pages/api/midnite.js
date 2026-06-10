@@ -652,6 +652,28 @@ export default async function handler(req, res) {
           return res.json({ ok: true, sn, busy: r?.busy ?? null, count: Object.keys(data).length, data });
         } catch (e) { return res.json({ ok: false, sn, err: e.message }); }
       }
+      case "codelookup": {
+        // Search the installer app's JS bundle for device-shadow attribute codes to recover their
+        // human-readable labels and value meanings (so we can name the differing settings).
+        const codes = (req.body && req.body.codes) || ["1A18","1A44","1A45","1A46","1A4E"];
+        const ROOT = "https://service.midnitepower.com/";
+        const UA = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0 Safari/537.36" };
+        const grab = async (u) => (await fetch(u, { headers: UA })).text();
+        const home = await grab(ROOT);
+        const srcs = [...home.matchAll(/(?:src|href)=["']([^"']+\.js[^"']*)["']/gi)].map(m=>m[1]);
+        const abs = (s)=> s.startsWith("http")?s:ROOT.replace(/\/$/,"")+(s.startsWith("/")?s:"/"+s);
+        let js = "";
+        for (const s of srcs.slice(0,6)) { try { js += "\n" + await grab(abs(s)); } catch(e){} }
+        const out = {};
+        for (const code of codes) {
+          const hits = [];
+          const re = new RegExp(code.replace(/[^A-Za-z0-9]/g,""), "gi");
+          let m, n=0;
+          while ((m = re.exec(js)) && n < 6) { hits.push(js.slice(Math.max(0,m.index-140), m.index+160).replace(/\s+/g," ")); n++; }
+          out[code] = hits;
+        }
+        return res.json({ bundleLen: js.length, found: out });
+      }
       case "probemppt": {
         // TEMPORARY — hunt for a per-MPPT/PV-string intraday history endpoint for the day chart.
         const { sn, date } = req.body || {};
