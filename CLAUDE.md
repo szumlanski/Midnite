@@ -236,16 +236,23 @@ const BAR_YEAR  = { barCategoryGap: "20%", maxBarSize: 44 };
   fragile and broke whenever sizing changed. The single shared stackId needs no `barGap`/`barSize` tricks.
 - Day is a `ComposedChart` (areas/lines), so this does not apply to it.
 
-**Why `BAR_DAY` has NO `barSize`**: In Recharts 3.x (`combineAllBarPositions.js`), when `barSize` IS set, the positioning code checks `if (sum >= bandSize) { realBarGap = 0; }`. With 288 data points, `bandSize ≈ 3px` and any reasonable `barSize` makes `sum >> bandSize`, so Recharts **always resets barGap to 0**, rendering pos and neg groups side-by-side. The `barCategoryGap` prop is also only consulted in the else branch (no barSize). Fix: omit `barSize` entirely. Recharts then uses `originalSize = (bandSize - 0 - 1*(-bandSize)) / 2 = bandSize`, and both group offsets collapse to 0 — perfect overlap.
-
-**Why `BAR_MONTH` and `BAR_YEAR` use `barSize`**: These charts have far fewer data points (~30 and 12), so `bandSize` is large enough that `barSize < bandSize` — the reset condition never triggers. `barGap = -barSize` aligns pos/neg groups to overlap correctly.
-
 **Other invariants that must never change:**
 - Each `<Bar>` must have `activeBar={false}` — prevents white hover box (Recharts 3.x bug)
 - `<Tooltip>` must have `cursor={false}` — same reason
 - Do NOT add `verticalPoints` to `<CartesianGrid>` — causes misalignment
-- `stackId="pos"` for above-zero bars, `stackId="neg"` for below-zero bars — never share a stackId between them
 - Month/year use `consumptionNeg: -(d.consumption||0)` etc. to render below zero — do NOT use ComposedChart
+
+### !! CHART COLORS — DO NOT CHANGE WITHOUT AN EXPLICIT REQUEST !!
+The palette is intentional and consistent across the app. **Never recolor a chart/series as a side effect of a
+redesign.** (A Day-chart redesign once silently changed grid → teal and battery → amber; it had to be reverted.)
+The canonical series colors:
+- Production / Solar = **blue** `CHART_PROD #3B82F6` (Day shades lead with this in `PROD_SHADES`)
+- Consumption / Load = **orange** `CHART_CONS #F97316` (`CONS_SHADES`)
+- Battery = **green** `CHART_BAT #22C55E` / `BAT_LINE`
+- Grid = **gray** `CHART_GRID #94A3B8` / `GRID_LINE`
+- SOC = green `SOC_LINE #16A34A`
+
+If a color genuinely needs changing, confirm with Jason first.
 
 ---
 
