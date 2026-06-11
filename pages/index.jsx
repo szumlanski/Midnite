@@ -1098,6 +1098,19 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
   const charged    = summary ? summary.charged    : data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
   const discharged = summary ? summary.discharged : data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
   const chartData = data.map(d=>({ ...d, batNet: d.batNet!=null ? d.batNet : ((d.batCharge||0)-(d.batDischarge||0)) }));
+  // Y-axis: positive (production) extent must always be >= negative (consumption) extent, so the
+  // zero line never sits above the vertical midpoint. Compute the stacked extents (incl. grid/battery
+  // line spikes) and force domain = [-N, max(P,N)].
+  let P=0, N=0;
+  for(const d of chartData){
+    let p=0; for(const s of prodSeries) p+=(d[s.key]||0);
+    let n=0; for(const s of consSeries) n+=-(d[s.key]||0);
+    const g=d.gridNet||0, b=d.batNet||0;
+    p=Math.max(p,g,b,0); n=Math.max(n,-g,-b,0);
+    if(p>P)P=p; if(n>N)N=n;
+  }
+  const yTop=Math.max(P,N,100);
+  const powerDomain=[-N*1.05, yTop*1.05];
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
@@ -1126,8 +1139,8 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-            <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval={23} minTickGap={20}/>
-            <YAxis yAxisId="power" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
+            <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={44} tickFormatter={t=>typeof t==="string"?t.slice(0,5):t}/>
+            <YAxis yAxisId="power" domain={powerDomain} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
             <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
             <ReferenceLine yAxisId="power" y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip content={<DayTooltip/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
