@@ -1261,7 +1261,7 @@ function GridVoltageChart({data}) {
             <ReferenceLine yAxisId="v" y={126} stroke={SOLAR} strokeDasharray="2 4" strokeWidth={1}/>
             <ReferenceLine yAxisId="v" y={110} stroke={GRID_IN} strokeDasharray="2 4" strokeWidth={1}/>
             <ReferenceLine yAxisId="v" y={127} stroke={GRID_IN} strokeDasharray="2 4" strokeWidth={1}/>
-            <Tooltip cursor={{stroke:FAINT,strokeDasharray:"3 3"}} contentStyle={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,fontSize:12,fontFamily:SANS}} formatter={(v,n)=>[v!=null?`${Number(v).toFixed(n==="Hz"?2:1)} ${n==="Hz"?"Hz":"V"}`:"—", n]} labelFormatter={t=>t}/>
+            <Tooltip cursor={{stroke:FAINT,strokeDasharray:"3 3"}} contentStyle={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,fontSize:12,fontFamily:SANS}} labelStyle={{fontWeight:700,color:TEXT,marginBottom:2}} formatter={(v,n)=>[v!=null?`${Number(v).toFixed(n==="Hz"?2:1)} ${n==="Hz"?"Hz":"V"}`:"—", n]} labelFormatter={t=>`🕐 ${t}`}/>
             <Line yAxisId="v" type="monotone" dataKey="v1" stroke={VOLT_L1} strokeWidth={1.6} dot={false} name="L1–N" isAnimationActive={false} connectNulls={false}/>
             {hasL2&&<Line yAxisId="v" type="monotone" dataKey="v2" stroke={VOLT_L2} strokeWidth={1.6} dot={false} name="L2–N" isAnimationActive={false} connectNulls={false}/>}
             {showHz&&<Line yAxisId="hz" type="monotone" dataKey="hz" stroke={VOLT_HZ} strokeWidth={1.2} dot={false} name="Hz" isAnimationActive={false} connectNulls={false}/>}
