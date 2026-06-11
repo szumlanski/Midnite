@@ -515,8 +515,10 @@ export default async function handler(req, res) {
             mppt: [wOf(m1), wOf(m2), wOf(m3)],
             gridV: [vOf(g1), vOf(g2)], // [L1-N, L2-N]
             gridHz: numOf(f[ix("GridFac",21)]),
-            // flat metric map (Hyper charts) — every parameter at this 5-min interval
-            pvW: wOf(f[ix("PV",4)]) || (wOf(m1)+wOf(m2)+wOf(m3)),
+            // flat metric map (Hyper charts) — every parameter at this 5-min interval.
+            // PV total comes from the MPPT watt sum; the "PV" column is in kW (e.g. "8.31KW"), so it
+            // is only a ×1000 fallback when the per-MPPT split is absent.
+            pvW: (wOf(m1)+wOf(m2)+wOf(m3)) || Math.round(numOf(f[ix("PV",4)])*1000),
             mppt1W: wOf(m1), mppt2W: wOf(m2), mppt3W: wOf(m3),
             mppt1V: vOf(m1), mppt2V: vOf(m2), mppt3V: vOf(m3),
             mppt1A: aOf(m1), mppt2A: aOf(m2), mppt3A: aOf(m3),
