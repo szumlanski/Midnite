@@ -495,20 +495,20 @@ const FAULT_DESC = {
 
 function FaultPanel({site}) {
   const [events, setEvents] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(thirtyAgo);
   const [endDate, setEndDate] = useState(today);
+  // Loads only on demand (Search button) — never auto-fetches on site view.
   const load = useCallback(()=>{
-    if(!site) return;
-    setLoading(true); setEvents(null);
+    if(!site||!startDate||!endDate) return;
+    setLoading(true); setEvents(null); setExpanded(true);
     api("logsearch",{serials:site.inverters.map(i=>i.sn),startDate,endDate})
       .then(d=>setEvents(d.events||[]))
       .catch(()=>setEvents([]))
       .finally(()=>setLoading(false));
   },[site,startDate,endDate]);
-  useEffect(()=>{ load(); },[load]);
   const activeCount = events?.filter(e=>e.status==="1").length||0;
   const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"4px 8px",fontSize:11,fontFamily:SANS,cursor:"pointer"};
   return (
@@ -518,6 +518,7 @@ function FaultPanel({site}) {
           <span style={{fontSize:12,color:FAINT}}>⚡</span>
           <span style={{fontSize:12,fontWeight:600,color:MUTED}}>Fault Log</span>
           {!loading&&events&&<span style={{fontSize:11,color:FAINT}}>— {events.length} events · {activeCount} active</span>}
+          {!loading&&!events&&<span style={{fontSize:11,color:FAINT}}>— pick a range & search</span>}
           {loading&&<span style={{fontSize:11,color:FAINT}}>Loading…</span>}
         </div>
         <span style={{fontSize:11,color:FAINT}}>{expanded?"▲":"▼"}</span>
@@ -529,9 +530,11 @@ function FaultPanel({site}) {
             <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inputS}/>
             <span style={{fontSize:11,color:FAINT}}>to</span>
             <input type="date" value={endDate} max={today} onChange={e=>setEndDate(e.target.value)} style={inputS}/>
+            <button onClick={load} disabled={loading||!startDate||!endDate} style={{...inputS,background:SOLAR,color:"#fff",border:"none",fontWeight:700,cursor:loading?"default":"pointer"}}>{loading?"…":"Search"}</button>
           </div>
           <div style={{borderTop:`1px solid ${BORDER}`,overflowY:"auto",maxHeight:320,padding:"4px 0"}}>
             {loading&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>Loading…</div>}
+            {!loading&&!events&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>Pick a date range and press Search.</div>}
             {!loading&&events?.length===0&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>No fault events in this range</div>}
             {!loading&&events?.map((e,i)=>(
               <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"7px 16px",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
