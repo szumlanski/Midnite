@@ -435,22 +435,33 @@ export default async function handler(req, res) {
         }});
         const text = await resp.text();
         if (!resp.ok) return res.status(502).json({ error: `excel ${resp.status}`, sample: text.slice(0,200) });
-        // Parse the quoted CSV. Header row begins with "Time"; columns: Time,MPPT1,MPPT2,MPPT3,...
+        // Parse the quoted CSV. Header row begins with "Time". Cells are "V/A/W" (or "kWh", "HZ"…).
+        // Columns of interest: MPPT1-3 (production split) + Grid1/Grid2 = per-leg L-N grid voltage +
+        // GridFac = grid frequency, all at 5-min resolution (for the power-quality / voltage plot).
         const wOf = (cell) => { const p = String(cell||"").split("/"); const last = p[p.length-1]||""; return parseFloat(last.replace(/[^0-9.\-]/g,"")) || 0; };
+        const vOf = (cell) => { const p = String(cell||"").split("/"); return parseFloat((p[0]||"").replace(/[^0-9.\-]/g,"")) || 0; };
+        const numOf = (cell) => parseFloat(String(cell||"").replace(/[^0-9.\-]/g,"")) || 0;
         const rows = []; let started = false; let header = [];
+        let iG1 = 9, iG2 = 15, iFac = 21; // default positions; corrected from the header when present
         for (const line of text.split(/\r?\n/)) {
           const f = [...line.matchAll(/"([^"]*)"/g)].map(m=>m[1]);
           if (!f.length) continue;
-          if (f[0] === "Time") { header = f; started = true; continue; }
+          if (f[0] === "Time") {
+            header = f; started = true;
+            const idx = (n) => { const i = f.indexOf(n); return i >= 0 ? i : null; };
+            iG1 = idx("Grid1") ?? iG1; iG2 = idx("Grid2") ?? iG2; iFac = idx("GridFac") ?? iFac;
+            continue;
+          }
           if (!started || !/^\d{4}-\d{2}-\d{2}[ T]/.test(f[0])) continue;
-          rows.push({ time: f[0].split(/[ T]/)[1], mppt: [wOf(f[1]), wOf(f[2]), wOf(f[3])] });
+          rows.push({
+            time: f[0].split(/[ T]/)[1],
+            mppt: [wOf(f[1]), wOf(f[2]), wOf(f[3])],
+            gridV: [vOf(f[iG1]), vOf(f[iG2])], // [L1-N, L2-N]
+            gridHz: numOf(f[iFac]),
+          });
         }
         const activeMppts = [0,1,2].filter(i => rows.some(r => Math.abs(r.mppt[i]) > 1));
-        // header + a raw sample row are returned so the exact grid-voltage column(s) can be
-        // identified before wiring up a per-interval L-N voltage plot.
-        const sampleLine = text.split(/\r?\n/).find(l => /^"?\d{4}-\d{2}-\d{2}[ T]/.test(l)) || "";
-        const sampleRow = [...sampleLine.matchAll(/"([^"]*)"/g)].map(m=>m[1]);
-        return res.json({ rows, activeMppts, count: rows.length, header, sampleRow });
+        return res.json({ rows, activeMppts, count: rows.length, header });
       }
       case "month": {
         const { sn, date } = req.body || {};

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
-import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -1218,6 +1218,70 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
   );
 }
 
+// Grid line-to-neutral voltage over the day (5-min resolution, from the dayexcel CSV) for
+// power-quality diagnosis. Two legs (L1-N / L2-N on a split-phase service) + frequency, with the
+// ANSI C84.1 service-voltage bands shaded so out-of-tolerance excursions are obvious.
+const VOLT_L1 = "#6D28D9", VOLT_L2 = "#0891B2", VOLT_HZ = "#475569";
+function GridVoltageChart({data}) {
+  const [showHz, setShowHz] = useState(false);
+  if(!data||!data.length) return null;
+  const vals = data.flatMap(d=>[d.v1,d.v2]).filter(v=>v!=null&&v>0);
+  if(!vals.length) return null;
+  const dataMin = Math.min(...vals), dataMax = Math.max(...vals);
+  const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+  const hasL2 = data.some(d=>d.v2!=null&&d.v2>0);
+  // Domain always spans the ANSI Range A band (114–126 V) so the band reads as a band, not the whole plot.
+  const lo = Math.min(112, Math.floor(dataMin-1));
+  const hi = Math.max(128, Math.ceil(dataMax+1));
+  // Nominal: assume 120 V L-N service. (240/120 split-phase; each leg ~120 V to neutral.)
+  return (
+    <div style={{marginBottom:24}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8,flexWrap:"wrap",gap:8}}>
+        <div>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Grid Voltage (L–N)</h2>
+          <div style={{fontSize:11,color:FAINT}}>Per-interval grid voltage at the inverter · power-quality view</div>
+        </div>
+        <div style={{display:"flex",gap:14,fontSize:11,color:MUTED,fontVariantNumeric:"tabular-nums"}}>
+          <span>Min <b style={{color:dataMin<114?GRID_IN:TEXT}}>{dataMin.toFixed(1)}</b></span>
+          <span>Avg <b style={{color:TEXT}}>{avg.toFixed(1)}</b></span>
+          <span>Max <b style={{color:dataMax>126?GRID_IN:TEXT}}>{dataMax.toFixed(1)}</b></span>
+        </div>
+      </div>
+      <ChartCard loading={false} minHeight={300}>
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={data} margin={{top:4,right:8,left:0,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
+            <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={44}/>
+            <YAxis yAxisId="v" domain={[lo,hi]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v}`} allowDecimals={false}/>
+            {showHz&&<YAxis yAxisId="hz" orientation="right" domain={[59,61]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={34} tickFormatter={v=>`${v}`}/>}
+            {/* ANSI C84.1 service bands: Range A ±5% (114–126) green; Range B edges (110/127) red lines. */}
+            <ReferenceArea yAxisId="v" y1={114} y2={126} fill={GRID_OUT} fillOpacity={0.06} ifOverflow="hidden"/>
+            <ReferenceLine yAxisId="v" y={120} stroke={FAINT} strokeDasharray="4 4" strokeWidth={1} label={{value:"120",position:"insideLeft",fill:FAINT,fontSize:9}}/>
+            <ReferenceLine yAxisId="v" y={114} stroke={SOLAR} strokeDasharray="2 4" strokeWidth={1}/>
+            <ReferenceLine yAxisId="v" y={126} stroke={SOLAR} strokeDasharray="2 4" strokeWidth={1}/>
+            <ReferenceLine yAxisId="v" y={110} stroke={GRID_IN} strokeDasharray="2 4" strokeWidth={1}/>
+            <ReferenceLine yAxisId="v" y={127} stroke={GRID_IN} strokeDasharray="2 4" strokeWidth={1}/>
+            <Tooltip cursor={{stroke:FAINT,strokeDasharray:"3 3"}} contentStyle={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,fontSize:12,fontFamily:SANS}} formatter={(v,n)=>[v!=null?`${Number(v).toFixed(n==="Hz"?2:1)} ${n==="Hz"?"Hz":"V"}`:"—", n]} labelFormatter={t=>t}/>
+            <Line yAxisId="v" type="monotone" dataKey="v1" stroke={VOLT_L1} strokeWidth={1.6} dot={false} name="L1–N" isAnimationActive={false} connectNulls={false}/>
+            {hasL2&&<Line yAxisId="v" type="monotone" dataKey="v2" stroke={VOLT_L2} strokeWidth={1.6} dot={false} name="L2–N" isAnimationActive={false} connectNulls={false}/>}
+            {showHz&&<Line yAxisId="hz" type="monotone" dataKey="hz" stroke={VOLT_HZ} strokeWidth={1.2} dot={false} name="Hz" isAnimationActive={false} connectNulls={false}/>}
+            <Brush dataKey="time" height={22} stroke={FAINT} fill={BG} travellerWidth={10} tickFormatter={()=>""}/>
+          </ComposedChart>
+        </ResponsiveContainer>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"center",padding:"8px 4px 2px"}}>
+          <LegendSwatch color={VOLT_L1} label="L1–N"/>
+          {hasL2&&<LegendSwatch color={VOLT_L2} label="L2–N"/>}
+          <span style={{fontSize:11,color:FAINT}}>· band = ANSI ±5% (114–126 V) · red = ±127/110 V limits</span>
+          <button onClick={()=>setShowHz(h=>!h)} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:showHz?"#F1F5F9":CARD,color:showHz?TEXT:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Frequency</button>
+        </div>
+      </ChartCard>
+    </div>
+  );
+}
+function LegendSwatch({color,label}){
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:MUTED}}><span style={{width:14,height:3,borderRadius:2,background:color}}/>{label}</span>;
+}
+
 function MonthChart({month, onMonthChange, data, loading, mode="month", onModeChange, rangeStart, rangeEnd, onRangeStart, onRangeEnd}) {
   const rangeMode = mode==="range";
   const [showProduced, setShowProduced] = useState(true);
@@ -1573,6 +1637,7 @@ export default function Dashboard() {
   const [dayData, setDayData] = useState([]);
   const [daySummary, setDaySummary] = useState(null);
   const [dayMode, setDayMode] = useState({type:"inverter"});
+  const [dayVolt, setDayVolt] = useState(null); // per-interval grid L-N voltage (single inverter only)
   const [dayLoading, setDayLoading] = useState(false);
   const [monthDate, setMonthDate] = useState(thisMonth);
   const [monthData, setMonthData] = useState([]);
@@ -1687,9 +1752,17 @@ export default function Dashboard() {
       if(single && excel?.rows?.length){
         setDayData(aggregateDayMppt(dayAll[0], excel.rows));
         setDayMode({type:"mppt", active: excel.activeMppts?.length?excel.activeMppts:[0]});
+        // Per-interval grid line-to-neutral voltage (+ frequency) for the power-quality plot.
+        setDayVolt(excel.rows.map(r=>({
+          time: (r.time||"").slice(0,5),
+          v1: r.gridV?.[0]>0 ? r.gridV[0] : null,
+          v2: r.gridV?.[1]>0 ? r.gridV[1] : null,
+          hz: r.gridHz>0 ? r.gridHz : null,
+        })));
       } else {
         setDayData(aggregateDayData(dayAll));
         setDayMode({type:"inverter"});
+        setDayVolt(null);
       }
       // Day summary tiles read straight from the month rollup so Day == Month == Year for every
       // field (export included). If a site's rollup reports 0 export (stuck feed-in register on the
@@ -1828,7 +1901,10 @@ export default function Dashboard() {
               prodSeries = chartInverters.map((inv,i)=>({key:`pv${i}`, name:single?"Solar":`${inv.label} Solar`, color:PROD_SHADES[i%PROD_SHADES.length]}));
               consSeries = chartInverters.map((inv,i)=>({key:`loadNeg${i}`, name:single?"Load":`${inv.label} Load`, color:CONS_SHADES[i%CONS_SHADES.length]}));
             }
-            return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>;
+            return <>
+              <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>
+              {!dayLoading && dayVolt && <GridVoltageChart data={dayVolt}/>}
+            </>;
           })()}
           {tab==="month"&&<MonthChart mode={monthMode} onModeChange={setMonthMode} month={monthDate} onMonthChange={setMonthDate} rangeStart={rangeStart} rangeEnd={rangeEnd} onRangeStart={setRangeStart} onRangeEnd={setRangeEnd} data={monthData} loading={monthLoading}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
