@@ -958,13 +958,14 @@ const gridPylon = (cx, cy) => (
     <line x1={cx+7} y1={cy-10.5} x2={cx+7} y2={cy-8.5}/>
   </g>
 );
-function FlowNode({x, y, r=22, color, icon, iconSvg, label, value, sub, place="below"}) {
+function FlowNode({x, y, r=22, color, icon, iconSvg, label, value, sub, sub2, sub2Color, place="below"}) {
   // All text sits on the side AWAY from the inverter (above for top nodes, below for bottom ones)
   // so the connector line — which exits the icon toward the center — never crosses the labels.
   const above = place==="above";
   const labelY = above ? y-r-38 : y+r+15;
   const valueY = above ? y-r-21 : y+r+31;
   const subY   = above ? y-r-7  : y+r+45;
+  const sub2Y  = above ? subY-13 : subY+13;
   return (
     <g>
       <circle cx={x} cy={y} r={r} fill={color}/>
@@ -972,6 +973,7 @@ function FlowNode({x, y, r=22, color, icon, iconSvg, label, value, sub, place="b
       <text x={x} y={labelY} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
       <text x={x} y={valueY} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
       {sub&&<text x={x} y={subY} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
+      {sub2&&<text x={x} y={sub2Y} textAnchor="middle" fontSize="10" fontWeight="700" fill={sub2Color||MUTED} fontFamily={SANS}>{sub2}</text>}
     </g>
   );
 }
@@ -1024,7 +1026,12 @@ function FlowDiagram({flow}) {
         <InverterGraphic count={flow.count}/>
         <FlowNode x={56} y={92} place="above" color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
         <FlowNode x={344} y={92} place="above" color={flow.grid<0?GRID_OUT:GRID_IN} iconSvg={gridPylon} label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
-        <FlowNode x={56} y={300} place="below" color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))} sub={flow.soc!=null?`SOC ${flow.soc.toFixed(0)}%`:null}/>
+        <FlowNode x={56} y={300} place="below" color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))}
+          sub={flow.remainKwh!=null ? `${flow.soc.toFixed(0)}% · ~${flow.remainKwh.toFixed(1)} kWh`
+            : flow.soc!=null ? `SOC ${flow.soc.toFixed(0)}%`
+            : flow.voltage!=null ? `${flow.voltage.toFixed(1)} V` : null}
+          sub2={flow.ratePctHr!=null ? `${flow.rateSign}${flow.ratePctHr.toFixed(1)}%/hr` : null}
+          sub2Color={flow.battery>0?BATTERY:SOLAR}/>
         <FlowNode x={344} y={300} place="below" color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
         {flow.gen>A      && <FlowNode x={200} y={64} r={17} place="above" color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
         {showSmart      && <FlowNode x={200} y={322} r={17} place="below" color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
@@ -1724,9 +1731,18 @@ export default function Dashboard() {
     const couple = sum(d=>d.couple?.netW||d.couple?.power||0); // provision — shows when the API exposes it
     const w = selStatus.filter(x=>(x.data.battery?.soc||0)>0);
     const times = selStatus.map(x=>x.data.inverter?.lastUpdateTime).filter(Boolean).sort();
+    const soc = w.length? w.reduce((s,x)=>s+x.data.battery.soc,0)/w.length : null;
+    // Battery capacity readout: rated kWh from the reported Ah rating × nominal 51.2 V, the
+    // SOC-derived remaining kWh, and the live charge/discharge rate as %-of-rated-capacity per hour.
+    const batsV = selStatus.filter(x=>(x.data.battery?.voltage||0)>0);
+    const capAh = batsV.length ? (batsV[0].data.battery.capacityAh||0) : 0;
+    const capKwh = capAh>0 ? capAh*51.2/1000 : null;
+    const voltage = batsV.length ? batsV.reduce((s,x)=>s+x.data.battery.voltage,0)/batsV.length : null;
+    const remainKwh = (capKwh!=null && soc!=null) ? capKwh*soc/100 : null;
+    const ratePctHr = (capKwh && Math.abs(battery)>20) ? Math.abs(battery)/1000/capKwh*100 : null; // battery is net watts (+charge)
     return { pv, grid, battery, load, gen, smartLoad, couple, count: selStatus.length,
       updated: times.length ? times[times.length-1] : null,
-      soc: w.length? w.reduce((s,x)=>s+x.data.battery.soc,0)/w.length : null };
+      soc, capKwh, voltage, remainKwh, ratePctHr, rateSign: battery>0?"+":"−" };
   })() : null;
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
