@@ -435,33 +435,86 @@ export default async function handler(req, res) {
         }});
         const text = await resp.text();
         if (!resp.ok) return res.status(502).json({ error: `excel ${resp.status}`, sample: text.slice(0,200) });
-        // Parse the quoted CSV. Header row begins with "Time". Cells are "V/A/W" (or "kWh", "HZ"…).
-        // Columns of interest: MPPT1-3 (production split) + Grid1/Grid2 = per-leg L-N grid voltage +
-        // GridFac = grid frequency, all at 5-min resolution (for the power-quality / voltage plot).
-        const wOf = (cell) => { const p = String(cell||"").split("/"); const last = p[p.length-1]||""; return parseFloat(last.replace(/[^0-9.\-]/g,"")) || 0; };
-        const vOf = (cell) => { const p = String(cell||"").split("/"); return parseFloat((p[0]||"").replace(/[^0-9.\-]/g,"")) || 0; };
-        const numOf = (cell) => parseFloat(String(cell||"").replace(/[^0-9.\-]/g,"")) || 0;
-        const rows = []; let started = false; let header = [];
-        let iG1 = 9, iG2 = 15, iFac = 21; // default positions; corrected from the header when present
+        // Parse the quoted CSV. Header row begins with "Time". Most cells are "V/A/W" (parse first
+        // field for volts, middle for amps, last for watts); scalar columns (Temperature, SOC, …) are
+        // a single number. Returns the legacy mppt/gridV/gridHz fields (used by the Day chart) PLUS a
+        // flat per-row metric map and a catalog of the metrics that actually carry data — the source
+        // for the Hyper per-parameter time-series charts (every column at 5-min resolution).
+        const seg   = (cell) => String(cell||"").split("/");
+        const fnum  = (s) => parseFloat(String(s).replace(/[^0-9.\-]/g,"")) || 0;
+        const vOf   = (cell) => fnum(seg(cell)[0]);
+        const wOf   = (cell) => { const p = seg(cell); return fnum(p[p.length-1]); };
+        const aOf   = (cell) => { const p = seg(cell); return p.length>=3 ? fnum(p[1]) : fnum(p[p.length-1]); };
+        const numOf = (cell) => fnum(cell);
+        // Catalog of chartable parameters. Only the ones that carry data on this inverter/day are
+        // returned (so e.g. generator legs vanish on sites with no genset).
+        const METRIC_DEFS = [
+          {key:"pvW",     label:"PV Power",        unit:"W",  group:"Power"},
+          {key:"mppt1W",  label:"MPPT1 Power",     unit:"W",  group:"Power"},
+          {key:"mppt2W",  label:"MPPT2 Power",     unit:"W",  group:"Power"},
+          {key:"mppt3W",  label:"MPPT3 Power",     unit:"W",  group:"Power"},
+          {key:"loadL1W", label:"Load L1",         unit:"W",  group:"Power"},
+          {key:"loadL2W", label:"Load L2",         unit:"W",  group:"Power"},
+          {key:"gridL1W", label:"Grid L1",         unit:"W",  group:"Power"},
+          {key:"gridL2W", label:"Grid L2",         unit:"W",  group:"Power"},
+          {key:"genL1W",  label:"Gen L1",          unit:"W",  group:"Power"},
+          {key:"genL2W",  label:"Gen L2",          unit:"W",  group:"Power"},
+          {key:"batW",    label:"Battery Power",   unit:"W",  group:"Power"},
+          {key:"gridL1V", label:"Grid L1–N",       unit:"V",  group:"Voltage"},
+          {key:"gridL2V", label:"Grid L2–N",       unit:"V",  group:"Voltage"},
+          {key:"mppt1V",  label:"MPPT1 Voltage",   unit:"V",  group:"Voltage"},
+          {key:"mppt2V",  label:"MPPT2 Voltage",   unit:"V",  group:"Voltage"},
+          {key:"mppt3V",  label:"MPPT3 Voltage",   unit:"V",  group:"Voltage"},
+          {key:"batV",    label:"Battery Voltage", unit:"V",  group:"Voltage"},
+          {key:"mppt1A",  label:"MPPT1 Current",   unit:"A",  group:"Current"},
+          {key:"mppt2A",  label:"MPPT2 Current",   unit:"A",  group:"Current"},
+          {key:"mppt3A",  label:"MPPT3 Current",   unit:"A",  group:"Current"},
+          {key:"batA",    label:"Battery Current", unit:"A",  group:"Current"},
+          {key:"gridHz",  label:"Grid Frequency",  unit:"Hz", group:"Frequency"},
+          {key:"loadHz",  label:"Load Frequency",  unit:"Hz", group:"Frequency"},
+          {key:"genHz",   label:"Gen Frequency",   unit:"Hz", group:"Frequency"},
+          {key:"soc",     label:"Battery SOC",     unit:"%",  group:"Battery"},
+          {key:"soh",     label:"Battery SOH",     unit:"%",  group:"Battery"},
+          {key:"temp",    label:"Inverter Temp",   unit:"°C", group:"Temperature"},
+          {key:"batTemp", label:"Battery Temp",    unit:"°C", group:"Temperature"},
+        ];
+        const rows = []; let started = false; let header = []; let col = {};
+        const ix = (name, fb) => { const i = col[name]; return i != null ? i : fb; }; // header index, or fallback
         for (const line of text.split(/\r?\n/)) {
           const f = [...line.matchAll(/"([^"]*)"/g)].map(m=>m[1]);
           if (!f.length) continue;
           if (f[0] === "Time") {
-            header = f; started = true;
-            const idx = (n) => { const i = f.indexOf(n); return i >= 0 ? i : null; };
-            iG1 = idx("Grid1") ?? iG1; iG2 = idx("Grid2") ?? iG2; iFac = idx("GridFac") ?? iFac;
+            header = f; started = true; col = {};
+            f.forEach((h,i)=>{ if (col[h] === undefined) col[h] = i; });
             continue;
           }
           if (!started || !/^\d{4}-\d{2}-\d{2}[ T]/.test(f[0])) continue;
+          const m1 = f[ix("MPPT1",1)], m2 = f[ix("MPPT2",2)], m3 = f[ix("MPPT3",3)];
+          const g1 = f[ix("Grid1",9)], g2 = f[ix("Grid2",15)];
           rows.push({
             time: f[0].split(/[ T]/)[1],
-            mppt: [wOf(f[1]), wOf(f[2]), wOf(f[3])],
-            gridV: [vOf(f[iG1]), vOf(f[iG2])], // [L1-N, L2-N]
-            gridHz: numOf(f[iFac]),
+            // legacy fields consumed by the Day chart (MPPT split + power-quality voltage plot)
+            mppt: [wOf(m1), wOf(m2), wOf(m3)],
+            gridV: [vOf(g1), vOf(g2)], // [L1-N, L2-N]
+            gridHz: numOf(f[ix("GridFac",21)]),
+            // flat metric map (Hyper charts) — every parameter at this 5-min interval
+            pvW: wOf(f[ix("PV",4)]) || (wOf(m1)+wOf(m2)+wOf(m3)),
+            mppt1W: wOf(m1), mppt2W: wOf(m2), mppt3W: wOf(m3),
+            mppt1V: vOf(m1), mppt2V: vOf(m2), mppt3V: vOf(m3),
+            mppt1A: aOf(m1), mppt2A: aOf(m2), mppt3A: aOf(m3),
+            gridL1V: vOf(g1), gridL2V: vOf(g2), gridL1W: wOf(g1), gridL2W: wOf(g2),
+            loadL1W: wOf(f[ix("Normal Load1",10)]), loadL2W: wOf(f[ix("Normal Load2",16)]),
+            genL1W: wOf(f[ix("Gen Port1",11)]),     genL2W: wOf(f[ix("Gen Port2",17)]),
+            loadHz: numOf(f[ix("LoadFac",22)]),     genHz: numOf(f[ix("GenFac",23)]),
+            soc: numOf(f[ix("SOC",32)]),            soh: numOf(f[ix("SOH",33)]),
+            batTemp: numOf(f[ix("BatteryTemp",34)]), batA: numOf(f[ix("Battery Current",35)]),
+            batV: numOf(f[ix("Battery Voltage",36)]), batW: numOf(f[ix("Battery Power",37)]),
+            temp: numOf(f[ix("Temperature",5)]),
           });
         }
         const activeMppts = [0,1,2].filter(i => rows.some(r => Math.abs(r.mppt[i]) > 1));
-        return res.json({ rows, activeMppts, count: rows.length, header });
+        const metrics = METRIC_DEFS.filter(md => rows.some(r => Math.abs(r[md.key]||0) > 0.0001));
+        return res.json({ rows, activeMppts, metrics, count: rows.length, header });
       }
       case "month": {
         const { sn, date } = req.body || {};
