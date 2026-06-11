@@ -1100,7 +1100,16 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
   const exported   = summary ? summary.exported   : data.reduce((s,d)=>s+((d.gridExport||0)*(5/60)),0);
   const charged    = summary ? summary.charged    : data.reduce((s,d)=>s+((d.batCharge||0)*(5/60)),0);
   const discharged = summary ? summary.discharged : data.reduce((s,d)=>s+((d.batDischarge||0)*(5/60)),0);
-  const chartData = data.map(d=>({ ...d, batNet: d.batNet!=null ? d.batNet : ((d.batCharge||0)-(d.batDischarge||0)) }));
+  // Always render a full 24h x-axis (00:00–23:55 at 5-min) — pad the data onto the complete grid so
+  // today stops at "now" with empty space after, instead of the axis ending early.
+  const _byTime = {};
+  for(const d of data) _byTime[(d.time||"").slice(0,5)] = d;
+  const chartData = [];
+  for(let h=0;h<24;h++) for(let m=0;m<60;m+=5){
+    const key = `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+    const d = _byTime[key];
+    chartData.push(d ? { ...d, batNet: d.batNet!=null ? d.batNet : ((d.batCharge||0)-(d.batDischarge||0)) } : { time: key+":00" });
+  }
   // Y-axis: positive (production) extent must always be >= negative (consumption) extent, so the
   // zero line never sits above the vertical midpoint. Compute the stacked extents (incl. grid/battery
   // line spikes) and force domain = [-N, max(P,N)].
