@@ -13,6 +13,9 @@ const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1
 // register reads 0 and the real consumption only shows up in this balance.
 const balanceLoad = (d) => d ? Math.max(0, (d.photovoltaic?.power?.totalDc||0) + (d.grid?.netW||0) + (d.battery?.discharge||0) - (d.battery?.charge||0)) : null;
 const fmtHrs = (h) => { if(!isFinite(h)||h<=0) return "--"; if(h>=48) return `${(h/24).toFixed(1)} days`; const H=Math.floor(h), M=Math.round((h-H)*60); return M? `${H}h ${M}m` : `${H}h`; };
+// Format an inverter DataTime ("YYYY-MM-DD HH:MM:SS", already in site/ET time) as M/D/YYYY h:mm AM/PM
+// without timezone conversion (don't use Date()).
+const fmtClock = (s) => { if(!s) return ""; const m=String(s).replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2}):(\d{2})/); if(!m) return String(s); let h=+m[4]; const ap=h>=12?"PM":"AM"; h=h%12||12; return `${+m[2]}/${+m[3]}/${m[1]} ${h}:${m[5]} ${ap}`; };
 
 // Session cache for historical, immutable data (past day/month/year + their MPPT export). The
 // current day/month/year is never cached so live periods stay fresh. Cleared on logout.
@@ -96,6 +99,23 @@ function aggregateYearData(all) {
   const map = {};
   for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,_m:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0); } }
   return Object.values(map).sort((a,b)=>a._m-b._m);
+}
+// Custom date range (e.g. utility billing period) — list the YYYY-MM months a range spans, and flatten
+// per-month daily rollups into one date-sorted array of {..., _date, day:"M/D"} within [start,end].
+function monthsInRange(start, end){
+  const out=[]; let [y,m]=start.split("-").map(Number); const [ey,em]=end.split("-").map(Number);
+  while(y<ey || (y===ey&&m<=em)){ out.push(`${y}-${String(m).padStart(2,"0")}`); m++; if(m>12){m=1;y++;} if(out.length>60)break; }
+  return out;
+}
+function aggregateRange(perMonth, start, end){
+  const rows=[];
+  for(const {m, days} of perMonth){
+    for(const d of days){
+      const date=`${m}-${String(d.day).padStart(2,"0")}`;
+      if(date>=start && date<=end && date<=today) rows.push({ ...d, _date:date, day:`${parseInt(m.slice(5),10)}/${d.day}` });
+    }
+  }
+  return rows.sort((a,b)=>a._date.localeCompare(b._date));
 }
 
 // Design tokens
@@ -994,7 +1014,7 @@ function FlowDiagram({flow}) {
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"4px 8px 0"}}>
         <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
-        {flow.updated&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>as of {flow.updated.replace("T"," ").slice(0,16)}</span>}
+        {flow.updated&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>{fmtClock(flow.updated)}</span>}
       </div>
       <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
@@ -1184,7 +1204,8 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
   );
 }
 
-function MonthChart({month, onMonthChange, data, loading}) {
+function MonthChart({month, onMonthChange, data, loading, mode="month", onModeChange, rangeStart, rangeEnd, onRangeStart, onRangeEnd}) {
+  const rangeMode = mode==="range";
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -1213,17 +1234,30 @@ function MonthChart({month, onMonthChange, data, loading}) {
   const moAtMax = month >= thisMonth;
   const moPrev = () => { const [y,m]=month.split('-').map(Number); onMonthChange(`${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,'0')}`); };
   const moNext = () => { if(!moAtMax){const [y,m]=month.split('-').map(Number); onMonthChange(`${m===12?y+1:y}-${String(m===12?1:m+1).padStart(2,'0')}`);} };
+  const navBtn = {padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS};
+  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 8px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM};
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Month</h2>
-          <div style={{fontSize:11,color:FAINT}}>Daily totals</div>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>{rangeMode?"Custom Range":"Month"}</h2>
+          <div style={{fontSize:11,color:FAINT}}>{rangeMode?"Billing-period totals":"Daily totals"}</div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={moPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <button onClick={moNext} disabled={moAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:moAtMax?BG:CARD,color:moAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:moAtMax?"default":"pointer",boxShadow:moAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          {rangeMode ? (
+            <>
+              <input type="date" value={rangeStart} max={rangeEnd} onChange={e=>onRangeStart(e.target.value)} style={inputS}/>
+              <span style={{fontSize:12,color:FAINT}}>→</span>
+              <input type="date" value={rangeEnd} max={today} onChange={e=>onRangeEnd(e.target.value)} style={inputS}/>
+            </>
+          ) : (
+            <>
+              <button onClick={moPrev} style={navBtn}>‹</button>
+              <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={inputS}/>
+              <button onClick={moNext} disabled={moAtMax} style={{...navBtn,background:moAtMax?BG:CARD,color:moAtMax?FAINT:TEXT,cursor:moAtMax?"default":"pointer",boxShadow:moAtMax?"none":SHADOW_SM}}>›</button>
+            </>
+          )}
+          <button onClick={()=>onModeChange&&onModeChange(rangeMode?"month":"range")} style={{...inputS,fontWeight:700,color:SOLAR,border:`1px solid ${SOLAR}`,background:"#FFFBEB"}}>{rangeMode?"Monthly":"Custom"}</button>
         </div>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
@@ -1231,10 +1265,10 @@ function MonthChart({month, onMonthChange, data, loading}) {
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-            <XAxis dataKey="day" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false}/>
+            <XAxis dataKey="day" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={rangeMode?22:6}/>
             <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
-            <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
+            <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>rangeMode?l:`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
             {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false}/>}
             {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false}/>}
@@ -1529,6 +1563,9 @@ export default function Dashboard() {
   const [monthDate, setMonthDate] = useState(thisMonth);
   const [monthData, setMonthData] = useState([]);
   const [monthLoading, setMonthLoading] = useState(false);
+  const [monthMode, setMonthMode] = useState("month"); // "month" | "range" (custom billing period)
+  const [rangeStart, setRangeStart] = useState(thisMonth+"-01");
+  const [rangeEnd, setRangeEnd] = useState(today);
   const [yearVal, setYearVal] = useState(thisYear);
   const [yearData, setYearData] = useState([]);
   const [yearLoading, setYearLoading] = useState(false);
@@ -1652,7 +1689,18 @@ export default function Dashboard() {
       setDayLoading(false);
     });
   }, [tab,dayDate,snKey,site]);
-  useEffect(() => { if(tab!=="month"||!site) return; setMonthLoading(true); Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);}); }, [tab,monthDate,snKey,site]);
+  useEffect(() => {
+    if(tab!=="month"||!site) return;
+    setMonthLoading(true);
+    if(monthMode==="range" && rangeStart && rangeEnd && rangeStart<=rangeEnd){
+      const months = monthsInRange(rangeStart.slice(0,7), rangeEnd.slice(0,7));
+      Promise.all(months.map(m =>
+        Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:m}).catch(()=>null))).then(all=>({m, days:aggregateMonthData(all)}))
+      )).then(perMonth=>{ setMonthData(aggregateRange(perMonth, rangeStart, rangeEnd)); setMonthLoading(false); });
+    } else {
+      Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);});
+    }
+  }, [tab,monthDate,monthMode,rangeStart,rangeEnd,snKey,site]);
   useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,snKey,site]);
 
   const visibleStatuses = statuses.filter(s=>selectedSns.includes(s.sn));
@@ -1759,7 +1807,7 @@ export default function Dashboard() {
             }
             return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>;
           })()}
-          {tab==="month"&&<MonthChart month={monthDate} onMonthChange={setMonthDate} data={monthData} loading={monthLoading}/>}
+          {tab==="month"&&<MonthChart mode={monthMode} onModeChange={setMonthMode} month={monthDate} onMonthChange={setMonthDate} rangeStart={rangeStart} rangeEnd={rangeEnd} onRangeStart={setRangeStart} onRangeEnd={setRangeEnd} data={monthData} loading={monthLoading}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses}/>}
         </div>
