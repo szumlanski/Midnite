@@ -321,12 +321,13 @@ function StatTile({label, value, color=MUTED, sub=null}) {
   );
 }
 
-function SummaryStrip({produced, consumed, imported, exported, charged, discharged}) {
+function SummaryStrip({produced, consumed, imported, exported, charged, discharged, netExported}) {
   const items = [
     {label:"Produced", value:fmtE(produced), color:CHART_PROD},
     {label:"Consumed", value:fmtE(consumed), color:CHART_CONS},
     {label:"Imported", value:fmtE(imported), color:GRID_IN},
     {label:"Exported", value:fmtE(exported), color:GRID_OUT},
+    ...(netExported!=null?[{label: netExported>=0?"Net Exported":"Net Imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN}]:[]),
     ...(charged>0?[{label:"Charged", value:fmtE(charged), color:BATTERY}]:[]),
     ...(discharged>0?[{label:"Discharged", value:fmtE(discharged), color:SOLAR}]:[]),
   ];
@@ -1260,7 +1261,7 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
           <button onClick={()=>onModeChange&&onModeChange(rangeMode?"month":"range")} style={{...inputS,fontWeight:700,color:SOLAR,border:`1px solid ${SOLAR}`,background:"#FFFBEB"}}>{rangeMode?"Monthly":"Custom"}</button>
         </div>
       </div>
-      {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
+      {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
       <ChartCard loading={loading} minHeight={340}>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
@@ -1327,7 +1328,7 @@ function YearChart({year, onYearChange, data, loading}) {
           <button onClick={yrNext} disabled={yrAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:yrAtMax?BG:CARD,color:yrAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:yrAtMax?"default":"pointer",boxShadow:yrAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
         </div>
       </div>
-      {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
+      {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
       <ChartCard loading={loading} minHeight={320}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
