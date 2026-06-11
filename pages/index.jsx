@@ -1286,7 +1286,7 @@ function LegendSwatch({color,label}){
 // Pick one or more parameters (power/voltage/current/frequency/battery/temperature); up to two
 // distinct units share a left + right axis. Single inverter only (the CSV is per-inverter).
 const HYPER_COLORS = ["#D97706","#2563EB","#16A34A","#DC2626","#7C3AED","#0891B2","#DB2777","#65A30D","#EA580C","#0D9488"];
-const HYPER_DEC = (unit) => unit==="W"?0 : unit==="A"?2 : unit==="Hz"?2 : (unit==="V"||unit==="°C")?1 : 0;
+const HYPER_DEC = (unit) => unit==="W"?0 : unit==="A"?2 : unit==="Hz"?2 : unit==="kWh"?2 : (unit==="V"||unit==="°C")?1 : 0;
 function fmtMetric(v, unit){
   if(v==null||!isFinite(v)) return "—";
   if(unit==="W" && Math.abs(v)>=1000) return `${(v/1000).toFixed(2)} kW`;

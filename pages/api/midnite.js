@@ -457,11 +457,19 @@ export default async function handler(req, res) {
           {key:"loadL2W", label:"Load L2",         unit:"W",  group:"Power"},
           {key:"gridL1W", label:"Grid L1",         unit:"W",  group:"Power"},
           {key:"gridL2W", label:"Grid L2",         unit:"W",  group:"Power"},
+          {key:"acOut1W", label:"AC Out L1",       unit:"W",  group:"Power"},
+          {key:"acOut2W", label:"AC Out L2",       unit:"W",  group:"Power"},
+          {key:"smartB1W",label:"Smart Load B L1", unit:"W",  group:"Power"},
+          {key:"smartB2W",label:"Smart Load B L2", unit:"W",  group:"Power"},
+          {key:"smartC1W",label:"Smart Load C L1", unit:"W",  group:"Power"},
+          {key:"smartC2W",label:"Smart Load C L2", unit:"W",  group:"Power"},
           {key:"genL1W",  label:"Gen L1",          unit:"W",  group:"Power"},
           {key:"genL2W",  label:"Gen L2",          unit:"W",  group:"Power"},
           {key:"batW",    label:"Battery Power",   unit:"W",  group:"Power"},
           {key:"gridL1V", label:"Grid L1–N",       unit:"V",  group:"Voltage"},
           {key:"gridL2V", label:"Grid L2–N",       unit:"V",  group:"Voltage"},
+          {key:"acOut1V", label:"AC Out L1",       unit:"V",  group:"Voltage"},
+          {key:"acOut2V", label:"AC Out L2",       unit:"V",  group:"Voltage"},
           {key:"mppt1V",  label:"MPPT1 Voltage",   unit:"V",  group:"Voltage"},
           {key:"mppt2V",  label:"MPPT2 Voltage",   unit:"V",  group:"Voltage"},
           {key:"mppt3V",  label:"MPPT3 Voltage",   unit:"V",  group:"Voltage"},
@@ -477,6 +485,15 @@ export default async function handler(req, res) {
           {key:"soh",     label:"Battery SOH",     unit:"%",  group:"Battery"},
           {key:"temp",    label:"Inverter Temp",   unit:"°C", group:"Temperature"},
           {key:"batTemp", label:"Battery Temp",    unit:"°C", group:"Temperature"},
+          // Cumulative day counters (ramp from 0 over the day)
+          {key:"eToday",            label:"PV Energy",          unit:"kWh", group:"Energy"},
+          {key:"consumptionToday",  label:"Consumption",        unit:"kWh", group:"Energy"},
+          {key:"feedInToday",       label:"Feed-In Energy",     unit:"kWh", group:"Energy"},
+          {key:"purchasedToday",    label:"Purchased Energy",   unit:"kWh", group:"Energy"},
+          {key:"chargeToday",       label:"Battery Charged",    unit:"kWh", group:"Energy"},
+          {key:"dischargeToday",    label:"Battery Discharged", unit:"kWh", group:"Energy"},
+          {key:"outputToday",       label:"Output Energy",      unit:"kWh", group:"Energy"},
+          {key:"smartLoadToday",    label:"Smart Load Energy",  unit:"kWh", group:"Energy"},
         ];
         const rows = []; let started = false; let header = []; let col = {};
         const ix = (name, fb) => { const i = col[name]; return i != null ? i : fb; }; // header index, or fallback
@@ -491,6 +508,7 @@ export default async function handler(req, res) {
           if (!started || !/^\d{4}-\d{2}-\d{2}[ T]/.test(f[0])) continue;
           const m1 = f[ix("MPPT1",1)], m2 = f[ix("MPPT2",2)], m3 = f[ix("MPPT3",3)];
           const g1 = f[ix("Grid1",9)], g2 = f[ix("Grid2",15)];
+          const ao1 = f[ix("AC OUT(100A)1",12)], ao2 = f[ix("AC OUT(100A)2",18)];
           rows.push({
             time: f[0].split(/[ T]/)[1],
             // legacy fields consumed by the Day chart (MPPT split + power-quality voltage plot)
@@ -503,13 +521,21 @@ export default async function handler(req, res) {
             mppt1V: vOf(m1), mppt2V: vOf(m2), mppt3V: vOf(m3),
             mppt1A: aOf(m1), mppt2A: aOf(m2), mppt3A: aOf(m3),
             gridL1V: vOf(g1), gridL2V: vOf(g2), gridL1W: wOf(g1), gridL2W: wOf(g2),
+            acOut1V: vOf(ao1), acOut2V: vOf(ao2), acOut1W: wOf(ao1), acOut2W: wOf(ao2),
             loadL1W: wOf(f[ix("Normal Load1",10)]), loadL2W: wOf(f[ix("Normal Load2",16)]),
+            smartB1W: wOf(f[ix("Smart LoadB(50A)1",13)]), smartB2W: wOf(f[ix("Smart LoadB(50A)2",19)]),
+            smartC1W: wOf(f[ix("Smart LoadC(30A)1",14)]), smartC2W: wOf(f[ix("Smart LoadC(30A)2",20)]),
             genL1W: wOf(f[ix("Gen Port1",11)]),     genL2W: wOf(f[ix("Gen Port2",17)]),
             loadHz: numOf(f[ix("LoadFac",22)]),     genHz: numOf(f[ix("GenFac",23)]),
             soc: numOf(f[ix("SOC",32)]),            soh: numOf(f[ix("SOH",33)]),
             batTemp: numOf(f[ix("BatteryTemp",34)]), batA: numOf(f[ix("Battery Current",35)]),
             batV: numOf(f[ix("Battery Voltage",36)]), batW: numOf(f[ix("Battery Power",37)]),
             temp: numOf(f[ix("Temperature",5)]),
+            // cumulative day-energy counters (kWh)
+            eToday: numOf(f[ix("E-Today",6)]), consumptionToday: numOf(f[ix("Consumption Today",26)]),
+            feedInToday: numOf(f[ix("Feed-In Energy Today",24)]), purchasedToday: numOf(f[ix("Purchased Energy Today",25)]),
+            chargeToday: numOf(f[ix("Daily charge energy",38)]), dischargeToday: numOf(f[ix("Daily discharge energy",39)]),
+            outputToday: numOf(f[ix("Outputs Energy Today",44)]), smartLoadToday: numOf(f[ix("smartLoadDay",42)]),
           });
         }
         const activeMppts = [0,1,2].filter(i => rows.some(r => Math.abs(r.mppt[i]) > 1));
