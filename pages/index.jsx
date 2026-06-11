@@ -329,8 +329,12 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
     {label:"Imported", value:fmtE(imported), color:GRID_IN},
     {label:"Exported", value:fmtE(exported), color:GRID_OUT},
     ...(netExported!=null?[{label: netExported>=0?"Net Exported":"Net Imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN, tip:`Exported ${fmtE(exported)} − Imported ${fmtE(imported)} = ${netExported<0?"−":""}${fmtE(Math.abs(netExported))}`}]:[]),
-    ...(charged>0?[{label:"Charged", value:fmtE(charged), color:BATTERY}]:[]),
-    ...(discharged>0?[{label:"Discharged", value:fmtE(discharged), color:SOLAR}]:[]),
+    // Show the battery pair together whenever there's any battery activity, so Discharged never
+    // silently drops out when its (often under-reported) energy register rounds to 0.
+    ...((charged>0||discharged>0)?[
+      {label:"Charged", value:fmtE(charged), color:BATTERY},
+      {label:"Discharged", value:fmtE(discharged), color:SOLAR},
+    ]:[]),
   ];
   return (
     <div style={{background:CARD,borderRadius:14,padding:"16px 20px",marginBottom:16,boxShadow:SHADOW_SM,border:`1px solid ${BORDER}`}}>
