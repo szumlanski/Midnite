@@ -437,16 +437,20 @@ export default async function handler(req, res) {
         if (!resp.ok) return res.status(502).json({ error: `excel ${resp.status}`, sample: text.slice(0,200) });
         // Parse the quoted CSV. Header row begins with "Time"; columns: Time,MPPT1,MPPT2,MPPT3,...
         const wOf = (cell) => { const p = String(cell||"").split("/"); const last = p[p.length-1]||""; return parseFloat(last.replace(/[^0-9.\-]/g,"")) || 0; };
-        const rows = []; let started = false;
+        const rows = []; let started = false; let header = [];
         for (const line of text.split(/\r?\n/)) {
           const f = [...line.matchAll(/"([^"]*)"/g)].map(m=>m[1]);
           if (!f.length) continue;
-          if (f[0] === "Time") { started = true; continue; }
+          if (f[0] === "Time") { header = f; started = true; continue; }
           if (!started || !/^\d{4}-\d{2}-\d{2}[ T]/.test(f[0])) continue;
           rows.push({ time: f[0].split(/[ T]/)[1], mppt: [wOf(f[1]), wOf(f[2]), wOf(f[3])] });
         }
         const activeMppts = [0,1,2].filter(i => rows.some(r => Math.abs(r.mppt[i]) > 1));
-        return res.json({ rows, activeMppts, count: rows.length });
+        // header + a raw sample row are returned so the exact grid-voltage column(s) can be
+        // identified before wiring up a per-interval L-N voltage plot.
+        const sampleLine = text.split(/\r?\n/).find(l => /^"?\d{4}-\d{2}-\d{2}[ T]/.test(l)) || "";
+        const sampleRow = [...sampleLine.matchAll(/"([^"]*)"/g)].map(m=>m[1]);
+        return res.json({ rows, activeMppts, count: rows.length, header, sampleRow });
       }
       case "month": {
         const { sn, date } = req.body || {};
