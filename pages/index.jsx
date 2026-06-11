@@ -5,6 +5,10 @@ import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxi
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const thisYear = today.slice(0,4);
+// Date math for the Explorer date-range picker (operate at noon to dodge DST edges).
+const addDays = (d,n) => { const x=new Date(d+"T12:00:00"); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
+const dayDiff = (a,b) => Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000);
+const datesInRange = (start,end) => { const out=[]; let d=start; while(d<=end && out.length<7){ out.push(d); d=addDays(d,1); } return out; };
 
 const fmt = (w,d=1) => { if(w==null) return "--"; if(Math.abs(w)>=1000) return `${(w/1000).toFixed(d)} kW`; return `${Math.round(w)} W`; };
 const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1000000).toFixed(2)} MWh`; if(wh>=1000) return `${(wh/1000).toFixed(1)} kWh`; return `${Math.round(wh)} Wh`; };
@@ -1045,7 +1049,7 @@ function FlowDiagram({flow}) {
   );
 }
 
-function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, inverters}) {
+function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, inverters, single, value, onPick}) {
   const pill = (active, onClick, key, label, sub, power) => (
     <button key={key} onClick={onClick} style={{
       flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1,
@@ -1060,13 +1064,16 @@ function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, 
       <span style={{fontSize:10,fontWeight:500,color:active?"#B45309":FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"monospace"}}>{sub}</span>
     </button>
   );
+  // Single-select mode (Explorer): no "All" pill; picking an inverter replaces the current one.
   return (
     <div className="inv-scroll" style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
-      {pill(allSelected, onAll, "all", "All", `${inverters.length} inverters`, null)}
+      {!single && pill(allSelected, onAll, "all", "All", `${inverters.length} inverters`, null)}
       {inverters.map(inv=>{
         const s = statuses.find(x=>x.sn===inv.sn);
         const pv = s?.data?.photovoltaic?.power?.totalDc;
-        return pill(selectedSns.includes(inv.sn), ()=>onToggle(inv.sn), inv.sn, inv.label, inv.sn.slice(-8), pv!=null?fmt(pv):null);
+        const active = single ? value===inv.sn : selectedSns.includes(inv.sn);
+        const onClick = single ? ()=>onPick(inv.sn) : ()=>onToggle(inv.sn);
+        return pill(active, onClick, inv.sn, inv.label, inv.sn.slice(-8), pv!=null?fmt(pv):null);
       })}
     </div>
   );
@@ -1282,21 +1289,22 @@ function LegendSwatch({color,label}){
   return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:MUTED}}><span style={{width:14,height:3,borderRadius:2,background:color}}/>{label}</span>;
 }
 
-// Hyper — chart any raw inverter parameter over the day at 5-min resolution (from the dayexcel CSV).
-// Pick one or more parameters (power/voltage/current/frequency/battery/temperature); up to two
-// distinct units share a left + right axis. Single inverter only (the CSV is per-inverter).
-const HYPER_COLORS = ["#D97706","#2563EB","#16A34A","#DC2626","#7C3AED","#0891B2","#DB2777","#65A30D","#EA580C","#0D9488"];
-const HYPER_DEC = (unit) => unit==="W"?0 : unit==="A"?2 : unit==="Hz"?2 : unit==="kWh"?2 : (unit==="V"||unit==="°C")?1 : 0;
+// Explorer — chart any raw inverter parameter(s) over a date range (up to a week) at 5-min
+// resolution, from the dayexcel CSV. Each chart holds up to two distinct units (left + right axis);
+// selecting parameters in a third/fourth unit spawns additional charts below. Single inverter only
+// (the CSV is per-inverter).
+const EXPLORER_COLORS = ["#D97706","#2563EB","#16A34A","#DC2626","#7C3AED","#0891B2","#DB2777","#65A30D","#EA580C","#0D9488","#9333EA","#0EA5E9","#F59E0B","#10B981"];
+const METRIC_DEC = (unit) => unit==="W"?0 : unit==="A"?2 : unit==="Hz"?2 : unit==="kWh"?2 : (unit==="V"||unit==="°C")?1 : 0;
 function fmtMetric(v, unit){
   if(v==null||!isFinite(v)) return "—";
   if(unit==="W" && Math.abs(v)>=1000) return `${(v/1000).toFixed(2)} kW`;
-  return `${Number(v).toFixed(HYPER_DEC(unit))}${unit==="%"?"":" "}${unit}`;
+  return `${Number(v).toFixed(METRIC_DEC(unit))}${unit==="%"?"":" "}${unit}`;
 }
 function axisFmt(unit){
   if(unit==="W") return (v)=> Math.abs(v)>=1000 ? `${(v/1000).toFixed(0)}k` : `${v}`;
   return (v)=>`${v}`;
 }
-function HyperTooltip({active, payload, label, byKey}){
+function ExplorerTooltip({active, payload, label, byKey}){
   if(!active || !payload?.length) return null;
   return (
     <div style={TOOLTIP_S}>
@@ -1310,51 +1318,63 @@ function HyperTooltip({active, payload, label, byKey}){
     </div>
   );
 }
-function HyperChart({date, onDateChange, rows, metrics, loading, label}){
+function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled, rows, metrics, multi, loading, label}){
   const [sel, setSel] = useState([]);
   const byKey = Object.fromEntries(metrics.map(m=>[m.key,m]));
-  const colorOf = (key)=> HYPER_COLORS[Math.max(0,metrics.findIndex(m=>m.key===key)) % HYPER_COLORS.length];
-  // Seed a sensible default and prune the selection whenever the available metrics change (e.g. a new
-  // day where some parameters carry no data).
+  const colorOf = (key)=> EXPLORER_COLORS[Math.max(0,metrics.findIndex(m=>m.key===key)) % EXPLORER_COLORS.length];
+  // Seed a sensible default and prune the selection whenever the available metrics change.
   useEffect(()=>{
     setSel(prev=>{
       const avail = metrics.map(m=>m.key);
       const kept = prev.filter(k=>avail.includes(k));
-      if(kept.length) return kept;
+      if(kept.length || prev.length) return kept; // keep a deliberate empty selection
       const def = metrics.find(m=>m.key==="pvW") || metrics[0];
       return def ? [def.key] : [];
     });
   }, [metrics]);
-  const toggle = (k)=> setSel(p=> p.includes(k) ? (p.length>1 ? p.filter(x=>x!==k) : p) : [...p,k]);
-  // Up to two distinct units render (left + right axis); extras are held until a slot frees up.
-  const units = [...new Set(sel.map(k=>byKey[k]?.unit).filter(Boolean))];
-  const leftUnit = units[0], rightUnit = units[1];
-  const plot = sel.filter(k=>{ const u=byKey[k]?.unit; return u===leftUnit || u===rightUnit; });
-  const dropped = sel.length - plot.length;
-  // Pad onto a full 24h 5-min grid so the axis always spans the day (today stops at "now").
-  const byTime = {}; for(const r of rows) byTime[(r.time||"").slice(0,5)] = r;
-  const data = [];
-  for(let h=0;h<24;h++) for(let m=0;m<60;m+=5){ const key=`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`; const r=byTime[key]; data.push(r?{...r,t:key}:{t:key}); }
+  const toggle = (k)=> setSel(p=> p.includes(k) ? p.filter(x=>x!==k) : [...p,k]);
   const groups = [...new Set(metrics.map(m=>m.group))];
-  const dayAtMax = date >= today;
-  const dayPrev = ()=>{ const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()-1); onDateChange(d.toISOString().split('T')[0]); };
-  const dayNext = ()=>{ if(!dayAtMax){ const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()+1); onDateChange(d.toISOString().split('T')[0]); } };
+  // Build the (optionally multi-day) full 5-min grid so each day spans 00:00–23:55.
+  const pad = (n)=>String(n).padStart(2,"0");
+  const dates = [...new Set(rows.map(r=>r._date).filter(Boolean))].sort();
+  const rowByKey = {}; for(const r of rows){ rowByKey[(r._date||"")+" "+(r.t||(r.time||"").slice(0,5))] = r; }
+  const useDates = dates.length ? dates : [null];
+  const data = [];
+  for(const dt of useDates){
+    const md = dt ? `${+dt.slice(5,7)}/${+dt.slice(8,10)}` : "";
+    for(let h=0;h<24;h++) for(let m=0;m<60;m+=5){
+      const t = `${pad(h)}:${pad(m)}`;
+      const r = rowByKey[(dt||"")+" "+t];
+      const lbl = multi ? `${md} ${t}` : t;
+      data.push(r ? {...r, lbl} : {lbl});
+    }
+  }
+  // Group the selected metrics into charts of two units each (left + right axis), in selection order.
+  const unitsOrdered = [];
+  for(const k of sel){ const u=byKey[k]?.unit; if(u && !unitsOrdered.includes(u)) unitsOrdered.push(u); }
+  const pairs = []; for(let i=0;i<unitsOrdered.length;i+=2) pairs.push(unitsOrdered.slice(i,i+2));
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Hyper</h2>
-          <div style={{fontSize:11,color:FAINT}}>{label?`${label} · `:""}Raw inverter parameters · 5-min resolution · pick what to chart</div>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Explorer</h2>
+          <div style={{fontSize:11,color:FAINT}}>{label?`${label} · `:""}Raw inverter parameters · 5-min resolution · up to 7 days</div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <button onClick={dayNext} disabled={dayAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:dayAtMax?BG:CARD,color:dayAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:dayAtMax?"default":"pointer",boxShadow:dayAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <button onClick={onPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <input type="date" value={start} max={today} onChange={e=>onStart(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <span style={{fontSize:12,color:FAINT}}>to</span>
+          <input type="date" value={end} max={today} onChange={e=>onEnd(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <button onClick={onNext} disabled={nextDisabled} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:nextDisabled?BG:CARD,color:nextDisabled?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:nextDisabled?"default":"pointer",boxShadow:nextDisabled?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
         </div>
       </div>
       {/* Parameter picker — grouped chips */}
       {!loading && metrics.length>0 && (
         <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"10px 12px",marginBottom:12,boxShadow:SHADOW_SM}}>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:6}}>
+            <button onClick={()=>setSel(metrics.map(m=>m.key))} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Select all</button>
+            <button onClick={()=>setSel([])} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear</button>
+          </div>
           {groups.map(g=>(
             <div key={g} style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:6}}>
               <span style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",minWidth:74}}>{g}</span>
@@ -1375,31 +1395,41 @@ function HyperChart({date, onDateChange, rows, metrics, loading, label}){
               </div>
             </div>
           ))}
-          {dropped>0 && <div style={{fontSize:10.5,color:SOLAR,marginTop:2}}>Two units max on the chart ({leftUnit}{rightUnit?` · ${rightUnit}`:""}); {dropped} selected parameter{dropped>1?"s are":" is"} hidden — deselect one to free an axis.</div>}
         </div>
       )}
-      <ChartCard loading={loading} minHeight={340}>
-        {metrics.length===0
-          ? <div style={{color:FAINT,fontSize:13,textAlign:"center",padding:"40px 0"}}>No 5-minute data for this day.</div>
-          : <>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={data} margin={{top:4,right:8,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                <XAxis dataKey="t" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={44}/>
-                {leftUnit && <YAxis yAxisId="L" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={38} tickFormatter={axisFmt(leftUnit)} domain={["auto","auto"]} label={{value:leftUnit,angle:-90,position:"insideLeft",fill:FAINT,fontSize:10}}/>}
-                {rightUnit && <YAxis yAxisId="R" orientation="right" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={38} tickFormatter={axisFmt(rightUnit)} domain={["auto","auto"]} label={{value:rightUnit,angle:90,position:"insideRight",fill:FAINT,fontSize:10}}/>}
-                <Tooltip content={(props)=><HyperTooltip {...props} byKey={byKey}/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
-                {plot.map(k=>(
-                  <Line key={k} yAxisId={byKey[k].unit===leftUnit?"L":"R"} type="monotone" dataKey={k} stroke={colorOf(k)} strokeWidth={1.6} dot={false} name={k} isAnimationActive={false} connectNulls/>
-                ))}
-                <Brush dataKey="t" height={22} stroke={FAINT} fill={BG} travellerWidth={10} tickFormatter={()=>""}/>
-              </ComposedChart>
-            </ResponsiveContainer>
-            <div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"center",padding:"10px 4px 2px",borderTop:`1px solid ${BORDER}`,marginTop:8}}>
-              {plot.map(k=><LegendSwatch key={k} color={colorOf(k)} label={`${byKey[k].label} (${byKey[k].unit})`}/>)}
-            </div>
-          </>}
-      </ChartCard>
+      {loading
+        ? <ChartCard loading minHeight={340}/>
+        : metrics.length===0
+          ? <ChartCard loading={false} minHeight={200}><div style={{color:FAINT,fontSize:13,textAlign:"center",padding:"40px 0"}}>No 5-minute data for this range.</div></ChartCard>
+          : pairs.length===0
+            ? <ChartCard loading={false} minHeight={160}><div style={{color:FAINT,fontSize:13,textAlign:"center",padding:"32px 0"}}>Select one or more parameters above to chart.</div></ChartCard>
+            : pairs.map((pair, pi)=>{
+                const [lu, ru] = pair;
+                const keys = sel.filter(k=>{ const u=byKey[k]?.unit; return u===lu || u===ru; });
+                return (
+                  <div key={pi} style={{marginBottom:14}}>
+                    <ChartCard loading={false} minHeight={300}>
+                      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 4px 6px"}}>{lu}{ru?` · ${ru}`:""}</div>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <ComposedChart data={data} margin={{top:4,right:8,left:0,bottom:0}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
+                          <XAxis dataKey="lbl" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={multi?70:44}/>
+                          <YAxis yAxisId="L" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(lu)} domain={["auto","auto"]} label={{value:lu,angle:-90,position:"insideLeft",fill:FAINT,fontSize:10}}/>
+                          {ru && <YAxis yAxisId="R" orientation="right" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(ru)} domain={["auto","auto"]} label={{value:ru,angle:90,position:"insideRight",fill:FAINT,fontSize:10}}/>}
+                          <Tooltip content={(props)=><ExplorerTooltip {...props} byKey={byKey}/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
+                          {keys.map(k=>(
+                            <Line key={k} yAxisId={byKey[k].unit===lu?"L":"R"} type="monotone" dataKey={k} stroke={colorOf(k)} strokeWidth={1.6} dot={false} name={k} isAnimationActive={false} connectNulls/>
+                          ))}
+                          <Brush dataKey="lbl" height={20} stroke={FAINT} fill={BG} travellerWidth={10} tickFormatter={()=>""}/>
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                      <div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"center",padding:"10px 4px 2px",borderTop:`1px solid ${BORDER}`,marginTop:8}}>
+                        {keys.map(k=><LegendSwatch key={k} color={colorOf(k)} label={`${byKey[k].label} (${byKey[k].unit})`}/>)}
+                      </div>
+                    </ChartCard>
+                  </div>
+                );
+              })}
     </div>
   );
 }
@@ -1578,9 +1608,9 @@ function SeriesToggle({series}) {
 const TABS = [
   { id:"live", label:"Live", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> },
   { id:"day",  label:"Day",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg> },
-  { id:"hyper",label:"Hyper",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg> },
   { id:"month",label:"Month",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
   { id:"year", label:"Year", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg> },
+  { id:"explorer",label:"Explorer",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg> },
 ];
 const ADMIN_TAB = { id:"admin", label:"Admin", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg> };
 
@@ -1588,6 +1618,9 @@ function AdminPanel({site, inverters, statuses=[]}) {
   const [log, setLog] = useState(null);
   const [logErr, setLogErr] = useState(null);
   const [persistent, setPersistent] = useState(false);
+  const [hideSelf, setHideSelf] = useState(true); // suppress the admin's own log events by default
+  const myUser = (JSON.parse(localStorage.getItem("midnite_creds")||"{}").username||"").trim().toLowerCase();
+  const shownLog = log && hideSelf ? log.filter(e=>(e.user||"").trim().toLowerCase()!==myUser) : log;
   const [action, setAction] = useState("status");
   const [bodyText, setBodyText] = useState("{}");
   const [out, setOut] = useState("");
@@ -1706,13 +1739,19 @@ function AdminPanel({site, inverters, statuses=[]}) {
             <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Access Log</div>
             <div style={{fontSize:11,color:FAINT}}>{persistent? "Persistent (Vercel KV)" : "In-memory — recent activity only; add a KV store to persist across restarts"}</div>
           </div>
-          <button onClick={loadLog} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Refresh</button>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",userSelect:"none"}}>
+              <input type="checkbox" checked={hideSelf} onChange={e=>setHideSelf(e.target.checked)} style={{cursor:"pointer"}}/>
+              Hide my own events
+            </label>
+            <button onClick={loadLog} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Refresh</button>
+          </div>
         </div>
         {logErr && <div style={{color:GRID_IN,fontSize:12}}>{logErr}</div>}
-        {log && log.length===0 && !logErr && <div style={{fontSize:12,color:FAINT}}>No events yet.</div>}
-        {log && log.length>0 && (
+        {shownLog && shownLog.length===0 && !logErr && <div style={{fontSize:12,color:FAINT}}>{log&&log.length>0&&hideSelf?"No events (your own are hidden).":"No events yet."}</div>}
+        {shownLog && shownLog.length>0 && (
           <div style={{maxHeight:300,overflow:"auto"}}>
-            {log.map((e,i)=>(
+            {shownLog.map((e,i)=>(
               <div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline"}}>
                 <span style={{color:FAINT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtTs(e.ts)}</span>
                 <span style={{fontWeight:700,color:e.type==="login"?BATTERY:LOAD_C,textTransform:"uppercase",fontSize:10}}>{e.type}</span>
@@ -1771,10 +1810,13 @@ export default function Dashboard() {
   const [yearVal, setYearVal] = useState(thisYear);
   const [yearData, setYearData] = useState([]);
   const [yearLoading, setYearLoading] = useState(false);
-  const [hyperDate, setHyperDate] = useState(today);
-  const [hyperRows, setHyperRows] = useState([]);
-  const [hyperMetrics, setHyperMetrics] = useState([]);
-  const [hyperLoading, setHyperLoading] = useState(false);
+  const [expStart, setExpStart] = useState(today);
+  const [expEnd, setExpEnd] = useState(today);
+  const [explorerSn, setExplorerSn] = useState(null);
+  const [explorerRows, setExplorerRows] = useState([]);
+  const [explorerMetrics, setExplorerMetrics] = useState([]);
+  const [explorerMulti, setExplorerMulti] = useState(false);
+  const [explorerLoading, setExplorerLoading] = useState(false);
 
   function handleSitesResponse(data) {
     const raw = data.sites || (Array.isArray(data) ? data : []);
@@ -1856,7 +1898,11 @@ export default function Dashboard() {
   useEffect(() => { if(!site) return; setLiveLoading(true); fetchLive(); const t=setInterval(fetchLive,60000); return()=>clearInterval(t); }, [fetchLive]);
 
   // Multi-select: selectedSns holds the serials currently shown. Default to all when a site loads.
-  useEffect(() => { if(site) setSelectedSns(site.inverters.map(i=>i.sn)); }, [site]);
+  useEffect(() => { if(site){ setSelectedSns(site.inverters.map(i=>i.sn)); setExplorerSn(site.inverters[0]?.sn||null); } }, [site]);
+  // Explorer date-range handlers — clamp to ≤7 days and not into the future.
+  const onExpStart = (v) => { if(v>today)v=today; let e=expEnd; if(e<v)e=v; if(dayDiff(v,e)>6)e=addDays(v,6); if(e>today)e=today; setExpStart(v); setExpEnd(e); };
+  const onExpEnd = (v) => { if(v>today)v=today; let s=expStart; if(v<s)s=v; if(dayDiff(s,v)>6)s=addDays(v,-6); setExpStart(s); setExpEnd(v); };
+  const expShift = (delta) => { const span=dayDiff(expStart,expEnd); let s=addDays(expStart,delta), e=addDays(expEnd,delta); if(e>today){ e=today; s=addDays(e,-span); } setExpStart(s); setExpEnd(e); };
   const chartInverters = site ? site.inverters.filter(i=>selectedSns.includes(i.sn)) : [];
   const allSelected = site ? selectedSns.length===site.inverters.length && selectedSns.length>0 : false;
   const toggleInv = (sn) => setSelectedSns(prev=>{ const has=prev.includes(sn); if(has){ const next=prev.filter(x=>x!==sn); return next.length?next:prev; } return [...prev,sn]; });
@@ -1916,15 +1962,25 @@ export default function Dashboard() {
     }
   }, [tab,monthDate,monthMode,rangeStart,rangeEnd,snKey,site]);
   useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,snKey,site]);
-  // Hyper: raw per-parameter 5-min series from the dayexcel CSV (single inverter — it's per-inverter).
+  // Explorer: raw per-parameter 5-min series from the dayexcel CSV, for one inverter over a date
+  // range (up to 7 days). Each day's rows are tagged with _date and concatenated; the metric catalog
+  // is the union across the range.
   useEffect(() => {
-    if(tab!=="hyper"||!site) return;
-    if(chartInverters.length!==1){ setHyperRows([]); setHyperMetrics([]); return; }
-    setHyperLoading(true);
-    api("dayexcel",{sn:chartInverters[0].sn,date:hyperDate,memberId:site.name})
-      .then(excel=>{ setHyperRows(excel?.rows||[]); setHyperMetrics(excel?.metrics||[]); setHyperLoading(false); })
-      .catch(()=>{ setHyperRows([]); setHyperMetrics([]); setHyperLoading(false); });
-  }, [tab,hyperDate,snKey,site]);
+    if(tab!=="explorer"||!site||!explorerSn) return;
+    setExplorerLoading(true);
+    const dates = datesInRange(expStart, expEnd);
+    const multi = dates.length>1;
+    Promise.all(dates.map(d=>api("dayexcel",{sn:explorerSn,date:d,memberId:site.name}).then(r=>({d,r})).catch(()=>({d,r:null}))))
+      .then(results=>{
+        const rows=[]; const metricMap={};
+        for(const {d,r} of results){
+          for(const m of (r?.metrics||[])) if(!metricMap[m.key]) metricMap[m.key]=m;
+          for(const row of (r?.rows||[])) rows.push({...row, _date:d, t:(row.time||"").slice(0,5)});
+        }
+        setExplorerRows(rows); setExplorerMetrics(Object.values(metricMap));
+        setExplorerMulti(multi); setExplorerLoading(false);
+      });
+  }, [tab,expStart,expEnd,explorerSn,site]);
 
   const visibleStatuses = statuses.filter(s=>selectedSns.includes(s.sn));
 
@@ -1997,7 +2053,9 @@ export default function Dashboard() {
 
         {/* Content */}
         <div className="page-pad" style={{maxWidth:960,margin:"0 auto",padding:"16px 16px 24px",animation:"fadeUp 0.35s ease"}}>
-          <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>
+          {tab==="explorer"
+            ? <InverterSelector single value={explorerSn} onPick={setExplorerSn} statuses={statuses} inverters={site.inverters}/>
+            : <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>}
 
           {tab==="live"&&(
             <>
@@ -2044,13 +2102,10 @@ export default function Dashboard() {
           })()}
           {tab==="month"&&<MonthChart mode={monthMode} onModeChange={setMonthMode} month={monthDate} onMonthChange={setMonthDate} rangeStart={rangeStart} rangeEnd={rangeEnd} onRangeStart={setRangeStart} onRangeEnd={setRangeEnd} data={monthData} loading={monthLoading}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
-          {tab==="hyper"&&(
-            chartInverters.length===1
-              ? <HyperChart date={hyperDate} onDateChange={setHyperDate} rows={hyperRows} metrics={hyperMetrics} loading={hyperLoading} label={chartInverters[0].label}/>
-              : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:13,background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,boxShadow:SHADOW_SM}}>
-                  <div style={{fontSize:15,fontWeight:700,color:TEXT,marginBottom:6}}>Select a single inverter</div>
-                  Hyper charts raw per-parameter data from one inverter at a time. Pick one inverter above to begin.
-                </div>
+          {tab==="explorer"&&(
+            explorerSn
+              ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label}/>
+              : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:13}}>No inverter selected.</div>
           )}
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses}/>}
         </div>

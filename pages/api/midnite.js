@@ -439,61 +439,59 @@ export default async function handler(req, res) {
         // field for volts, middle for amps, last for watts); scalar columns (Temperature, SOC, …) are
         // a single number. Returns the legacy mppt/gridV/gridHz fields (used by the Day chart) PLUS a
         // flat per-row metric map and a catalog of the metrics that actually carry data — the source
-        // for the Hyper per-parameter time-series charts (every column at 5-min resolution).
+        // for the Explorer per-parameter time-series charts (every column at 5-min resolution).
         const seg   = (cell) => String(cell||"").split("/");
         const fnum  = (s) => parseFloat(String(s).replace(/[^0-9.\-]/g,"")) || 0;
         const vOf   = (cell) => fnum(seg(cell)[0]);
         const wOf   = (cell) => { const p = seg(cell); return fnum(p[p.length-1]); };
         const aOf   = (cell) => { const p = seg(cell); return p.length>=3 ? fnum(p[1]) : fnum(p[p.length-1]); };
         const numOf = (cell) => fnum(cell);
-        // Catalog of chartable parameters. Only the ones that carry data on this inverter/day are
-        // returned (so e.g. generator legs vanish on sites with no genset).
+        // Catalog of chartable parameters. The AC ports are "V/A/W" cells, so each is broken out into
+        // three metrics (volts / amps / watts). The whole catalog is returned regardless of whether a
+        // column reads zero (gen, smart loads, unused MPPT/legs stay selectable) — the Explorer tab
+        // groups them and the user picks what to chart.
+        const PORTS = [
+          ["mppt1","MPPT1"],["mppt2","MPPT2"],["mppt3","MPPT3"],
+          ["gridL1","Grid L1"],["gridL2","Grid L2"],
+          ["loadL1","Load L1"],["loadL2","Load L2"],
+          ["acOut1","AC Out L1"],["acOut2","AC Out L2"],
+          ["smartB1","Smart Load B L1"],["smartB2","Smart Load B L2"],
+          ["smartC1","Smart Load C L1"],["smartC2","Smart Load C L2"],
+          ["genL1","Gen L1"],["genL2","Gen L2"],
+          ["bat","Battery"],
+        ];
         const METRIC_DEFS = [
-          {key:"pvW",     label:"PV Power",        unit:"W",  group:"Power"},
-          {key:"mppt1W",  label:"MPPT1 Power",     unit:"W",  group:"Power"},
-          {key:"mppt2W",  label:"MPPT2 Power",     unit:"W",  group:"Power"},
-          {key:"mppt3W",  label:"MPPT3 Power",     unit:"W",  group:"Power"},
-          {key:"loadL1W", label:"Load L1",         unit:"W",  group:"Power"},
-          {key:"loadL2W", label:"Load L2",         unit:"W",  group:"Power"},
-          {key:"gridL1W", label:"Grid L1",         unit:"W",  group:"Power"},
-          {key:"gridL2W", label:"Grid L2",         unit:"W",  group:"Power"},
-          {key:"acOut1W", label:"AC Out L1",       unit:"W",  group:"Power"},
-          {key:"acOut2W", label:"AC Out L2",       unit:"W",  group:"Power"},
-          {key:"smartB1W",label:"Smart Load B L1", unit:"W",  group:"Power"},
-          {key:"smartB2W",label:"Smart Load B L2", unit:"W",  group:"Power"},
-          {key:"smartC1W",label:"Smart Load C L1", unit:"W",  group:"Power"},
-          {key:"smartC2W",label:"Smart Load C L2", unit:"W",  group:"Power"},
-          {key:"genL1W",  label:"Gen L1",          unit:"W",  group:"Power"},
-          {key:"genL2W",  label:"Gen L2",          unit:"W",  group:"Power"},
-          {key:"batW",    label:"Battery Power",   unit:"W",  group:"Power"},
-          {key:"gridL1V", label:"Grid L1–N",       unit:"V",  group:"Voltage"},
-          {key:"gridL2V", label:"Grid L2–N",       unit:"V",  group:"Voltage"},
-          {key:"acOut1V", label:"AC Out L1",       unit:"V",  group:"Voltage"},
-          {key:"acOut2V", label:"AC Out L2",       unit:"V",  group:"Voltage"},
-          {key:"mppt1V",  label:"MPPT1 Voltage",   unit:"V",  group:"Voltage"},
-          {key:"mppt2V",  label:"MPPT2 Voltage",   unit:"V",  group:"Voltage"},
-          {key:"mppt3V",  label:"MPPT3 Voltage",   unit:"V",  group:"Voltage"},
-          {key:"batV",    label:"Battery Voltage", unit:"V",  group:"Voltage"},
-          {key:"mppt1A",  label:"MPPT1 Current",   unit:"A",  group:"Current"},
-          {key:"mppt2A",  label:"MPPT2 Current",   unit:"A",  group:"Current"},
-          {key:"mppt3A",  label:"MPPT3 Current",   unit:"A",  group:"Current"},
-          {key:"batA",    label:"Battery Current", unit:"A",  group:"Current"},
-          {key:"gridHz",  label:"Grid Frequency",  unit:"Hz", group:"Frequency"},
-          {key:"loadHz",  label:"Load Frequency",  unit:"Hz", group:"Frequency"},
-          {key:"genHz",   label:"Gen Frequency",   unit:"Hz", group:"Frequency"},
-          {key:"soc",     label:"Battery SOC",     unit:"%",  group:"Battery"},
-          {key:"soh",     label:"Battery SOH",     unit:"%",  group:"Battery"},
-          {key:"temp",    label:"Inverter Temp",   unit:"°C", group:"Temperature"},
-          {key:"batTemp", label:"Battery Temp",    unit:"°C", group:"Temperature"},
+          {key:"pvW", label:"PV Power", unit:"W", group:"Power"},
+          ...PORTS.map(([k,l])=>({key:k+"W", label:l, unit:"W", group:"Power"})),
+          ...PORTS.map(([k,l])=>({key:k+"V", label:l, unit:"V", group:"Voltage"})),
+          ...PORTS.map(([k,l])=>({key:k+"A", label:l, unit:"A", group:"Current"})),
+          {key:"gridHz", label:"Grid Frequency", unit:"Hz", group:"Frequency"},
+          {key:"loadHz", label:"Load Frequency", unit:"Hz", group:"Frequency"},
+          {key:"genHz",  label:"Gen Frequency",  unit:"Hz", group:"Frequency"},
+          {key:"soc",      label:"Battery SOC",      unit:"%",  group:"Battery"},
+          {key:"soh",      label:"Battery SOH",      unit:"%",  group:"Battery"},
+          {key:"capacity", label:"Battery Capacity", unit:"Ah", group:"Battery"},
+          {key:"temp",    label:"Inverter Temp", unit:"°C", group:"Temperature"},
+          {key:"batTemp", label:"Battery Temp",  unit:"°C", group:"Temperature"},
           // Cumulative day counters (ramp from 0 over the day)
-          {key:"eToday",            label:"PV Energy",          unit:"kWh", group:"Energy"},
-          {key:"consumptionToday",  label:"Consumption",        unit:"kWh", group:"Energy"},
-          {key:"feedInToday",       label:"Feed-In Energy",     unit:"kWh", group:"Energy"},
-          {key:"purchasedToday",    label:"Purchased Energy",   unit:"kWh", group:"Energy"},
-          {key:"chargeToday",       label:"Battery Charged",    unit:"kWh", group:"Energy"},
-          {key:"dischargeToday",    label:"Battery Discharged", unit:"kWh", group:"Energy"},
-          {key:"outputToday",       label:"Output Energy",      unit:"kWh", group:"Energy"},
-          {key:"smartLoadToday",    label:"Smart Load Energy",  unit:"kWh", group:"Energy"},
+          {key:"eToday",           label:"PV Energy",          unit:"kWh", group:"Energy (today)"},
+          {key:"consumptionToday", label:"Consumption",        unit:"kWh", group:"Energy (today)"},
+          {key:"feedInToday",      label:"Feed-In",            unit:"kWh", group:"Energy (today)"},
+          {key:"purchasedToday",   label:"Purchased",          unit:"kWh", group:"Energy (today)"},
+          {key:"chargeToday",      label:"Battery Charged",    unit:"kWh", group:"Energy (today)"},
+          {key:"dischargeToday",   label:"Battery Discharged", unit:"kWh", group:"Energy (today)"},
+          {key:"outputToday",      label:"Output",             unit:"kWh", group:"Energy (today)"},
+          {key:"smartLoadToday",   label:"Smart Load",         unit:"kWh", group:"Energy (today)"},
+          // Lifetime counters
+          {key:"eTotal",          label:"PV Energy",          unit:"kWh", group:"Energy (lifetime)"},
+          {key:"totalConsumption",label:"Consumption",        unit:"kWh", group:"Energy (lifetime)"},
+          {key:"totalFeedIn",     label:"Feed-In",            unit:"kWh", group:"Energy (lifetime)"},
+          {key:"totalPurchased",  label:"Purchased",          unit:"kWh", group:"Energy (lifetime)"},
+          {key:"totalCharge",     label:"Battery Charged",    unit:"kWh", group:"Energy (lifetime)"},
+          {key:"totalDischarge",  label:"Battery Discharged", unit:"kWh", group:"Energy (lifetime)"},
+          {key:"outputTotal",     label:"Output",             unit:"kWh", group:"Energy (lifetime)"},
+          {key:"smartLoadTotal",  label:"Smart Load",         unit:"kWh", group:"Energy (lifetime)"},
+          {key:"hTotal",          label:"Run Hours",          unit:"h",   group:"Energy (lifetime)"},
         ];
         const rows = []; let started = false; let header = []; let col = {};
         const ix = (name, fb) => { const i = col[name]; return i != null ? i : fb; }; // header index, or fallback
@@ -506,42 +504,51 @@ export default async function handler(req, res) {
             continue;
           }
           if (!started || !/^\d{4}-\d{2}-\d{2}[ T]/.test(f[0])) continue;
-          const m1 = f[ix("MPPT1",1)], m2 = f[ix("MPPT2",2)], m3 = f[ix("MPPT3",3)];
-          const g1 = f[ix("Grid1",9)], g2 = f[ix("Grid2",15)];
-          const ao1 = f[ix("AC OUT(100A)1",12)], ao2 = f[ix("AC OUT(100A)2",18)];
+          // Each AC port is a "V/A/W" cell → break it into k+V / k+A / k+W. Battery V/A/W are scalar
+          // columns parsed separately. The "PV" column is in kW (e.g. "8.31KW"), so PV power is taken
+          // from the per-MPPT watt sum (true watts), scaling the PV column only as a fallback.
+          const cells = {
+            mppt1: f[ix("MPPT1",1)], mppt2: f[ix("MPPT2",2)], mppt3: f[ix("MPPT3",3)],
+            gridL1: f[ix("Grid1",9)], gridL2: f[ix("Grid2",15)],
+            loadL1: f[ix("Normal Load1",10)], loadL2: f[ix("Normal Load2",16)],
+            acOut1: f[ix("AC OUT(100A)1",12)], acOut2: f[ix("AC OUT(100A)2",18)],
+            smartB1: f[ix("Smart LoadB(50A)1",13)], smartB2: f[ix("Smart LoadB(50A)2",19)],
+            smartC1: f[ix("Smart LoadC(30A)1",14)], smartC2: f[ix("Smart LoadC(30A)2",20)],
+            genL1: f[ix("Gen Port1",11)], genL2: f[ix("Gen Port2",17)],
+          };
+          const flat = {};
+          for (const [k, c] of Object.entries(cells)) { flat[k+"V"] = vOf(c); flat[k+"A"] = aOf(c); flat[k+"W"] = wOf(c); }
           rows.push({
             time: f[0].split(/[ T]/)[1],
             // legacy fields consumed by the Day chart (MPPT split + power-quality voltage plot)
-            mppt: [wOf(m1), wOf(m2), wOf(m3)],
-            gridV: [vOf(g1), vOf(g2)], // [L1-N, L2-N]
+            mppt: [flat.mppt1W, flat.mppt2W, flat.mppt3W],
+            gridV: [flat.gridL1V, flat.gridL2V], // [L1-N, L2-N]
             gridHz: numOf(f[ix("GridFac",21)]),
-            // flat metric map (Hyper charts) — every parameter at this 5-min interval.
-            // PV total comes from the MPPT watt sum; the "PV" column is in kW (e.g. "8.31KW"), so it
-            // is only a ×1000 fallback when the per-MPPT split is absent.
-            pvW: (wOf(m1)+wOf(m2)+wOf(m3)) || Math.round(numOf(f[ix("PV",4)])*1000),
-            mppt1W: wOf(m1), mppt2W: wOf(m2), mppt3W: wOf(m3),
-            mppt1V: vOf(m1), mppt2V: vOf(m2), mppt3V: vOf(m3),
-            mppt1A: aOf(m1), mppt2A: aOf(m2), mppt3A: aOf(m3),
-            gridL1V: vOf(g1), gridL2V: vOf(g2), gridL1W: wOf(g1), gridL2W: wOf(g2),
-            acOut1V: vOf(ao1), acOut2V: vOf(ao2), acOut1W: wOf(ao1), acOut2W: wOf(ao2),
-            loadL1W: wOf(f[ix("Normal Load1",10)]), loadL2W: wOf(f[ix("Normal Load2",16)]),
-            smartB1W: wOf(f[ix("Smart LoadB(50A)1",13)]), smartB2W: wOf(f[ix("Smart LoadB(50A)2",19)]),
-            smartC1W: wOf(f[ix("Smart LoadC(30A)1",14)]), smartC2W: wOf(f[ix("Smart LoadC(30A)2",20)]),
-            genL1W: wOf(f[ix("Gen Port1",11)]),     genL2W: wOf(f[ix("Gen Port2",17)]),
-            loadHz: numOf(f[ix("LoadFac",22)]),     genHz: numOf(f[ix("GenFac",23)]),
-            soc: numOf(f[ix("SOC",32)]),            soh: numOf(f[ix("SOH",33)]),
-            batTemp: numOf(f[ix("BatteryTemp",34)]), batA: numOf(f[ix("Battery Current",35)]),
-            batV: numOf(f[ix("Battery Voltage",36)]), batW: numOf(f[ix("Battery Power",37)]),
-            temp: numOf(f[ix("Temperature",5)]),
-            // cumulative day-energy counters (kWh)
+            // flat metric map (Explorer charts) — every parameter at this 5-min interval
+            pvW: (flat.mppt1W + flat.mppt2W + flat.mppt3W) || Math.round(numOf(f[ix("PV",4)])*1000),
+            ...flat,
+            batV: numOf(f[ix("Battery Voltage",36)]), batA: numOf(f[ix("Battery Current",35)]), batW: numOf(f[ix("Battery Power",37)]),
+            loadHz: numOf(f[ix("LoadFac",22)]), genHz: numOf(f[ix("GenFac",23)]),
+            soc: numOf(f[ix("SOC",32)]), soh: numOf(f[ix("SOH",33)]), capacity: numOf(f[ix("Capacity",30)]),
+            temp: numOf(f[ix("Temperature",5)]), batTemp: numOf(f[ix("BatteryTemp",34)]),
+            // cumulative day counters (kWh)
             eToday: numOf(f[ix("E-Today",6)]), consumptionToday: numOf(f[ix("Consumption Today",26)]),
             feedInToday: numOf(f[ix("Feed-In Energy Today",24)]), purchasedToday: numOf(f[ix("Purchased Energy Today",25)]),
             chargeToday: numOf(f[ix("Daily charge energy",38)]), dischargeToday: numOf(f[ix("Daily discharge energy",39)]),
             outputToday: numOf(f[ix("Outputs Energy Today",44)]), smartLoadToday: numOf(f[ix("smartLoadDay",42)]),
+            // lifetime counters (kWh / hours)
+            eTotal: numOf(f[ix("E-Total",7)]), hTotal: numOf(f[ix("H-Total",8)]),
+            totalConsumption: numOf(f[ix("Total Consumption",29)]), totalFeedIn: numOf(f[ix("Total Feed-In Energy",27)]),
+            totalPurchased: numOf(f[ix("Total Purchased Energy",28)]),
+            totalCharge: numOf(f[ix("Total charge energy",40)]), totalDischarge: numOf(f[ix("Total discharge energy",41)]),
+            outputTotal: numOf(f[ix("Outputs Energy Total",45)]), smartLoadTotal: numOf(f[ix("smartLoadTotal",43)]),
           });
         }
         const activeMppts = [0,1,2].filter(i => rows.some(r => Math.abs(r.mppt[i]) > 1));
-        const metrics = METRIC_DEFS.filter(md => rows.some(r => Math.abs(r[md.key]||0) > 0.0001));
+        // Return the full catalog so every parameter stays selectable (gen, smart loads, unused legs
+        // included), but drop any metric whose column is entirely absent from this CSV variant.
+        const present = (key) => rows.some(r => r[key] !== undefined && !Number.isNaN(r[key]));
+        const metrics = METRIC_DEFS.filter(md => present(md.key));
         return res.json({ rows, activeMppts, metrics, count: rows.length, header });
       }
       case "month": {
