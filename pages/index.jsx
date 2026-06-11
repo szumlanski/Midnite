@@ -992,7 +992,10 @@ function FlowDiagram({flow}) {
   if(flow.couple>A) edges.push({ d:`M56,182 L${L},182`, active:true, reverse:flow.couple<0, value:flow.couple });
   return (
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
-      <div style={{fontSize:11,fontWeight:700,color:FAINT,padding:"4px 8px 0",letterSpacing:"0.06em"}}>POWER FLOW</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"4px 8px 0"}}>
+        <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
+        {flow.updated&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>as of {flow.updated.replace("T"," ").slice(0,16)}</span>}
+      </div>
       <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
         <InverterGraphic count={flow.count}/>
@@ -1669,7 +1672,9 @@ export default function Dashboard() {
     const smartLoad = sum(d=>{const sp=d.smartPorts||{}; return portW(sp.A)+portW(sp.B)+portW(sp.C);});
     const couple = sum(d=>d.couple?.netW||d.couple?.power||0); // provision — shows when the API exposes it
     const w = selStatus.filter(x=>(x.data.battery?.soc||0)>0);
+    const times = selStatus.map(x=>x.data.inverter?.lastUpdateTime).filter(Boolean).sort();
     return { pv, grid, battery, load, gen, smartLoad, couple, count: selStatus.length,
+      updated: times.length ? times[times.length-1] : null,
       soc: w.length? w.reduce((s,x)=>s+x.data.battery.soc,0)/w.length : null };
   })() : null;
 
