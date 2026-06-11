@@ -322,12 +322,13 @@ function StatTile({label, value, color=MUTED, sub=null}) {
 }
 
 function SummaryStrip({produced, consumed, imported, exported, charged, discharged, netExported}) {
+  const [openTip, setOpenTip] = useState(null);
   const items = [
     {label:"Produced", value:fmtE(produced), color:CHART_PROD},
     {label:"Consumed", value:fmtE(consumed), color:CHART_CONS},
     {label:"Imported", value:fmtE(imported), color:GRID_IN},
     {label:"Exported", value:fmtE(exported), color:GRID_OUT},
-    ...(netExported!=null?[{label: netExported>=0?"Net Exported":"Net Imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN}]:[]),
+    ...(netExported!=null?[{label: netExported>=0?"Net Exported":"Net Imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN, tip:`Exported ${fmtE(exported)} − Imported ${fmtE(imported)} = ${netExported<0?"−":""}${fmtE(Math.abs(netExported))}`}]:[]),
     ...(charged>0?[{label:"Charged", value:fmtE(charged), color:BATTERY}]:[]),
     ...(discharged>0?[{label:"Discharged", value:fmtE(discharged), color:SOLAR}]:[]),
   ];
@@ -335,9 +336,10 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
     <div style={{background:CARD,borderRadius:14,padding:"16px 20px",marginBottom:16,boxShadow:SHADOW_SM,border:`1px solid ${BORDER}`}}>
       <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
         {items.map(it=>(
-          <div key={it.label}>
-            <div style={{fontSize:11,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{it.label}</div>
+          <div key={it.label} onClick={it.tip?()=>setOpenTip(t=>t===it.label?null:it.label):undefined} title={it.tip||undefined} style={{cursor:it.tip?"pointer":"default"}}>
+            <div style={{fontSize:11,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{it.label}{it.tip&&<span style={{marginLeft:4,color:FAINT,fontWeight:700}}>ⓘ</span>}</div>
             <div style={{fontSize:15,fontWeight:700,color:it.color,fontVariantNumeric:"tabular-nums"}}>{it.value}</div>
+            {it.tip&&openTip===it.label&&<div style={{fontSize:10,color:MUTED,fontWeight:500,marginTop:3,whiteSpace:"nowrap"}}>{it.tip}</div>}
           </div>
         ))}
       </div>
