@@ -427,6 +427,7 @@ export default async function handler(req, res) {
             grid: parseFloat(r?.gridCurrpac || 0),
             load: parseFloat(r?.loadCurrpac || 0),
             eps: parseFloat(r?.epsCurrpac || 0),
+            gen: parseFloat(r?.genCurrpac || 0),
             battery: parseFloat(r?.Pbat || 0),
             soc: parseFloat(r?.SOC || 0),
             raw: r,

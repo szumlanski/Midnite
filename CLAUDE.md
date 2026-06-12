@@ -332,13 +332,17 @@ diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **d
   (+import/−export), battery net (`charge−discharge`), Home = `balanceLoad`. Aggregates the **selected**
   inverters; `flow.count` drives a **×N badge** on the inverter.
 - **Real-time overlay (`flowrt` / getHybridFlowgraphRealTimeData):** on the Live tab a 5s poll of `flowrt`
-  per selected inverter overlays live PV/grid/load/battery/SOC onto `flowAgg` and `SiteHero` (only when a
-  reading exists for **every** selected inverter, else falls back to 5-min `status`). A **LIVE** pulse shows on
-  the flow header + hero. This endpoint **is** genuinely live: `SystemTime` ticks per second, the measured
-  values refresh ~every 5s (verified by 1s logging) — the first poll can return one stale (cached) sample, then
-  it goes live. `flowrt.load` == `pv + grid − battery` (the energy balance), so on AIO units where `loadCurrpac`
-  reads 0 we derive Home from that balance. (Device-shadow registers do NOT carry real-time telemetry — only
-  this flow endpoint does.)
+  per selected inverter overlays live power onto `flowAgg` and `SiteHero` (only when a reading exists for
+  **every** selected inverter, else falls back to 5-min `status`). A **LIVE** pulse shows on the flow header +
+  hero. This endpoint **is** genuinely live: `SystemTime` ticks per second, the values refresh ~every 5s
+  (verified by 1s logging) — the first poll can return one stale (cached) sample, then it goes live.
+  **AIO/EPS handling (critical):** on AIO units the house is served through the **EPS** port, so `loadCurrpac`
+  reads **0** and the real house load is in **`epsCurrpac`** — Home = `load>0 ? load : eps`. Battery net is
+  **balance-derived** (`pv + grid + gen − load`) because the live `Pbat` sign is unreliable; live `SOC` can come
+  back `0`, so fall back to the 5-min status SOC when live SOC ≤ 0. Getting Home right (= eps) also makes the
+  smart-load node auto-suppress, since the smart-port reading IS that EPS house load (don't show it twice).
+  Note: `flowrt` `SystemTime` can be **12h off** (inverter clock) — cosmetic. (Device-shadow registers do NOT
+  carry real-time telemetry — only this flow endpoint does.)
 - Node text sits on the side **away** from the inverter (`place="above"` top nodes / `"below"` bottom) so
   connectors never cross labels.
 - Grid icon = drawn **transmission pylon** (`gridPylon`, passed via `iconSvg`), not a bank emoji.

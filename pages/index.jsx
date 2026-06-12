@@ -364,7 +364,8 @@ function SiteHero({statuses, live=null}) {
   const totalLoad = live ? live.load : v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
   const totalGrid = live ? live.grid : v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
   const totalBat = live ? live.battery : v.reduce((s,i)=>s+(i.data.battery?.charge||0)-(i.data.battery?.discharge||0),0);
-  const avgSoc = live ? live.soc : (v.length ? v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length : null);
+  const statusSoc = v.length ? v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length : null;
+  const avgSoc = (live && live.soc!=null) ? live.soc : statusSoc;
   const totalToday = v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.today||0),0);
   const totalImpToday = v.reduce((s,i)=>s+(i.data.grid?.consumption?.today||0),0);
   const totalExpToday = v.reduce((s,i)=>s+(i.data.grid?.sold?.today||0),0);
@@ -2204,7 +2205,7 @@ export default function Dashboard() {
       try {
         const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
         if(!alive) return;
-        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false) next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
+        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false) next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
       } catch(e){ /* keep polling */ } finally { busy = false; }
     };
     poll();
@@ -2311,19 +2312,26 @@ export default function Dashboard() {
 
   // Live overlay from the 5s flowrt feed (only when we have a reading for every selected inverter).
   const liveSel = selectedSns.map(sn=>liveFlow[sn]).filter(Boolean);
-  const liveAgg = (liveSel.length && liveSel.length===selectedSns.length) ? {
-    pv: liveSel.reduce((s,x)=>s+(x.pv||0),0),
-    grid: liveSel.reduce((s,x)=>s+(x.grid||0),0),
-    battery: liveSel.reduce((s,x)=>s+(x.battery||0),0),
-    load: liveSel.reduce((s,x)=>s+(x.load>0?x.load:((x.pv||0)+(x.grid||0)-(x.battery||0))),0),
-    soc: liveSel.reduce((s,x)=>s+(x.soc||0),0)/liveSel.length,
-    time: liveSel.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null,
-  } : null;
+  const liveAgg = (liveSel.length && liveSel.length===selectedSns.length) ? (()=>{
+    // AIO/EPS units serve the house through the EPS port, so loadCurrpac reads 0 — use epsCurrpac.
+    const homeOf = (x) => (x.load>0 ? x.load : (x.eps||0));
+    const pv = liveSel.reduce((s,x)=>s+(x.pv||0),0);
+    const grid = liveSel.reduce((s,x)=>s+(x.grid||0),0);
+    const gen = liveSel.reduce((s,x)=>s+(x.gen||0),0);
+    const load = liveSel.reduce((s,x)=>s+homeOf(x),0);
+    // Battery net (+charge/−discharge) from the energy balance — the live Pbat sign is unreliable.
+    const battery = pv + grid + gen - load;
+    const socs = liveSel.map(x=>x.soc).filter(v=>v>0); // live SOC can come back 0; fall back to status
+    const soc = socs.length ? socs.reduce((a,b)=>a+b,0)/socs.length : null;
+    const time = liveSel.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null;
+    return { pv, grid, load, battery, soc, time };
+  })() : null;
   // Merge live power into the flow diagram (keep gen/smart-load/capacity from the 5-min status).
   if(flowAgg && liveAgg){
-    flowAgg = { ...flowAgg, pv:liveAgg.pv, grid:liveAgg.grid, battery:liveAgg.battery, load:liveAgg.load, soc:liveAgg.soc,
+    const soc = liveAgg.soc!=null ? liveAgg.soc : flowAgg.soc;
+    flowAgg = { ...flowAgg, pv:liveAgg.pv, grid:liveAgg.grid, battery:liveAgg.battery, load:liveAgg.load, soc,
       updated: liveAgg.time || flowAgg.updated, live: true,
-      remainKwh: (flowAgg.capKwh!=null && liveAgg.soc!=null) ? flowAgg.capKwh*liveAgg.soc/100 : flowAgg.remainKwh,
+      remainKwh: (flowAgg.capKwh!=null && soc!=null) ? flowAgg.capKwh*soc/100 : flowAgg.remainKwh,
       ratePctHr: (flowAgg.capKwh && Math.abs(liveAgg.battery)>20) ? Math.abs(liveAgg.battery)/1000/flowAgg.capKwh*100 : null,
       rateSign: liveAgg.battery>0?"+":"−" };
   }
