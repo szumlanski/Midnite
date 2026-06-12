@@ -130,8 +130,10 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
 - **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
   ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
   code that resolved to a value. Surfaced in **Admin → Live Register Probe** — one **Read all** button sweeps the
-  attribute space client-side in 2048-code windows (0x1000–0x3FFF + 0x5000–0x5FFF), merges, and on a second run
-  highlights **Δ vs the previous full read** (with a "changed only" filter) + signature tags. Purpose: find which
+  attribute space client-side in 2048-code windows (0x0000–0x6FFF), merges, shows only non-zero registers, and on a
+  second run highlights **Δ vs the previous full read** (with a "changed only" filter). A **Match to live status**
+  table cross-references each live reading (PV/grid/load/battery power, SOC, SOH, grid+battery V, Hz, temp) against
+  the swept registers at sane per-unit scales (config codes excluded) to auto-label candidates. Purpose: find which
   attribute IDs carry **real-time measurements** (power /
   voltage / current / freq / SOC) so we can offer an on-demand live stream instead of the 5-min cloud cache.
   Note: device-shadow codes (e.g. `0x2100`) are the cloud's **attribute IDs**, NOT raw Modbus addresses; the

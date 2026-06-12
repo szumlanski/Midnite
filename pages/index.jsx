@@ -1554,6 +1554,12 @@ const TABS = [
 ];
 const ADMIN_TAB = { id:"admin", label:"Admin", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg> };
 
+// Known device-shadow CONFIG/setting codes (the readsettings register set) — excluded from the
+// Live Register Probe's "match to live" so coincidental setting values don't drown out real telemetry.
+const CONFIG_CODES = new Set([
+  "1A18","5101","5000","5001","5019","5029","5002","5003","5004","5005","5006","5007","5008","5009","500A","500B","500C","500D","500E","500F","5010","5011","501A","5021","507F","5017","511D","2125","501F","5020","5025","5026","506C","506D","5033","5030","5031","5121","5059","5034","5035","5036","5037","5038","5039","503A","503B","503C","503D","503E","503F","5040","5041","5042","5043","505A","505B","505C","505D","505E","505F","5060","5061","5027","5028","5012","5013","507A","507B","5078","5079",
+  "30B0","30B1","30B2","30B3","30B4","30B5","30B9","30BA","308E","3089","2100","2141","215B","214C","1A48","1A5A","2124","2110","2101","2102","2103","2104","2105","2106","2107","2108","2109","210A","210B","210C","210D","210E","210F","2168","2169","216C","216D","2170","2171","2174","2175","2178","2179","217C","217D","216A","216B","216E","216F","2172","2173","2176","2177","217A","217B","217E","217F","2122","2520","2540","256E","256F","2570","2571","2568","2569","256A","256B","2138","2139","213A","213B","213C","212A","2129","2134","2135","2127","2126","2136","2137","2151","2156","2152","2153","2154","2155","212C","212D","2130","2131","213F","219B",
+]);
 function AdminPanel({site, inverters, statuses=[]}) {
   const [log, setLog] = useState(null);
   const [logErr, setLogErr] = useState(null);
@@ -1577,7 +1583,7 @@ function AdminPanel({site, inverters, statuses=[]}) {
   const [swProg, setSwProg] = useState("");
   const [swChangedOnly, setSwChangedOnly] = useState(false);
   useEffect(()=>{ if(!swAutoId && inverters[0]?.autoId) setSwAutoId(inverters[0].autoId); }, [inverters]);
-  const SWEEP_WINDOWS = [["1000","17FF"],["1800","1FFF"],["2000","27FF"],["2800","2FFF"],["3000","37FF"],["3800","3FFF"],["5000","57FF"],["5800","5FFF"]];
+  const SWEEP_WINDOWS = [["0000","07FF"],["0800","0FFF"],["1000","17FF"],["1800","1FFF"],["2000","27FF"],["2800","2FFF"],["3000","37FF"],["3800","3FFF"],["4000","47FF"],["4800","4FFF"],["5000","57FF"],["5800","5FFF"],["6000","67FF"],["6800","6FFF"]];
   const runSweep = async () => {
     if(!swAutoId) return;
     setSwErr(null); setSwBusy(true); setSwProg("");
@@ -1760,7 +1766,8 @@ function AdminPanel({site, inverters, statuses=[]}) {
           // registers at common scale factors (×1/10/100/0.1/0.01; 16-bit two's-complement for negatives).
           const swInv = inverters.find(i=>String(i.autoId)===String(swAutoId));
           const d = swInv ? statuses.find(s=>s.sn===swInv.sn)?.data : null;
-          const entries = Object.keys(data).map(c=>[c,numOf(c)]).filter(([,n])=>isFinite(n)&&n!==0);
+          // Exclude known config codes so coincidental setting values don't bury the real telemetry.
+          const entries = Object.keys(data).map(c=>[c,numOf(c)]).filter(([c,n])=>isFinite(n)&&n!==0&&!CONFIG_CODES.has(c));
           const targets = d ? [
             ["PV power", d.photovoltaic?.power?.totalDc, "W"],
             ["Grid net", d.grid?.netW, "W"],
@@ -1775,12 +1782,17 @@ function AdminPanel({site, inverters, statuses=[]}) {
             ["Grid Hz", d.grid?.lines?.find(l=>l.frequency>0)?.frequency, "Hz"],
             ["Inverter temp", d.inverter?.temperature, "°C"],
           ] : [];
-          const scales=[1,10,100,0.1,0.01];
+          // Sensible scales per unit (no ×0.01/×0.1 noise that matches any tiny raw value).
+          const SCALES = { W:[1], A:[1,10,100], V:[1,10], "%":[1], Hz:[1,10,100], "°C":[1,10] };
           const matchRows = targets.filter(([,v])=>v!=null&&Math.abs(v)>=0.5).map(([label,val,unit])=>{
             const hits=[]; const seen={};
-            for(const s of scales){ const t=val*s; const tol=Math.max(1,Math.abs(t)*0.03);
-              for(const [c,n] of entries){ if(seen[c]) continue; if(Math.abs(n-t)<=tol || (val<0 && Math.abs(n-(65536+t))<=tol)){ hits.push({c,s}); seen[c]=true; } } }
-            return {label,val,unit,hits:hits.slice(0,10)};
+            for(const s of (SCALES[unit]||[1])){ const t=val*s; const tol=Math.max(0.6,Math.abs(t)*0.012);
+              for(const [c,n] of entries){
+                if(seen[c]) continue;
+                if(Math.abs(n)<5 && unit!=="%" && unit!=="°C") continue; // drop tiny-raw coincidences
+                if(Math.abs(n-t)<=tol || (val<0 && Math.abs(n-(65536+t))<=tol)){ hits.push({c,s,n}); seen[c]=true; }
+              } }
+            return {label,val,unit,hits:hits.slice(0,8)};
           });
           return (
             <div>
@@ -1790,13 +1802,17 @@ function AdminPanel({site, inverters, statuses=[]}) {
                 <div style={{border:`1px solid ${BORDER}`,borderRadius:10,padding:"8px 10px",marginBottom:10,background:BG}}>
                   <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Match to live status ({swInv?.label})</div>
                   {matchRows.map(r=>(
-                    <div key={r.label} style={{display:"flex",gap:8,fontSize:11,padding:"3px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline"}}>
+                    <div key={r.label} style={{display:"flex",gap:8,fontSize:11,padding:"3px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline",flexWrap:"wrap"}}>
                       <span style={{color:MUTED,fontWeight:600,minWidth:90}}>{r.label}</span>
                       <span style={{color:TEXT,fontWeight:700,fontVariantNumeric:"tabular-nums",minWidth:70}}>{Number(r.val).toFixed(2)} {r.unit}</span>
-                      <span style={{color:r.hits.length?"#0369A1":FAINT,fontFamily:"monospace",fontSize:10.5}}>{r.hits.length?r.hits.map(h=>`${h.c}${h.s!==1?`(×${h.s})`:""}`).join("  "):"— no match"}</span>
+                      <span style={{fontFamily:"monospace",fontSize:10.5,display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {r.hits.length
+                          ? r.hits.map(h=>{ const live=isChanged(h.c); return <span key={h.c} style={{color:live?"#0369A1":MUTED,fontWeight:live?800:500}}>{h.c}={h.n}{h.s!==1?`(×${h.s})`:""}{live?" Δ":""}</span>; })
+                          : <span style={{color:FAINT}}>— no match</span>}
+                      </span>
                     </div>
                   ))}
-                  <div style={{fontSize:10,color:FAINT,marginTop:6}}>Power can drift between the cached status and the live sweep; voltage / SOC / Hz / temp are the reliable matches.</div>
+                  <div style={{fontSize:10,color:FAINT,marginTop:6}}>Config codes excluded. Δ = also changed since last read (live). Power drifts vs the cached status; V/SOC/Hz/temp are the reliable matches.</div>
                 </div>
               )}
               {!d && <div style={{fontSize:11,color:SOLAR,marginBottom:8}}>Open the Live tab once so the matcher has a status snapshot to compare against.</div>}
