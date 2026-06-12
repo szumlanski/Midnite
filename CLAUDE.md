@@ -129,8 +129,10 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
 - AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`. Writes would use `setDeviceShadow_WA` — **do not write.**
 - **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
   ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
-  code that resolved to a value. Surfaced in **Admin → Live Register Probe** (range presets + signature tags +
-  Δ-since-last-read highlighting). Purpose: find which attribute IDs carry **real-time measurements** (power /
+  code that resolved to a value. Surfaced in **Admin → Live Register Probe** — one **Read all** button sweeps the
+  attribute space client-side in 2048-code windows (0x1000–0x3FFF + 0x5000–0x5FFF), merges, and on a second run
+  highlights **Δ vs the previous full read** (with a "changed only" filter) + signature tags. Purpose: find which
+  attribute IDs carry **real-time measurements** (power /
   voltage / current / freq / SOC) so we can offer an on-demand live stream instead of the 5-min cloud cache.
   Note: device-shadow codes (e.g. `0x2100`) are the cloud's **attribute IDs**, NOT raw Modbus addresses; the
   known set is all config — measurement IDs must be discovered empirically (run the probe twice; changing values
