@@ -1608,13 +1608,13 @@ function AdminPanel({site, inverters, statuses=[]}) {
     const id = setInterval(poll, 10000);
     return ()=>{ alive=false; clearInterval(id); };
   }, [swWatch, swAutoId]);
-  // 0x0000–0x6FFF was swept thoroughly = only config/noise (+ the live power block at 0x3000).
-  // Keep 0x3000 for the power Δ; extend into the unexplored upper half 0x7000–0xFFFF.
+  // 0x7000–0xFFFF is confirmed empty. Sweep the full populated range 0x0000–0x6FFF — this includes
+  // 0x2xxx (live batV/temp/Hz) which a narrowed sweep had been skipping. Needed to catch the
+  // battery-power register on an actively-cycling (off-grid) site.
   const SWEEP_WINDOWS = [
-    ["3000","37FF"],
-    ["7000","77FF"],["7800","7FFF"],["8000","87FF"],["8800","8FFF"],["9000","97FF"],["9800","9FFF"],
-    ["A000","A7FF"],["A800","AFFF"],["B000","B7FF"],["B800","BFFF"],["C000","C7FF"],["C800","CFFF"],
-    ["D000","D7FF"],["D800","DFFF"],["E000","E7FF"],["E800","EFFF"],["F000","F7FF"],["F800","FFFF"],
+    ["0000","07FF"],["0800","0FFF"],["1000","17FF"],["1800","1FFF"],["2000","27FF"],["2800","2FFF"],
+    ["3000","37FF"],["3800","3FFF"],["4000","47FF"],["4800","4FFF"],["5000","57FF"],["5800","5FFF"],
+    ["6000","67FF"],["6800","6FFF"],
   ];
   const runSweep = async () => {
     if(!swAutoId) return;
