@@ -596,6 +596,9 @@ const SETTINGS_MAP = [
   // Power Control
   { code:"30BA", label:"Maximum Feed-In Grid Power",        group:"Power Control", unit:"W" },
   { code:"308E", label:"Maximum Consumption From Grid",     group:"Power Control", unit:"W" },
+  { code:"2100", label:"Work Mode",            group:"Power Control", enum:{0:"Self Consumption",1:"Grid Feed-In Priority (Sell To Grid)",2:"Off Grid"} },
+  { code:"30B5", label:"Sensor Location",      group:"Power Control", enum:{0:"Grid Side",1:"Load Side"} },
+  { code:"30B2", label:"Energy Flow Direction",group:"Power Control", enum:{0:"From Grid To Inverter",1:"From Inverter To Grid"} },
   // Generator
   { code:"2127", label:"Maximum Input Power From Generator", group:"Generator", unit:"W" },
   { code:"2126", label:"Maximum Generator Charge Power",     group:"Generator", unit:"W" },
