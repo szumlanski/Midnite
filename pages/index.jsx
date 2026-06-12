@@ -733,6 +733,75 @@ function SettingsModal({inv, onClose}){
     </div>
   );
 }
+// Fleet settings comparison — settings as rows, inverters as columns; rows that differ are highlighted.
+function SettingsCompareModal({inverters, onClose}){
+  const cols = inverters.filter(i=>i.autoId);
+  const [data, setData] = useState(null);   // sn -> {code:value}
+  const [done, setDone] = useState(0);
+  const [diffOnly, setDiffOnly] = useState(false);
+  useEffect(()=>{
+    let alive = true;
+    const map = {};
+    Promise.all(cols.map(inv=>
+      api("readsettings", { autoId: inv.autoId, sn: inv.sn, codes: SETTINGS_MAP.map(s=>s.code) })
+        .then(r=>{ map[inv.sn]=r?.data||{}; })
+        .catch(()=>{ map[inv.sn]={}; })
+        .finally(()=>{ if(alive) setDone(d=>d+1); })
+    )).then(()=>{ if(alive) setData(map); });
+    return ()=>{ alive=false; };
+  }, []);
+  const groups = [...new Set(SETTINGS_MAP.map(s=>s.group))];
+  const valsOf = (s)=> cols.map(inv=> { const raw = data?.[inv.sn]?.[s.code]; return raw===undefined||raw==="" ? null : fmtSetting(s, raw); });
+  const isDiff = (vals)=>{ const p = vals.filter(v=>v!=null); return p.length>1 && new Set(p).size>1; };
+  const rows = SETTINGS_MAP.map(s=>({ s, vals: valsOf(s) })).filter(r=> r.vals.some(v=>v!=null) && (!diffOnly || isDiff(r.vals)));
+  const diffCount = SETTINGS_MAP.map(s=>valsOf(s)).filter(isDiff).length;
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:1100,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:`1px solid ${BORDER}`,gap:8,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Compare Inverter Settings</div>
+            <div style={{fontSize:11,color:FAINT}}>{data ? `${cols.length} inverters · ${diffCount} setting${diffCount===1?"":"s"} differ` : `Reading… ${done}/${cols.length}`}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {data && <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}><input type="checkbox" checked={diffOnly} onChange={e=>setDiffOnly(e.target.checked)} style={{cursor:"pointer"}}/>Differences only</label>}
+            <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+          </div>
+        </div>
+        <div style={{overflow:"auto",padding:"4px 0"}}>
+          {!data && <div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"32px 0"}}>Reading live settings from {cols.length} inverters…</div>}
+          {data && cols.length===0 && <div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"32px 0"}}>No inverters with installer access.</div>}
+          {data && cols.length>0 && (
+            <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+              <thead><tr style={{position:"sticky",top:0,background:CARD,zIndex:1}}>
+                <th style={{textAlign:"left",padding:"8px 14px",fontSize:11,color:FAINT,fontWeight:700,position:"sticky",left:0,background:CARD,minWidth:200}}>Setting</th>
+                {cols.map(inv=><th key={inv.sn} style={{textAlign:"right",padding:"8px 14px",fontSize:11,color:TEXT,fontWeight:700,whiteSpace:"nowrap"}}>{inv.label}</th>)}
+              </tr></thead>
+              <tbody>
+                {groups.flatMap(g=>{
+                  const grows = rows.filter(r=>r.s.group===g);
+                  if(!grows.length) return [];
+                  return [
+                    <tr key={"h-"+g}><td colSpan={cols.length+1} style={{padding:"10px 14px 4px",fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{g}</td></tr>,
+                    ...grows.map(({s,vals})=>{
+                      const diff = isDiff(vals);
+                      return (
+                        <tr key={s.code} style={{background:diff?"#FEF3C7":"transparent",borderTop:`1px solid ${BORDER}`}}>
+                          <td style={{textAlign:"left",padding:"6px 14px",color:TEXT,position:"sticky",left:0,background:diff?"#FEF3C7":CARD,whiteSpace:"nowrap"}}>{diff&&<span style={{color:SOLAR,fontWeight:800,marginRight:4}}>⚠</span>}{s.label}</td>
+                          {vals.map((v,i)=><td key={i} style={{textAlign:"right",padding:"6px 14px",color:v==null?FAINT:TEXT,fontWeight:diff?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v==null?"—":v}</td>)}
+                        </tr>
+                      );
+                    })
+                  ];
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 function InverterCard({inv, status}) {
   const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
@@ -2157,6 +2226,7 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [liveFlow, setLiveFlow] = useState({}); // sn -> live {pv,grid,load,battery,soc,time} from flowrt (~5s)
+  const [showCompare, setShowCompare] = useState(false);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -2459,6 +2529,13 @@ export default function Dashboard() {
           {tab==="explorer"
             ? <InverterSelector single value={explorerSn} onPick={setExplorerSn} statuses={statuses} inverters={site.inverters}/>
             : <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>}
+
+          {site.inverters.some(i=>i.autoId) && (
+            <div style={{marginBottom:14}}>
+              <button onClick={()=>setShowCompare(true)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>⚙ Compare all inverter settings</button>
+            </div>
+          )}
+          {showCompare && <SettingsCompareModal inverters={site.inverters} onClose={()=>setShowCompare(false)}/>}
 
           {tab==="live"&&(
             <>

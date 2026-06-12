@@ -142,7 +142,14 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
   power/percent/time ×1. **Omitted** (not certain): enum/dropdown fields (no value→label map) and the 32-bit
   protection-time fields (`5007(5020)` etc., split across two registers). NB: the form labels disproved earlier
   value-guesses — `2183` = "Max Time To Attempt Equalize" (not grid V), `212F` = "Stop Discharge Reconnect Voltage"
-  (not battery V) — vindicating the certain-only rule.
+  (not battery V) — vindicating the certain-only rule. Dropdown/toggle enums hold **sparse value codes, NOT option
+  positions** (Work Mode 0=Self-Consumption/3=Off-Grid; Power Control 0=Disable/3=Smart Meter; Battery Brand
+  17=MidNite/33=Lithium-No-BMS; Meter Type 2=DTSU666) — each mapped only from a value confirmed on a real inverter;
+  unknown values render `(raw)`. Toggles (`bool:true`) → On/Off.
+- **`SettingsCompareModal`** (standalone **⚙ Compare all inverter settings** button under the inverter selector):
+  reads `SETTINGS_MAP` for **every** inverter at the site and renders a table (settings = rows grouped by section,
+  inverters = columns). Rows whose formatted values differ across inverters are **highlighted amber with a ⚠**;
+  a "Differences only" filter collapses to just those. The per-card **Settings ›** modal stays for single-inverter view.
 - **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
   ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
   code that resolved to a value. Surfaced in **Admin → Live Register Probe** — one **Read all** button sweeps the
