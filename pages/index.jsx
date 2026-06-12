@@ -601,6 +601,7 @@ const SETTINGS_MAP = [
   { code:"30B2", label:"Energy Flow Direction",group:"Power Control", enum:{0:"From Grid To Inverter",1:"From Inverter To Grid"} },
   { code:"30B3", label:"Power Control",         group:"Power Control", enum:{1:"Disable",2:"CT Sensor",3:"Smart Meter"} },
   { code:"3089", label:"Power Derating Control Method", group:"Power Control", enum:{0:"Minimum Phase Power",1:"Independent Phase Power",2:"Total Power"} },
+  { code:"30B1", label:"Meter Type",            group:"Power Control", enum:{1:"Unknown",2:"CHINT/DTSU666",3:"CHINT/DDSU666"} },
   // Generator
   { code:"2127", label:"Maximum Input Power From Generator", group:"Generator", unit:"W" },
   { code:"2126", label:"Maximum Generator Charge Power",     group:"Generator", unit:"W" },
