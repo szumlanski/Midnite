@@ -755,6 +755,16 @@ function SettingsCompareModal({inverters, onClose}){
   const isDiff = (vals)=>{ const p = vals.filter(v=>v!=null); return p.length>1 && new Set(p).size>1; };
   const rows = SETTINGS_MAP.map(s=>({ s, vals: valsOf(s) })).filter(r=> r.vals.some(v=>v!=null) && (!diffOnly || isDiff(r.vals)));
   const diffCount = SETTINGS_MAP.map(s=>valsOf(s)).filter(isDiff).length;
+  const exportCsv = () => {
+    const esc = (v)=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;
+    const lines = [["Section","Setting",...cols.map(c=>c.label),"Differs"].map(esc).join(",")];
+    for(const {s,vals} of rows) lines.push([s.group, s.label, ...vals.map(v=>v==null?"":v), isDiff(vals)?"Yes":""].map(esc).join(","));
+    const blob = new Blob(["﻿"+lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `inverter-settings-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
       <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:1100,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
@@ -763,8 +773,9 @@ function SettingsCompareModal({inverters, onClose}){
             <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Compare Inverter Settings</div>
             <div style={{fontSize:11,color:FAINT}}>{data ? `${cols.length} inverters · ${diffCount} setting${diffCount===1?"":"s"} differ` : `Reading… ${done}/${cols.length}`}</div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
             {data && <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}><input type="checkbox" checked={diffOnly} onChange={e=>setDiffOnly(e.target.checked)} style={{cursor:"pointer"}}/>Differences only</label>}
+            {data && rows.length>0 && <button onClick={exportCsv} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Export CSV</button>}
             <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
           </div>
         </div>
@@ -2529,12 +2540,6 @@ export default function Dashboard() {
           {tab==="explorer"
             ? <InverterSelector single value={explorerSn} onPick={setExplorerSn} statuses={statuses} inverters={site.inverters}/>
             : <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>}
-
-          {site.inverters.some(i=>i.autoId) && (
-            <div style={{marginBottom:14}}>
-              <button onClick={()=>setShowCompare(true)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>⚙ Compare all inverter settings</button>
-            </div>
-          )}
           {showCompare && <SettingsCompareModal inverters={site.inverters} onClose={()=>setShowCompare(false)}/>}
 
           {tab==="live"&&(
@@ -2547,6 +2552,11 @@ export default function Dashboard() {
                   {allSelected&&<SiteHero statuses={statuses} live={liveAgg}/>}
                   {allSelected&&<BatteryPanel statuses={statuses}/>}
                   {allSelected&&<LifetimePanel statuses={statuses}/>}
+                  {site.inverters.some(i=>i.autoId) && (
+                    <div style={{marginBottom:12}}>
+                      <button onClick={()=>setShowCompare(true)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>⚙ Compare all inverter settings</button>
+                    </div>
+                  )}
                   {selectedSns.length===1 ? (
                     visibleStatuses.map(s=>{
                       const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
