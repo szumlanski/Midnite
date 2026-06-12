@@ -804,6 +804,27 @@ export default async function handler(req, res) {
           return res.json({ ok: true, sn, busy: r?.busy ?? null, count: Object.keys(data).length, data });
         } catch (e) { return res.json({ ok: false, sn, err: e.message }); }
       }
+      case "iotshadow": {
+        // Aliyun IoT device-shadow command channel (salvaged from a parallel experiment).
+        // setShadowCommand writes a Command into the unit's Aliyun IoT shadow; receiveShadowCommand
+        // reads back whatever the device replied. Hypothesis: poking the shadow forces a fresh
+        // telemetry sample / faster reporting — a possible alternate path to real-time data.
+        // NOTE: poke=true performs a WRITE (Command); default command "0" — effect unverified.
+        const { serial, command = "0", poke = true, receive = true } = req.body || {};
+        if (!serial) return res.status(400).json({ error: "serial required" });
+        const out = { serial, command };
+        if (poke) {
+          const setBody = { GoodsID: serial, Command: String(command) }; setBody.sign = makeSign(setBody);
+          try { out.set = await midnitePost("/Aliyuniotapi/iot/setShadowCommand", setBody, auth.token); }
+          catch (e) { out.set = { error: e.message }; }
+        }
+        if (receive) {
+          const recvBody = { GoodsID: serial }; recvBody.sign = makeSign(recvBody);
+          try { out.receive = await midnitePost("/Aliyuniotapi/iot/receiveShadowCommand", recvBody, auth.token); }
+          catch (e) { out.receive = { error: e.message }; }
+        }
+        return res.json(out);
+      }
       case "codelookup": {
         // Search the installer app's JS bundle for device-shadow attribute codes to recover their
         // human-readable labels and value meanings (so we can name the differing settings).

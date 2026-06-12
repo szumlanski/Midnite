@@ -115,7 +115,13 @@ All actions accept optional `username` and `password` in the request body. Falls
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
 
 **Debug actions** (Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`,
-`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `shadowsweep`, `codelookup`.
+`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `shadowsweep`, `iotshadow`, `codelookup`.
+
+**`iotshadow`** (salvaged from a parallel session) is a *different* shadow path: the **Aliyun IoT** command
+channel — `POST /Aliyuniotapi/iot/setShadowCommand` `{GoodsID, Command, sign}` writes a command into the unit's
+Aliyun IoT shadow, then `receiveShadowCommand` `{GoodsID, sign}` reads the device reply. Hypothesis: poking the
+shadow forces a fresh telemetry sample (an alternate real-time path to the Eagle `readDeviceShadow` sweep).
+**`poke:true` is a WRITE** (default `command:"0"`, effect unverified) — use cautiously.
 
 ### Reading inverter settings (device shadow / Modbus registers)
 The installer app's Remote-Setting dialog reads/writes inverter parameters via **device-shadow** endpoints.
