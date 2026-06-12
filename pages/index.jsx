@@ -1660,22 +1660,36 @@ function AdminPanel({site, inverters, statuses=[]}) {
   const [swWatchData, setSwWatchData] = useState({});
   const [swWatchTs, setSwWatchTs] = useState(null);
   const swWatchPrevRef = useRef({});
-  // Realtime-flow freshness test (getHybridFlowgraphRealTimeData)
+  // Realtime-flow freshness test (getHybridFlowgraphRealTimeData) — polls every 1s and logs each
+  // sample (client time + endpoint SystemTime + values) to a copyable text box, to measure how
+  // often the data actually changes and pick a real-time polling interval.
   const [rtfOn, setRtfOn] = useState(false);
   const [rtfData, setRtfData] = useState(null);
   const [rtfTs, setRtfTs] = useState(null);
   const [rtfRaw, setRtfRaw] = useState(false);
+  const [rtfLog, setRtfLog] = useState([]);
   const rtfPrevRef = useRef(null);
+  const rtfBusyRef = useRef(false);
   const rtfSn = inverters.find(i=>String(i.autoId)===String(swAutoId))?.sn || inverters[0]?.sn || "";
   useEffect(()=>{
     if(!rtfOn || !rtfSn) return;
     let alive = true;
     const poll = async ()=>{
-      try { const r = await api("flowrt", { serial: rtfSn }); if(!alive) return; setRtfData(cur=>{ rtfPrevRef.current = cur; return r; }); setRtfTs(new Date()); }
-      catch(e){ /* keep polling */ }
+      if(rtfBusyRef.current) return;              // skip if the previous request is still in flight
+      rtfBusyRef.current = true;
+      try {
+        const r = await api("flowrt", { serial: rtfSn });
+        if(!alive) return;
+        setRtfData(cur=>{ rtfPrevRef.current = cur; return r; });
+        setRtfTs(new Date());
+        const line = `${new Date().toISOString()} | st=${r?.time||"-"} | pv=${r?.pv} grid=${r?.grid} load=${r?.load} bat=${r?.battery} soc=${r?.soc}`;
+        setRtfLog(log=>{ const n=[...log, line]; return n.length>1500?n.slice(-1500):n; });
+      } catch(e){
+        if(alive) setRtfLog(log=>[...log, `${new Date().toISOString()} | ERROR ${String(e)}`]);
+      } finally { rtfBusyRef.current = false; }
     };
     poll();
-    const id = setInterval(poll, 10000);
+    const id = setInterval(poll, 1000);
     return ()=>{ alive=false; clearInterval(id); };
   }, [rtfOn, rtfSn]);
   useEffect(()=>{ if(!swAutoId && inverters[0]?.autoId) setSwAutoId(inverters[0].autoId); }, [inverters]);
@@ -1986,11 +2000,12 @@ function AdminPanel({site, inverters, statuses=[]}) {
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{marginBottom:8}}>
           <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Realtime Flow Test</div>
-          <div style={{fontSize:11,color:FAINT,lineHeight:1.5}}>Polls <code>getHybridFlowgraphRealTimeData</code> every 10s. If <b>SystemTime</b> advances each poll and the values move faster than 5 min, it beats the cloud cache. Inverter: <span style={{fontFamily:"monospace"}}>{rtfSn||"—"}</span></div>
+          <div style={{fontSize:11,color:FAINT,lineHeight:1.5}}>Polls <code>getHybridFlowgraphRealTimeData</code> <b>every 1s</b> and logs each sample (client time + endpoint SystemTime + values) below so you can copy it back to determine how often the data actually changes. Inverter: <span style={{fontFamily:"monospace"}}>{rtfSn||"—"}</span></div>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
-          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?"■ Stop":"▶ Watch realtime flow (10s)"}</button>
-          {rtfTs && <span style={{fontSize:11,color:FAINT}}>polled {rtfTs.toLocaleTimeString()}</span>}
+          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?"■ Stop":"▶ Log realtime flow (1s)"}</button>
+          {rtfTs && <span style={{fontSize:11,color:FAINT}}>polled {rtfTs.toLocaleTimeString()} · {rtfLog.length} samples</span>}
+          {rtfLog.length>0 && <button onClick={()=>setRtfLog([])} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear log</button>}
           {rtfData && <button onClick={()=>setRtfRaw(r=>!r)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{rtfRaw?"Hide raw":"Raw"}</button>}
         </div>
         {rtfData && rtfData.ok===false && <div style={{color:GRID_IN,fontSize:12}}>{rtfData.error||"error"}</div>}
@@ -2017,6 +2032,12 @@ function AdminPanel({site, inverters, statuses=[]}) {
             </div>
           );
         })()}
+        {rtfLog.length>0 && (
+          <div style={{marginTop:12}}>
+            <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Sample log — select all &amp; copy</div>
+            <textarea readOnly value={rtfLog.join("\n")} onFocus={e=>e.target.select()} style={{width:"100%",height:200,fontFamily:"monospace",fontSize:10.5,lineHeight:1.5,color:TEXT,background:BG,border:`1px solid ${BORDER}`,borderRadius:8,padding:10,resize:"vertical",whiteSpace:"pre"}}/>
+          </div>
+        )}
       </div>
       <div style={{background:"#1C1917",borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{color:"#F59E0B",fontWeight:700,fontSize:13,marginBottom:10,fontFamily:SANS}}>🔧 API Debug</div>
