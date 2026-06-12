@@ -5,6 +5,8 @@ import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxi
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const thisYear = today.slice(0,4);
+// Build marker (baked in at build time via next.config env) — lets you confirm a deploy landed.
+const BUILD = `${process.env.NEXT_PUBLIC_COMMIT || "local"} · ${(process.env.NEXT_PUBLIC_BUILD_TIME || "").slice(5,16).replace("T"," ")}`;
 // Date math for the Explorer date-range picker (operate at noon to dodge DST edges).
 const addDays = (d,n) => { const x=new Date(d+"T12:00:00"); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
 const dayDiff = (a,b) => Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000);
@@ -2316,6 +2318,7 @@ export default function Dashboard() {
             </div>
             {sites.length>1&&<button onClick={()=>{setAuthState("sites");setSite(null);setStatuses([]);}} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sites</button>}
             <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+            <span title="build" style={{fontSize:9,color:FAINT,fontFamily:"monospace",whiteSpace:"nowrap",alignSelf:"center"}}>{BUILD}</span>
           </div>
         </div>
 
