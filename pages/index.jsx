@@ -1750,18 +1750,61 @@ function AdminPanel({site, inverters, statuses=[]}) {
         </div>
         {swErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:6}}>{swErr}</div>}
         {swRes && !swBusy && (()=>{
-          const codes = Object.keys(swRes.data).sort();
-          const isChanged = (c)=> swPrev && (c in swPrev) && String(swPrev[c])!==String(swRes.data[c]);
-          const changedCount = codes.filter(isChanged).length;
-          const shown = swChangedOnly ? codes.filter(isChanged) : codes;
+          const data = swRes.data;
+          const isChanged = (c)=> swPrev && (c in swPrev) && String(swPrev[c])!==String(data[c]);
+          const numOf = (c)=> parseFloat(data[c]);
+          const nonZero = Object.keys(data).filter(c=>{ const n=numOf(c); return isFinite(n) && n!==0; }).sort();
+          const changedCount = Object.keys(data).filter(isChanged).length;
+          const shown = swChangedOnly ? Object.keys(data).filter(isChanged).sort() : nonZero;
+          // Auto-label: match each live reading from the inverter's status feed against the swept
+          // registers at common scale factors (×1/10/100/0.1/0.01; 16-bit two's-complement for negatives).
+          const swInv = inverters.find(i=>String(i.autoId)===String(swAutoId));
+          const d = swInv ? statuses.find(s=>s.sn===swInv.sn)?.data : null;
+          const entries = Object.keys(data).map(c=>[c,numOf(c)]).filter(([,n])=>isFinite(n)&&n!==0);
+          const targets = d ? [
+            ["PV power", d.photovoltaic?.power?.totalDc, "W"],
+            ["Grid net", d.grid?.netW, "W"],
+            ["Load", balanceLoad(d), "W"],
+            ["Battery power", (d.battery?.charge||0)-(d.battery?.discharge||0), "W"],
+            ["SOC", d.battery?.soc, "%"],
+            ["SOH", d.battery?.healthPercent, "%"],
+            ["Battery V", d.battery?.voltage, "V"],
+            ["Battery A", d.battery?.current, "A"],
+            ["Grid L1 V", d.grid?.lines?.[0]?.voltage, "V"],
+            ["Grid L2 V", d.grid?.lines?.[1]?.voltage, "V"],
+            ["Grid Hz", d.grid?.lines?.find(l=>l.frequency>0)?.frequency, "Hz"],
+            ["Inverter temp", d.inverter?.temperature, "°C"],
+          ] : [];
+          const scales=[1,10,100,0.1,0.01];
+          const matchRows = targets.filter(([,v])=>v!=null&&Math.abs(v)>=0.5).map(([label,val,unit])=>{
+            const hits=[]; const seen={};
+            for(const s of scales){ const t=val*s; const tol=Math.max(1,Math.abs(t)*0.03);
+              for(const [c,n] of entries){ if(seen[c]) continue; if(Math.abs(n-t)<=tol || (val<0 && Math.abs(n-(65536+t))<=tol)){ hits.push({c,s}); seen[c]=true; } } }
+            return {label,val,unit,hits:hits.slice(0,10)};
+          });
           return (
             <div>
-              <div style={{fontSize:11,color:MUTED,marginBottom:8}}>requested {swRes.requested} · <b style={{color:TEXT}}>{swRes.found}</b> returned a value{swPrev?` · ${changedCount} changed since last read`:" · run again to spot live (changing) values"}</div>
+              <div style={{fontSize:11,color:MUTED,marginBottom:8}}>requested {swRes.requested} · <b style={{color:TEXT}}>{nonZero.length}</b> non-zero{swPrev?` · ${changedCount} changed since last read`:" · run again to spot live (changing) values"}</div>
+              {/* Auto-label table: live reading → candidate register codes */}
+              {matchRows.length>0 && (
+                <div style={{border:`1px solid ${BORDER}`,borderRadius:10,padding:"8px 10px",marginBottom:10,background:BG}}>
+                  <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Match to live status ({swInv?.label})</div>
+                  {matchRows.map(r=>(
+                    <div key={r.label} style={{display:"flex",gap:8,fontSize:11,padding:"3px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline"}}>
+                      <span style={{color:MUTED,fontWeight:600,minWidth:90}}>{r.label}</span>
+                      <span style={{color:TEXT,fontWeight:700,fontVariantNumeric:"tabular-nums",minWidth:70}}>{Number(r.val).toFixed(2)} {r.unit}</span>
+                      <span style={{color:r.hits.length?"#0369A1":FAINT,fontFamily:"monospace",fontSize:10.5}}>{r.hits.length?r.hits.map(h=>`${h.c}${h.s!==1?`(×${h.s})`:""}`).join("  "):"— no match"}</span>
+                    </div>
+                  ))}
+                  <div style={{fontSize:10,color:FAINT,marginTop:6}}>Power can drift between the cached status and the live sweep; voltage / SOC / Hz / temp are the reliable matches.</div>
+                </div>
+              )}
+              {!d && <div style={{fontSize:11,color:SOLAR,marginBottom:8}}>Open the Live tab once so the matcher has a status snapshot to compare against.</div>}
               {shown.length===0
-                ? <div style={{fontSize:12,color:FAINT}}>{swChangedOnly?"No values changed since the last read.":"Nothing resolved."}</div>
+                ? <div style={{fontSize:12,color:FAINT}}>{swChangedOnly?"No values changed since the last read.":"No non-zero registers."}</div>
                 : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:6,maxHeight:360,overflow:"auto"}}>
                     {shown.map(code=>{
-                      const v = swRes.data[code]; const n = parseFloat(v);
+                      const v = data[code]; const n = parseFloat(v);
                       const changed = isChanged(code);
                       let tag=null;
                       if(isFinite(n)){ if(n>=59&&n<=61)tag="Hz"; else if(n>=95&&n<=300)tag="V"; else if(n>=0&&n<=100&&Number.isInteger(n))tag="%"; else if(Math.abs(n)>=300)tag="W"; }
