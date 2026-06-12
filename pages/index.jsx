@@ -599,7 +599,8 @@ const SETTINGS_MAP = [
   { code:"2100", label:"Work Mode",            group:"Power Control", enum:{0:"Self Consumption",1:"Grid Feed-In Priority (Sell To Grid)",2:"Off Grid"} },
   { code:"30B5", label:"Sensor Location",      group:"Power Control", enum:{0:"Grid Side",1:"Load Side"} },
   { code:"30B2", label:"Energy Flow Direction",group:"Power Control", enum:{0:"From Grid To Inverter",1:"From Inverter To Grid"} },
-  { code:"30B3", label:"Power Control",         group:"Power Control", enum:{0:"Disable",1:"CT Sensor",2:"Smart Meter"} },
+  { code:"30B3", label:"Power Control",         group:"Power Control", enum:{1:"Disable",2:"CT Sensor",3:"Smart Meter"} },
+  { code:"3089", label:"Power Derating Control Method", group:"Power Control", enum:{0:"Minimum Phase Power",1:"Independent Phase Power",2:"Total Power"} },
   // Generator
   { code:"2127", label:"Maximum Input Power From Generator", group:"Generator", unit:"W" },
   { code:"2126", label:"Maximum Generator Charge Power",     group:"Generator", unit:"W" },
@@ -608,6 +609,7 @@ const SETTINGS_MAP = [
   { code:"2137", label:"Generator Standby Time",            group:"Generator", unit:"min" },
   { code:"2136", label:"Generator Max Run Time",            group:"Generator", unit:"min" },
   // Battery
+  { code:"2110", label:"Battery Brand", group:"Battery", enum:{0:"Unavailable",1:"Lead-Acid Battery",2:"PYLON",3:"UZ",4:"MidNite Battery",5:"Lithium Battery (No BMS)"} },
   { code:"2112", label:"Battery Capacity",                  group:"Battery", unit:"Ah" },
   { code:"21B4", label:"Battery Charge Efficiency",         group:"Battery", unit:"%" },
   { code:"21B5", label:"Battery Rated Temperature",         group:"Battery", unit:"°C" },
@@ -634,6 +636,7 @@ const SETTINGS_MAP = [
   { code:"501B", label:"PV Insulation Resistance Protection",group:"General", unit:"kΩ" },
   { code:"5110", label:"PV Leakage Current Protection",     group:"General", unit:"mA" },
   // Grid
+  { code:"5101", label:"Grid Standard Code", group:"Grid", enum:{18:"US (IEEE1547)"} },
   { code:"2125", label:"Maximum Input Power From Grid",     group:"Grid", unit:"W" },
   { code:"5000", label:"First Boot Delay Time",             group:"Grid", unit:"s" },
   { code:"5029", label:"First Boot Power Gradient",         group:"Grid", unit:"%" },
