@@ -617,7 +617,7 @@ const SETTINGS_MAP = [
   { code:"2136", label:"Generator Max Run Time",            group:"Generator", unit:"min" },
   { code:"213F", label:"Generator Input Location (Grid Side)", group:"Generator", bool:true },
   // Battery
-  { code:"2110", label:"Battery Brand", group:"Battery", enum:{33:"Lithium Battery (No BMS)"} },
+  { code:"2110", label:"Battery Brand", group:"Battery", enum:{17:"MidNite Battery",33:"Lithium Battery (No BMS)"} },
   { code:"2115", label:"Charge By Grid",  group:"Battery", bool:true },
   { code:"218C", label:"Force Charging",  group:"Battery", bool:true },
   { code:"2112", label:"Battery Capacity",                  group:"Battery", unit:"Ah" },
