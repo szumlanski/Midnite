@@ -1811,6 +1811,7 @@ function AdminPanel({site, inverters, statuses=[]}) {
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
+      <div style={{fontSize:11,color:FAINT,fontFamily:"monospace",textAlign:"right"}}>build {BUILD}</div>
       {/* Energy registers — spot stuck feed-in counters */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
@@ -2318,7 +2319,6 @@ export default function Dashboard() {
             </div>
             {sites.length>1&&<button onClick={()=>{setAuthState("sites");setSite(null);setStatuses([]);}} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sites</button>}
             <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
-            <span title="build" style={{fontSize:9,color:FAINT,fontFamily:"monospace",whiteSpace:"nowrap",alignSelf:"center"}}>{BUILD}</span>
           </div>
         </div>
 
