@@ -596,10 +596,16 @@ const SETTINGS_MAP = [
   // Power Control
   { code:"30BA", label:"Maximum Feed-In Grid Power",        group:"Power Control", unit:"W" },
   { code:"308E", label:"Maximum Consumption From Grid",     group:"Power Control", unit:"W" },
-  { code:"2100", label:"Work Mode",            group:"Power Control", enum:{0:"Self Consumption",1:"Grid Feed-In Priority (Sell To Grid)",2:"Off Grid"} },
+  // Dropdown registers hold sparse value codes (NOT option positions) — only value↔label pairs
+  // confirmed on a real inverter are mapped; unknown values render as "(raw)".
+  { code:"2100", label:"Work Mode",            group:"Power Control", enum:{0:"Self Consumption",3:"Off Grid"} },
+  { code:"2141", label:"Support Normal Load",  group:"Power Control", bool:true },
+  { code:"215B", label:"Zero Export",          group:"Power Control", bool:true },
+  { code:"214C", label:"TimeBase Control",     group:"Power Control", bool:true },
   { code:"30B5", label:"Sensor Location",      group:"Power Control", enum:{0:"Grid Side",1:"Load Side"} },
   { code:"30B2", label:"Energy Flow Direction",group:"Power Control", enum:{0:"From Grid To Inverter",1:"From Inverter To Grid"} },
-  { code:"30B3", label:"Power Control",         group:"Power Control", enum:{1:"Disable",2:"CT Sensor",3:"Smart Meter"} },
+  { code:"30B3", label:"Power Control",         group:"Power Control", enum:{0:"Disable",3:"Smart Meter"} },
+  { code:"30B0", label:"Meter Modbus Address",  group:"Power Control" },
   { code:"3089", label:"Power Derating Control Method", group:"Power Control", enum:{0:"Minimum Phase Power",1:"Independent Phase Power",2:"Total Power"} },
   { code:"30B1", label:"Meter Type",            group:"Power Control", enum:{1:"Unknown",2:"CHINT/DTSU666",3:"CHINT/DDSU666"} },
   // Generator
@@ -609,8 +615,11 @@ const SETTINGS_MAP = [
   { code:"2135", label:"Generator End Voltage",             group:"Generator", unit:"V", scale:0.1 },
   { code:"2137", label:"Generator Standby Time",            group:"Generator", unit:"min" },
   { code:"2136", label:"Generator Max Run Time",            group:"Generator", unit:"min" },
+  { code:"213F", label:"Generator Input Location (Grid Side)", group:"Generator", bool:true },
   // Battery
-  { code:"2110", label:"Battery Brand", group:"Battery", enum:{0:"Unavailable",1:"Lead-Acid Battery",2:"PYLON",3:"UZ",4:"MidNite Battery",5:"Lithium Battery (No BMS)"} },
+  { code:"2110", label:"Battery Brand", group:"Battery", enum:{33:"Lithium Battery (No BMS)"} },
+  { code:"2115", label:"Charge By Grid",  group:"Battery", bool:true },
+  { code:"218C", label:"Force Charging",  group:"Battery", bool:true },
   { code:"2112", label:"Battery Capacity",                  group:"Battery", unit:"Ah" },
   { code:"21B4", label:"Battery Charge Efficiency",         group:"Battery", unit:"%" },
   { code:"21B5", label:"Battery Rated Temperature",         group:"Battery", unit:"°C" },
@@ -633,6 +642,11 @@ const SETTINGS_MAP = [
   { code:"2184", label:"Days Between Auto Equalize",        group:"Battery", unit:"days" },
   { code:"2186", label:"Absorb Time",                       group:"Battery", unit:"min" },
   // General
+  { code:"2143", label:"Parallel Mode",                  group:"General", bool:true },
+  { code:"5112", label:"Low Voltage Ride Through",       group:"General", bool:true },
+  { code:"510E", label:"Anti-Islanding",                 group:"General", bool:true },
+  { code:"3088", label:"DRM Function",                   group:"General", bool:true },
+  { code:"2140", label:"Buzzer",                         group:"General", bool:true },
   { code:"5104", label:"Derating Setting",                  group:"General", unit:"%" },
   { code:"501B", label:"PV Insulation Resistance Protection",group:"General", unit:"kΩ" },
   { code:"5110", label:"PV Leakage Current Protection",     group:"General", unit:"mA" },
