@@ -115,7 +115,7 @@ All actions accept optional `username` and `password` in the request body. Falls
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
 
 **Debug actions** (Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`,
-`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `codelookup`.
+`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `shadowsweep`, `codelookup`.
 
 ### Reading inverter settings (device shadow / Modbus registers)
 The installer app's Remote-Setting dialog reads/writes inverter parameters via **device-shadow** endpoints.
@@ -127,6 +127,15 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
 - `shadow` action = the quick 5-flag read; `codelookup` searches the installer JS bundle for a code's label
   (note: register labels are NOT in the bundle, so this returns nothing useful — map codes via the UI instead).
 - AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`. Writes would use `setDeviceShadow_WA` — **do not write.**
+- **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
+  ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
+  code that resolved to a value. Surfaced in **Admin → Live Register Probe** (range presets + signature tags +
+  Δ-since-last-read highlighting). Purpose: find which attribute IDs carry **real-time measurements** (power /
+  voltage / current / freq / SOC) so we can offer an on-demand live stream instead of the 5-min cloud cache.
+  Note: device-shadow codes (e.g. `0x2100`) are the cloud's **attribute IDs**, NOT raw Modbus addresses; the
+  known set is all config — measurement IDs must be discovered empirically (run the probe twice; changing values
+  are live). `Force:1` is an on-demand poll through the WiFi dongle (request/response, ~1-3s latency, possible
+  rate limits) — near-real-time, not a true push stream.
 
 ### `dayexcel` — per-MPPT intraday (the day-chart CSV export)
 The day endpoint has **no per-MPPT** breakdown. The installer site's day-chart **Download** button hits a signed GET that returns a CSV with `MPPT1/2/3` (V/A/W), per-phase grid/load, battery, etc. at 5-min resolution. `dayexcel` calls it (sign over `{MemberID, inDate, GoodsID}`; **no token needed** — sign-authorized), parses the CSV, and returns `{ rows:[{time, mppt:[w1,w2,w3], gridV:[L1,L2], gridHz}], activeMppts, header }`. Used only when **one inverter** is selected on the Day tab → production splits into stacked MPPT bands. `memberId` = `site.name` (the end-user MemberID, e.g. `Dotsikas, Konstantinos`).

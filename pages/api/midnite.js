@@ -760,6 +760,36 @@ export default async function handler(req, res) {
         const data = r?.data?.data || {};
         return res.json({ autoId: aid, ok: r?.status ?? null, requested: REG.length, count: Object.keys(data).length, data, statusFlags: r?.data?.status || {} });
       }
+      case "shadowsweep": {
+        // READ-ONLY discovery probe: sweep a hex range of device-shadow attribute codes via
+        // readDeviceShadow_RA_New_AutoID with Force:1 (an on-demand live read of the inverter through
+        // its dongle — same mechanism the Remote-Setting dialog uses to "Read"). Returns every code
+        // that resolved to a value. Used to find which attribute IDs carry real-time measurements
+        // (power / voltage / current / frequency / SOC) for a live data stream. Never writes.
+        const { autoId, from, to, chunk } = req.body || {};
+        if (!autoId) return res.status(400).json({ error: "autoId required" });
+        const lo = parseInt(String(from||"2000"),16), hi = parseInt(String(to||"20FF"),16);
+        if (!(Number.isFinite(lo) && Number.isFinite(hi) && hi>=lo)) return res.status(400).json({ error: "bad range (hex from/to)" });
+        if (hi-lo+1 > 2048) return res.status(400).json({ error: "range too large (max 2048 codes per call)" });
+        const size = Math.min(Math.max(parseInt(chunk||256,10)||256, 16), 512);
+        const aid = String(autoId);
+        const hex = (n)=> n.toString(16).toUpperCase().padStart(4,"0");
+        const all = {}; const reach = {}; let requested = 0;
+        for (let start=lo; start<=hi; start+=size) {
+          const codes = [];
+          for (let c=start; c<=Math.min(start+size-1,hi); c++) codes.push(hex(c));
+          requested += codes.length;
+          const rb = { AutoId: aid, ModbusArr: JSON.stringify(codes), Force: 1 }; rb.sign = makeSign(rb);
+          try {
+            const r = await midnitePost("/Eagle/v1/Inverterapi/readDeviceShadow_RA_New_AutoID", rb, auth.token);
+            Object.assign(all, r?.data?.data || {});
+            Object.assign(reach, r?.data?.status || {});
+          } catch (e) { /* keep sweeping the remaining chunks */ }
+        }
+        const data = {};
+        for (const [k,v] of Object.entries(all)) { if (v !== null && v !== "" && v !== undefined) data[k] = v; }
+        return res.json({ autoId: aid, from: hex(lo), to: hex(hi), requested, found: Object.keys(data).length, data, reach });
+      }
       case "shadow": {
         // Read the inverter's cached device-shadow (settings) — hex attribute codes → values.
         // Populate the full set first by opening the inverter's Settings page in the installer app,

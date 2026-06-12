@@ -1567,8 +1567,24 @@ function AdminPanel({site, inverters, statuses=[]}) {
   const [busy, setBusy] = useState(false);
   const [scan, setScan] = useState(null);
   const [scanning, setScanning] = useState(false);
+  // Live register probe (real-time data discovery)
+  const [swFrom, setSwFrom] = useState("2000");
+  const [swTo, setSwTo] = useState("20FF");
+  const [swAutoId, setSwAutoId] = useState(inverters[0]?.autoId || "");
+  const [swRes, setSwRes] = useState(null);
+  const [swPrev, setSwPrev] = useState(null);
+  const [swBusy, setSwBusy] = useState(false);
+  const [swErr, setSwErr] = useState(null);
+  useEffect(()=>{ if(!swAutoId && inverters[0]?.autoId) setSwAutoId(inverters[0].autoId); }, [inverters]);
+  const runSweep = async () => {
+    setSwErr(null); setSwBusy(true);
+    try { const r = await api("shadowsweep", { autoId: swAutoId, from: swFrom, to: swTo }); setSwPrev(swRes?.data || null); setSwRes(r); }
+    catch(e){ setSwErr(String(e)); }
+    setSwBusy(false);
+  };
   const sn = inverters[0]?.sn || "";
   const darkInput = {background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"6px 8px",fontFamily:SANS,fontSize:12};
+  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"6px 8px",fontFamily:SANS,fontSize:12};
 
   // Per-inverter energy registers for the CURRENT site (from the live status feed). A "stuck" feed-in
   // register = exporting power right now (grid net < 0) but Export Today ≈ 0 — the Dotsikas symptom.
@@ -1699,6 +1715,51 @@ function AdminPanel({site, inverters, statuses=[]}) {
                 {e.site && <span style={{color:MUTED}}>· {e.site}</span>}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+      {/* Live Register Probe — discover real-time data registers via the device-shadow live read */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{marginBottom:8}}>
+          <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Live Register Probe</div>
+          <div style={{fontSize:11,color:FAINT,lineHeight:1.5}}>On-demand live read of the inverter via device-shadow (<code>Force:1</code>) — sweeps a hex range of attribute codes. Run twice ~10s apart: <b>changed</b> values (highlighted) are live measurements. Loose tags: ~60→Hz, ~100–300→V, 0–100→%, large→W. Read-only.</div>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+          <input value={swAutoId} onChange={e=>setSwAutoId(e.target.value)} placeholder="AutoId" style={{...inputS,width:90}}/>
+          <span style={{fontSize:11,color:FAINT}}>0x</span>
+          <input value={swFrom} onChange={e=>setSwFrom(e.target.value)} placeholder="from" style={{...inputS,width:70,fontFamily:"monospace"}}/>
+          <span style={{fontSize:11,color:FAINT}}>– 0x</span>
+          <input value={swTo} onChange={e=>setSwTo(e.target.value)} placeholder="to" style={{...inputS,width:70,fontFamily:"monospace"}}/>
+          <button onClick={runSweep} disabled={swBusy||!swAutoId} style={{padding:"6px 14px",borderRadius:8,border:"none",background:swBusy?MUTED:"#0EA5E9",color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:swBusy?"default":"pointer"}}>{swBusy?"Reading…":"Read"}</button>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+          {["1000-10FF","1400-14FF","1600-16FF","1A00-1AFF","2000-20FF","2100-21FF","2500-25FF","3000-30FF"].map(rng=>{
+            const [a,b]=rng.split("-");
+            return <button key={rng} onClick={()=>{setSwFrom(a);setSwTo(b);}} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${BORDER}`,background:swFrom===a&&swTo===b?"#E0F2FE":CARD,color:MUTED,fontSize:10,fontWeight:600,fontFamily:"monospace",cursor:"pointer"}}>{rng}</button>;
+          })}
+        </div>
+        {swErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:6}}>{swErr}</div>}
+        {swRes && (
+          <div>
+            <div style={{fontSize:11,color:MUTED,marginBottom:8}}>0x{swRes.from}–0x{swRes.to} · requested {swRes.requested} · <b style={{color:TEXT}}>{swRes.found}</b> returned a value{swPrev?` · ${Object.keys(swRes.data).filter(k=>String(swPrev[k])!==String(swRes.data[k])).length} changed since last read`:" · run again to spot live (changing) values"}</div>
+            {swRes.found===0
+              ? <div style={{fontSize:12,color:FAINT}}>Nothing resolved in this range — try another band.</div>
+              : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:6,maxHeight:320,overflow:"auto"}}>
+                  {Object.keys(swRes.data).sort().map(code=>{
+                    const v = swRes.data[code]; const n = parseFloat(v);
+                    const changed = swPrev && String(swPrev[code])!==String(v);
+                    let tag=null;
+                    if(isFinite(n)){ if(n>=59&&n<=61)tag="Hz"; else if(n>=95&&n<=300)tag="V"; else if(n>=0&&n<=100&&Number.isInteger(n))tag="%"; else if(Math.abs(n)>=300)tag="W"; }
+                    return (
+                      <div key={code} style={{display:"flex",alignItems:"baseline",gap:6,padding:"4px 8px",borderRadius:8,border:`1px solid ${changed?"#0EA5E9":BORDER}`,background:changed?"#E0F2FE":BG}}>
+                        <span style={{fontFamily:"monospace",fontSize:11,color:MUTED,fontWeight:700}}>{code}</span>
+                        <span style={{fontSize:12,color:TEXT,fontWeight:600,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{String(v)}</span>
+                        {tag&&<span style={{fontSize:9,color:FAINT,fontWeight:700}}>{tag}</span>}
+                        {changed&&<span style={{fontSize:9,color:"#0369A1",fontWeight:800}}>Δ</span>}
+                      </div>
+                    );
+                  })}
+                </div>}
           </div>
         )}
       </div>
