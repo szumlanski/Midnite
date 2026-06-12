@@ -134,12 +134,15 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
   (note: register labels are NOT in the bundle, so this returns nothing useful — map codes via the UI instead).
 - AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`, OffTheHook INV-1 `51398`. Writes would use `setDeviceShadow_WA` — **do not write.**
 - **Inverter Settings detail** (`SettingsModal`, opened by a **Settings ›** link on each inverter card / detail panel):
-  reads the device-shadow registers (`readsettings`) and renders a plain-English, grouped list driven by
-  `SETTINGS_MAP` (`[{code,label,group,unit?,scale?,enum?,bool?}]`). **Only register→setting mappings we're CERTAIN
-  of are included** (value-matched to a labeled Remote-Setting field). Confirmed so far: `30BA` = Maximum Feed-In
-  Grid Power (W), `308E` = Maximum Consumption From Grid (W). Grow the map by correlating register values to the
-  Remote-Setting screens (Power Control / Battery / General / Grid tabs); enum/toggle settings that read 0/1/2 are
-  usually NOT certain by value alone.
+  requests the `SETTINGS_MAP` register codes via `readsettings` and renders a plain-English, grouped list. The
+  labels were captured **directly from the Remote-Setting form** (each `<input>` id embeds its register code, e.g.
+  `hybridForm_2114` → "Floating Charge Voltage"), so they're certain — not value-guessed. `SETTINGS_MAP` =
+  `[{code,label,group,unit?,scale?,enum?,bool?}]`, ~50 numeric settings across Power Control / Generator / Battery /
+  General / Grid. **Raw-register scaling**: voltages ×10 (`scale:0.1`), frequencies ×100 (`scale:0.01`),
+  power/percent/time ×1. **Omitted** (not certain): enum/dropdown fields (no value→label map) and the 32-bit
+  protection-time fields (`5007(5020)` etc., split across two registers). NB: the form labels disproved earlier
+  value-guesses — `2183` = "Max Time To Attempt Equalize" (not grid V), `212F` = "Stop Discharge Reconnect Voltage"
+  (not battery V) — vindicating the certain-only rule.
 - **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
   ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
   code that resolved to a value. Surfaced in **Admin → Live Register Probe** — one **Read all** button sweeps the

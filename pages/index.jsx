@@ -588,20 +588,79 @@ function FaultPanel({site}) {
   );
 }
 
-// Inverter settings map (device-shadow config registers → plain-English names). ONLY include a
-// register once we're CERTAIN it matches a labeled setting in the Remote-Setting UI (value match).
-// fmt: unit appends " W"/" V"…; scale multiplies the raw value; enum maps raw→label; bool → On/Off.
+// Inverter settings map (device-shadow config registers → plain-English names). ONLY registers we're
+// CERTAIN of are included — labels captured directly from the Remote-Setting form (bound to the register
+// code), not value-guessed. Raw register scaling: voltages ×10 (scale 0.1), frequencies ×100 (scale 0.01),
+// power/percent/time/etc ×1. Enum/dropdown and 32-bit protection-time fields are omitted (not certain).
 const SETTINGS_MAP = [
-  { code:"30BA", label:"Maximum Feed-In Grid Power", group:"Power Control", unit:"W" },
-  { code:"308E", label:"Maximum Consumption From Grid", group:"Power Control", unit:"W" },
+  // Power Control
+  { code:"30BA", label:"Maximum Feed-In Grid Power",        group:"Power Control", unit:"W" },
+  { code:"308E", label:"Maximum Consumption From Grid",     group:"Power Control", unit:"W" },
+  // Generator
+  { code:"2127", label:"Maximum Input Power From Generator", group:"Generator", unit:"W" },
+  { code:"2126", label:"Maximum Generator Charge Power",     group:"Generator", unit:"W" },
+  { code:"2134", label:"Generator Start Voltage",           group:"Generator", unit:"V", scale:0.1 },
+  { code:"2135", label:"Generator End Voltage",             group:"Generator", unit:"V", scale:0.1 },
+  { code:"2137", label:"Generator Standby Time",            group:"Generator", unit:"min" },
+  { code:"2136", label:"Generator Max Run Time",            group:"Generator", unit:"min" },
+  // Battery
+  { code:"2112", label:"Battery Capacity",                  group:"Battery", unit:"Ah" },
+  { code:"21B4", label:"Battery Charge Efficiency",         group:"Battery", unit:"%" },
+  { code:"21B5", label:"Battery Rated Temperature",         group:"Battery", unit:"°C" },
+  { code:"214F", label:"Lead-Acid Battery Impedance",       group:"Battery", unit:"mΩ" },
+  { code:"2118", label:"Maximum Charge Power",              group:"Battery", unit:"W" },
+  { code:"211A", label:"Maximum Discharge Power",           group:"Battery", unit:"W" },
+  { code:"2116", label:"Maximum Allowed Charging Power",    group:"Battery", unit:"W" },
+  { code:"2150", label:"Maximum Grid Recovery Charge Power",group:"Battery", unit:"W" },
+  { code:"2114", label:"Floating Charge Voltage",           group:"Battery", unit:"V", scale:0.1 },
+  { code:"2180", label:"Absorb Voltage Setpoint",           group:"Battery", unit:"V", scale:0.1 },
+  { code:"2113", label:"Stop Discharge Voltage",            group:"Battery", unit:"V", scale:0.1 },
+  { code:"2148", label:"Stop Charging Voltage",             group:"Battery", unit:"V", scale:0.1 },
+  { code:"2146", label:"Start Recovery Charge Voltage",     group:"Battery", unit:"V", scale:0.1 },
+  { code:"2147", label:"Stop Recovery Charge Voltage",      group:"Battery", unit:"V", scale:0.1 },
+  { code:"214B", label:"Discharge End Voltage (On-Grid)",   group:"Battery", unit:"V", scale:0.1 },
+  { code:"212F", label:"Stop Discharge Reconnect Voltage (Off-Grid)", group:"Battery", unit:"V", scale:0.1 },
+  { code:"2181", label:"Equalize Voltage",                  group:"Battery", unit:"V", scale:0.1 },
+  { code:"2182", label:"Equalize Time",                     group:"Battery", unit:"min" },
+  { code:"2183", label:"Max Time To Attempt Equalize",      group:"Battery", unit:"min" },
+  { code:"2184", label:"Days Between Auto Equalize",        group:"Battery", unit:"days" },
+  { code:"2186", label:"Absorb Time",                       group:"Battery", unit:"min" },
+  // General
+  { code:"5104", label:"Derating Setting",                  group:"General", unit:"%" },
+  { code:"501B", label:"PV Insulation Resistance Protection",group:"General", unit:"kΩ" },
+  { code:"5110", label:"PV Leakage Current Protection",     group:"General", unit:"mA" },
+  // Grid
+  { code:"2125", label:"Maximum Input Power From Grid",     group:"Grid", unit:"W" },
+  { code:"5000", label:"First Boot Delay Time",             group:"Grid", unit:"s" },
+  { code:"5029", label:"First Boot Power Gradient",         group:"Grid", unit:"%" },
+  { code:"5001", label:"Reconnect Delay Time",              group:"Grid", unit:"s" },
+  { code:"5019", label:"Reconnect Power Gradient",          group:"Grid", unit:"%" },
+  { code:"507A", label:"Grid First High Voltage",           group:"Grid", unit:"V", scale:0.1 },
+  { code:"507B", label:"Grid First Low Voltage",            group:"Grid", unit:"V", scale:0.1 },
+  { code:"5078", label:"Grid First High Frequency",         group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"5079", label:"Grid First Low Frequency",          group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"5027", label:"Grid Reconnect High Voltage",       group:"Grid", unit:"V", scale:0.1 },
+  { code:"5028", label:"Grid Reconnect Low Voltage",        group:"Grid", unit:"V", scale:0.1 },
+  { code:"5012", label:"Grid Reconnect High Frequency",     group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"5013", label:"Grid Reconnect Low Frequency",      group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"5004", label:"Over-Voltage Trip 1",              group:"Grid", unit:"V", scale:0.1 },
+  { code:"500C", label:"Over-Voltage Trip 2",              group:"Grid", unit:"V", scale:0.1 },
+  { code:"5005", label:"Under-Voltage Trip 1",             group:"Grid", unit:"V", scale:0.1 },
+  { code:"500D", label:"Under-Voltage Trip 2",             group:"Grid", unit:"V", scale:0.1 },
+  { code:"5002", label:"Over-Frequency Trip 1",            group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"500A", label:"Over-Frequency Trip 2",            group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"5003", label:"Under-Frequency Trip 1",           group:"Grid", unit:"Hz", scale:0.01 },
+  { code:"500B", label:"Under-Frequency Trip 2",           group:"Grid", unit:"Hz", scale:0.01 },
 ];
 function fmtSetting(s, raw){
   if(raw===undefined||raw===null||raw==="") return "—";
   const n = parseFloat(raw);
   if(s.enum) return s.enum[n] ?? `(${raw})`;
   if(s.bool) return Number(n)?"On":"Off";
+  if(!isFinite(n)) return String(raw);
   const v = s.scale ? n*s.scale : n;
-  return `${Number.isFinite(v)?v:raw}${s.unit?` ${s.unit}`:""}`;
+  const out = Number.isInteger(v) ? v : parseFloat(v.toFixed(2));
+  return `${out}${s.unit?` ${s.unit}`:""}`;
 }
 function SettingsModal({inv, onClose}){
   const [data, setData] = useState(null);
@@ -609,7 +668,7 @@ function SettingsModal({inv, onClose}){
   useEffect(()=>{
     if(!inv.autoId){ setErr("No AutoId for this inverter (settings need installer access)."); return; }
     let alive = true;
-    api("readsettings", { autoId: inv.autoId, sn: inv.sn })
+    api("readsettings", { autoId: inv.autoId, sn: inv.sn, codes: SETTINGS_MAP.map(s=>s.code) })
       .then(r=>{ if(alive) setData(r?.data || {}); })
       .catch(e=>{ if(alive) setErr(String(e)); });
     return ()=>{ alive=false; };
