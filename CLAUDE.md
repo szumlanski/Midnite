@@ -139,8 +139,13 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
   attribute space client-side in 2048-code windows (0x0000–0x6FFF), merges, shows only non-zero registers, and on a
   second run highlights **Δ vs the previous full read** (with a "changed only" filter). A **Match to live status**
   table cross-references each live reading (PV/grid/load/battery power, SOC, SOH, grid+battery V, Hz, temp) against
-  the swept registers at sane per-unit scales (config codes excluded) to auto-label candidates. Purpose: find which
-  attribute IDs carry **real-time measurements** (power /
+  the swept registers at sane per-unit scales (config codes excluded) to auto-label candidates. A **Watch power
+  block** button polls a focused set (0x3000–0x301F + Hz/temp/batV) every 10s via `readsettings` so register values
+  can be read off next to a live power-flow screen (resolves snapshot-timing ambiguity; best done at a site with
+  active PV/battery). **Findings so far:** the shadow only exposes a small live set — a power block at 0x3000–0x3003
+  (0x3002/0x3003 change on demand), plus rough 0x2562 Hz / 0x2563 temp / 0x212F battery-V. SOC, grid voltage, and
+  currents are **not** in the shadow (0x0000–0xFFFF fully swept); they only update on the 5-min cloud report.
+  Purpose: find which attribute IDs carry **real-time measurements** (power /
   voltage / current / freq / SOC) so we can offer an on-demand live stream instead of the 5-min cloud cache.
   Note: device-shadow codes (e.g. `0x2100`) are the cloud's **attribute IDs**, NOT raw Modbus addresses; the
   known set is all config — measurement IDs must be discovered empirically (run the probe twice; changing values

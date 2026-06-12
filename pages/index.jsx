@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Head from "next/head";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
 
@@ -1560,6 +1560,10 @@ const CONFIG_CODES = new Set([
   "1A18","5101","5000","5001","5019","5029","5002","5003","5004","5005","5006","5007","5008","5009","500A","500B","500C","500D","500E","500F","5010","5011","501A","5021","507F","5017","511D","2125","501F","5020","5025","5026","506C","506D","5033","5030","5031","5121","5059","5034","5035","5036","5037","5038","5039","503A","503B","503C","503D","503E","503F","5040","5041","5042","5043","505A","505B","505C","505D","505E","505F","5060","5061","5027","5028","5012","5013","507A","507B","5078","5079",
   "30B0","30B1","30B2","30B3","30B4","30B5","30B9","30BA","308E","3089","2100","2141","215B","214C","1A48","1A5A","2124","2110","2101","2102","2103","2104","2105","2106","2107","2108","2109","210A","210B","210C","210D","210E","210F","2168","2169","216C","216D","2170","2171","2174","2175","2178","2179","217C","217D","216A","216B","216E","216F","2172","2173","2176","2177","217A","217B","217E","217F","2122","2520","2540","256E","256F","2570","2571","2568","2569","256A","256B","2138","2139","213A","213B","213C","212A","2129","2134","2135","2127","2126","2136","2137","2151","2156","2152","2153","2154","2155","212C","212D","2130","2131","213F","219B",
 ]);
+// Focused live-watch register set for the Live Register Probe: the 0x3000 power block + the
+// known live Hz/temp/battery-V codes. Polled every 10s so values can be correlated against the
+// live power-flow screen (which register tracks PV vs grid vs load vs battery).
+const WATCH_CODES = (()=>{ const a=[]; for(let i=0x3000;i<=0x301F;i++) a.push(i.toString(16).toUpperCase()); a.push("2562","2563","212F"); return a; })();
 function AdminPanel({site, inverters, statuses=[]}) {
   const [log, setLog] = useState(null);
   const [logErr, setLogErr] = useState(null);
@@ -1582,7 +1586,28 @@ function AdminPanel({site, inverters, statuses=[]}) {
   const [swErr, setSwErr] = useState(null);
   const [swProg, setSwProg] = useState("");
   const [swChangedOnly, setSwChangedOnly] = useState(false);
+  const [swWatch, setSwWatch] = useState(false);
+  const [swWatchData, setSwWatchData] = useState({});
+  const [swWatchTs, setSwWatchTs] = useState(null);
+  const swWatchPrevRef = useRef({});
   useEffect(()=>{ if(!swAutoId && inverters[0]?.autoId) setSwAutoId(inverters[0].autoId); }, [inverters]);
+  // Live watch: poll the focused register set every 10s so values can be read off next to a live
+  // power-flow screen (resolves the "snapshots taken at different times" ambiguity).
+  useEffect(()=>{
+    if(!swWatch || !swAutoId) return;
+    let alive = true;
+    const poll = async ()=>{
+      try {
+        const r = await api("readsettings", { autoId: swAutoId, codes: WATCH_CODES });
+        if(!alive) return;
+        setSwWatchData(cur=>{ swWatchPrevRef.current = cur; return r?.data || {}; });
+        setSwWatchTs(new Date());
+      } catch(e){ /* keep polling */ }
+    };
+    poll();
+    const id = setInterval(poll, 10000);
+    return ()=>{ alive=false; clearInterval(id); };
+  }, [swWatch, swAutoId]);
   // 0x0000–0x6FFF was swept thoroughly = only config/noise (+ the live power block at 0x3000).
   // Keep 0x3000 for the power Δ; extend into the unexplored upper half 0x7000–0xFFFF.
   const SWEEP_WINDOWS = [
@@ -1762,6 +1787,30 @@ function AdminPanel({site, inverters, statuses=[]}) {
           )}
         </div>
         {swErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:6}}>{swErr}</div>}
+        {/* Live watch — poll the power block every 10s for real-time correlation */}
+        <div style={{borderTop:`1px solid ${BORDER}`,marginTop:10,paddingTop:10,marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <button onClick={()=>setSwWatch(w=>!w)} disabled={!swAutoId} style={{padding:"6px 14px",borderRadius:8,border:"none",background:swWatch?GRID_IN:BATTERY,color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:swAutoId?"pointer":"default"}}>{swWatch?"■ Stop watch":"▶ Watch power block (10s)"}</button>
+            <span style={{fontSize:11,color:FAINT}}>0x3000–0x301F + Hz/temp/batV{swWatchTs?` · updated ${swWatchTs.toLocaleTimeString()}`:""}</span>
+          </div>
+          {swWatch && (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:6,marginTop:8}}>
+              {WATCH_CODES.map(code=>{
+                const v = swWatchData[code]; const prev = swWatchPrevRef.current[code];
+                if(v===undefined) return null;
+                const changed = prev!==undefined && String(prev)!==String(v);
+                const zero = parseFloat(v)===0;
+                return (
+                  <div key={code} style={{display:"flex",alignItems:"baseline",gap:6,padding:"4px 8px",borderRadius:8,border:`1px solid ${changed?"#0EA5E9":BORDER}`,background:changed?"#E0F2FE":(zero?CARD:BG),opacity:zero?0.5:1}}>
+                    <span style={{fontFamily:"monospace",fontSize:11,color:MUTED,fontWeight:700}}>{code}</span>
+                    <span style={{fontSize:12,color:TEXT,fontWeight:600,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{String(v)}</span>
+                    {changed&&<span style={{fontSize:9,color:"#0369A1",fontWeight:800}}>Δ</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         {swRes && !swBusy && (()=>{
           const data = swRes.data;
           const isChanged = (c)=> swPrev && (c in swPrev) && String(swPrev[c])!==String(data[c]);
