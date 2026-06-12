@@ -1590,6 +1590,24 @@ function AdminPanel({site, inverters, statuses=[]}) {
   const [swWatchData, setSwWatchData] = useState({});
   const [swWatchTs, setSwWatchTs] = useState(null);
   const swWatchPrevRef = useRef({});
+  // Realtime-flow freshness test (getHybridFlowgraphRealTimeData)
+  const [rtfOn, setRtfOn] = useState(false);
+  const [rtfData, setRtfData] = useState(null);
+  const [rtfTs, setRtfTs] = useState(null);
+  const [rtfRaw, setRtfRaw] = useState(false);
+  const rtfPrevRef = useRef(null);
+  const rtfSn = inverters.find(i=>String(i.autoId)===String(swAutoId))?.sn || inverters[0]?.sn || "";
+  useEffect(()=>{
+    if(!rtfOn || !rtfSn) return;
+    let alive = true;
+    const poll = async ()=>{
+      try { const r = await api("flowrt", { serial: rtfSn }); if(!alive) return; setRtfData(cur=>{ rtfPrevRef.current = cur; return r; }); setRtfTs(new Date()); }
+      catch(e){ /* keep polling */ }
+    };
+    poll();
+    const id = setInterval(poll, 10000);
+    return ()=>{ alive=false; clearInterval(id); };
+  }, [rtfOn, rtfSn]);
   useEffect(()=>{ if(!swAutoId && inverters[0]?.autoId) setSwAutoId(inverters[0].autoId); }, [inverters]);
   // Live watch: poll the focused register set every 10s so values can be read off next to a live
   // power-flow screen (resolves the "snapshots taken at different times" ambiguity).
@@ -1890,6 +1908,42 @@ function AdminPanel({site, inverters, statuses=[]}) {
                       );
                     })}
                   </div>}
+            </div>
+          );
+        })()}
+      </div>
+      {/* Realtime Flow Test — is getHybridFlowgraphRealTimeData fresher than the 5-min cache? */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{marginBottom:8}}>
+          <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Realtime Flow Test</div>
+          <div style={{fontSize:11,color:FAINT,lineHeight:1.5}}>Polls <code>getHybridFlowgraphRealTimeData</code> every 10s. If <b>SystemTime</b> advances each poll and the values move faster than 5 min, it beats the cloud cache. Inverter: <span style={{fontFamily:"monospace"}}>{rtfSn||"—"}</span></div>
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?"■ Stop":"▶ Watch realtime flow (10s)"}</button>
+          {rtfTs && <span style={{fontSize:11,color:FAINT}}>polled {rtfTs.toLocaleTimeString()}</span>}
+          {rtfData && <button onClick={()=>setRtfRaw(r=>!r)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{rtfRaw?"Hide raw":"Raw"}</button>}
+        </div>
+        {rtfData && rtfData.ok===false && <div style={{color:GRID_IN,fontSize:12}}>{rtfData.error||"error"}</div>}
+        {rtfData && rtfData.ok!==false && (()=>{
+          const prev = rtfPrevRef.current;
+          const ch = (k)=> prev && String(prev[k])!==String(rtfData[k]);
+          const tile = (label,val,changed,color)=>(
+            <div style={{padding:"8px 10px",borderRadius:10,border:`1px solid ${changed?"#0EA5E9":BORDER}`,background:changed?"#E0F2FE":BG}}>
+              <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}{changed?" Δ":""}</div>
+              <div style={{fontSize:15,fontWeight:700,color:color||TEXT,fontVariantNumeric:"tabular-nums"}}>{val}</div>
+            </div>
+          );
+          return (
+            <div>
+              <div style={{fontSize:12,color:MUTED,marginBottom:8}}>SystemTime: <b style={{color:TEXT}}>{rtfData.time||"—"}</b></div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+                {tile("PV",fmt(rtfData.pv),ch("pv"),SOLAR)}
+                {tile("Grid",fmt(rtfData.grid),ch("grid"),rtfData.grid<0?GRID_OUT:GRID_IN)}
+                {tile("Load",fmt(rtfData.load),ch("load"),LOAD_C)}
+                {tile("Battery",fmt(rtfData.battery),ch("battery"),BATTERY)}
+                {tile("SOC",`${rtfData.soc}%`,ch("soc"),TEXT)}
+              </div>
+              {rtfRaw && <pre style={{marginTop:10,maxHeight:220,overflow:"auto",fontSize:10,background:BG,padding:10,borderRadius:8,border:`1px solid ${BORDER}`,whiteSpace:"pre-wrap"}}>{JSON.stringify(rtfData.raw,null,2)}</pre>}
             </div>
           );
         })()}

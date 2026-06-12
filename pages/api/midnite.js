@@ -411,6 +411,28 @@ export default async function handler(req, res) {
         }));
         return res.json({ results });
       }
+      case "flowrt": {
+        // Freshness test for getHybridFlowgraphRealTimeData (the vendor's "real-time" flow endpoint).
+        // Returns the FULL raw response so every timestamp/field can be inspected, plus extracted
+        // power/SOC and a best-effort timestamp. Poll repeatedly to see if it beats the 5-min cache.
+        const { serial } = req.body || {};
+        if(!serial) return res.status(400).json({error:"serial required"});
+        const body = { GoodsID: serial }; body.sign = makeSign(body);
+        try {
+          const r = await midnitePost("/Eagle/v1/Inverterapi/getHybridFlowgraphRealTimeData", body, auth.token);
+          return res.json({
+            ok: true, serial,
+            time: r?.SystemTime || r?.DataTime || r?.lastUpdateTime || r?.Time || "",
+            pv: parseFloat(r?.TotalDCpower || 0),
+            grid: parseFloat(r?.gridCurrpac || 0),
+            load: parseFloat(r?.loadCurrpac || 0),
+            eps: parseFloat(r?.epsCurrpac || 0),
+            battery: parseFloat(r?.Pbat || 0),
+            soc: parseFloat(r?.SOC || 0),
+            raw: r,
+          });
+        } catch(e){ return res.json({ ok:false, serial, error:e.message }); }
+      }
       case "day": {
         const { sn, date } = req.body || {};
         if (!sn || !date) return res.status(400).json({ error: "sn and date required" });
