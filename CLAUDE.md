@@ -132,7 +132,14 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
 - `getDeviceShadowStatus_RA` returns only ~5 cached status flags (`1A18/1A44/1A45/1A46/1A4E`) — NOT the full set.
 - `shadow` action = the quick 5-flag read; `codelookup` searches the installer JS bundle for a code's label
   (note: register labels are NOT in the bundle, so this returns nothing useful — map codes via the UI instead).
-- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`. Writes would use `setDeviceShadow_WA` — **do not write.**
+- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`, OffTheHook INV-1 `51398`. Writes would use `setDeviceShadow_WA` — **do not write.**
+- **Inverter Settings detail** (`SettingsModal`, opened by a **Settings ›** link on each inverter card / detail panel):
+  reads the device-shadow registers (`readsettings`) and renders a plain-English, grouped list driven by
+  `SETTINGS_MAP` (`[{code,label,group,unit?,scale?,enum?,bool?}]`). **Only register→setting mappings we're CERTAIN
+  of are included** (value-matched to a labeled Remote-Setting field). Confirmed so far: `30BA` = Maximum Feed-In
+  Grid Power (W), `308E` = Maximum Consumption From Grid (W). Grow the map by correlating register values to the
+  Remote-Setting screens (Power Control / Battery / General / Grid tabs); enum/toggle settings that read 0/1/2 are
+  usually NOT certain by value alone.
 - **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
   ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
   code that resolved to a value. Surfaced in **Admin → Live Register Probe** — one **Read all** button sweeps the

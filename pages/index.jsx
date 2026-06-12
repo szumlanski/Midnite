@@ -584,7 +584,72 @@ function FaultPanel({site}) {
   );
 }
 
+// Inverter settings map (device-shadow config registers → plain-English names). ONLY include a
+// register once we're CERTAIN it matches a labeled setting in the Remote-Setting UI (value match).
+// fmt: unit appends " W"/" V"…; scale multiplies the raw value; enum maps raw→label; bool → On/Off.
+const SETTINGS_MAP = [
+  { code:"30BA", label:"Maximum Feed-In Grid Power", group:"Power Control", unit:"W" },
+  { code:"308E", label:"Maximum Consumption From Grid", group:"Power Control", unit:"W" },
+];
+function fmtSetting(s, raw){
+  if(raw===undefined||raw===null||raw==="") return "—";
+  const n = parseFloat(raw);
+  if(s.enum) return s.enum[n] ?? `(${raw})`;
+  if(s.bool) return Number(n)?"On":"Off";
+  const v = s.scale ? n*s.scale : n;
+  return `${Number.isFinite(v)?v:raw}${s.unit?` ${s.unit}`:""}`;
+}
+function SettingsModal({inv, onClose}){
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(()=>{
+    if(!inv.autoId){ setErr("No AutoId for this inverter (settings need installer access)."); return; }
+    let alive = true;
+    api("readsettings", { autoId: inv.autoId, sn: inv.sn })
+      .then(r=>{ if(alive) setData(r?.data || {}); })
+      .catch(e=>{ if(alive) setErr(String(e)); });
+    return ()=>{ alive=false; };
+  }, [inv.autoId]);
+  const groups = [...new Set(SETTINGS_MAP.map(s=>s.group))];
+  const shown = (g)=> SETTINGS_MAP.filter(s=>s.group===g && data && (s.code in data));
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:560,width:"100%",maxHeight:"85vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,background:CARD}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Inverter Settings</div>
+            <div style={{fontSize:11,color:FAINT,fontFamily:"monospace"}}>{inv.label} · {inv.sn}</div>
+          </div>
+          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{padding:"14px 18px"}}>
+          {err && <div style={{fontSize:12,color:GRID_IN,padding:"8px 10px",background:"#FEF2F2",borderRadius:8}}>{err}</div>}
+          {!err && !data && <div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"24px 0"}}>Reading live settings from the inverter…</div>}
+          {!err && data && groups.map(g=>{
+            const rows = shown(g);
+            if(!rows.length) return null;
+            return (
+              <div key={g} style={{marginBottom:14}}>
+                <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{g}</div>
+                {rows.map(s=>(
+                  <div key={s.code} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",borderBottom:`1px solid ${BORDER}`,gap:12}}>
+                    <span style={{fontSize:13,color:TEXT}}>{s.label}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtSetting(s, data[s.code])}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+          {!err && data && (
+            <div style={{fontSize:11,color:FAINT,marginTop:8,lineHeight:1.5}}>Only settings we've confidently mapped from the register set are shown ({SETTINGS_MAP.length} so far). The list grows as more registers are correlated to the Remote-Setting screens.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 function InverterCard({inv, status}) {
+  const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
   const pv = d?.photovoltaic?.power?.totalDc ?? null;
   const load = balanceLoad(d);
@@ -615,6 +680,7 @@ function InverterCard({inv, status}) {
             <div style={{fontSize:16,fontWeight:700,color:TEXT}}>{inv.label}</div>
             {model&&<div style={{fontSize:10,color:MUTED,marginTop:1}}>{model}</div>}
             <div style={{fontSize:10,color:FAINT,marginTop:1,fontVariantNumeric:"tabular-nums"}}>{inv.sn}</div>
+            {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{marginTop:5,padding:"2px 8px",borderRadius:6,border:`1px solid ${BORDER}`,background:BG,color:MUTED,fontSize:10,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
           </div>
           <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
             <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:online?"#DCFCE7":"#FEE2E2",border:`1px solid ${online?"#86EFAC":"#FECACA"}`}}>
@@ -697,6 +763,7 @@ function InverterCard({inv, status}) {
         )}
         {!d&&!status&&<div style={{fontSize:12,color:FAINT,textAlign:"center",padding:"12px 0"}}>Connecting…</div>}
       </div>
+      {showSettings&&<SettingsModal inv={inv} onClose={()=>setShowSettings(false)}/>}
     </div>
   );
 }
@@ -727,6 +794,7 @@ function PhaseRow({label, line, exportWhenNegative}) {
 
 function InverterDetailPanel({inv, status}) {
   const [showInfo, setShowInfo] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
   if(!d) return <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting…</div>;
 
@@ -766,8 +834,10 @@ function InverterDetailPanel({inv, status}) {
             {stateLabel&&<span style={{fontSize:11,fontWeight:700,color:stateColor,padding:"3px 10px",borderRadius:12,background:stateColor===BATTERY?"#DCFCE7":"#F1F5F9"}}>{stateLabel}</span>}
             {workLabel&&<span style={{fontSize:10,color:MUTED,fontWeight:500}}>{workLabel}</span>}
             {d.inverter?.lastUpdateTime&&<span style={{fontSize:10,color:FAINT}}>{d.inverter.lastUpdateTime.slice(11,19)}</span>}
+            {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid #FDE68A`,background:"#FFFBEB",color:"#92400E",fontSize:10,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
           </div>
         </div>
+        {showSettings&&<SettingsModal inv={inv} onClose={()=>setShowSettings(false)}/>}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
           <StatTile label="PV Today"       value={fmtE(pvToday)}   color={TEXT}/>
           <StatTile label="PV Lifetime"    value={fmtE(pvLifetime)} color={TEXT}/>
