@@ -328,9 +328,17 @@ Battery (bottom-left), Home (bottom-right) around a center **SVG inverter cabine
 white unit — NOT a photo; user explicitly chose the SVG). Connectors are **squared/orthogonal elbows** (not
 diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **dot speed ∝ watts**
 (`animationDuration = clamp(4000/|W|, 0.3, 3)s` — 10kW flows 2× faster than 5kW).
-- Built from the **same `status` detail data** as the cards (NOT `getHybridFlowgraphRealTimeData`) so every node
-  matches: `grid.netW` (+import/−export), battery net (`charge−discharge`), Home = `balanceLoad`. Aggregates the
-  **selected** inverters; `flow.count` drives a **×N badge** on the inverter.
+- Built from the **same `status` detail data** as the cards (5-min) so every node matches: `grid.netW`
+  (+import/−export), battery net (`charge−discharge`), Home = `balanceLoad`. Aggregates the **selected**
+  inverters; `flow.count` drives a **×N badge** on the inverter.
+- **Real-time overlay (`flowrt` / getHybridFlowgraphRealTimeData):** on the Live tab a 5s poll of `flowrt`
+  per selected inverter overlays live PV/grid/load/battery/SOC onto `flowAgg` and `SiteHero` (only when a
+  reading exists for **every** selected inverter, else falls back to 5-min `status`). A **LIVE** pulse shows on
+  the flow header + hero. This endpoint **is** genuinely live: `SystemTime` ticks per second, the measured
+  values refresh ~every 5s (verified by 1s logging) — the first poll can return one stale (cached) sample, then
+  it goes live. `flowrt.load` == `pv + grid − battery` (the energy balance), so on AIO units where `loadCurrpac`
+  reads 0 we derive Home from that balance. (Device-shadow registers do NOT carry real-time telemetry — only
+  this flow endpoint does.)
 - Node text sits on the side **away** from the inverter (`place="above"` top nodes / `"below"` bottom) so
   connectors never cross labels.
 - Grid icon = drawn **transmission pylon** (`gridPylon`, passed via `iconSvg`), not a bank emoji.

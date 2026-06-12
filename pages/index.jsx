@@ -357,13 +357,14 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
   );
 }
 
-function SiteHero({statuses}) {
+function SiteHero({statuses, live=null}) {
   const v = statuses.filter(s=>s?.ok&&s?.data);
-  const totalPv = v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
-  const totalLoad = v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
-  const totalGrid = v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
-  const totalBat = v.reduce((s,i)=>s+(i.data.battery?.charge||0)-(i.data.battery?.discharge||0),0);
-  const avgSoc = v.length ? v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length : null;
+  // Power "now" comes from the live 5s feed when available; energy-today tiles stay on the 5-min status.
+  const totalPv = live ? live.pv : v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
+  const totalLoad = live ? live.load : v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
+  const totalGrid = live ? live.grid : v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
+  const totalBat = live ? live.battery : v.reduce((s,i)=>s+(i.data.battery?.charge||0)-(i.data.battery?.discharge||0),0);
+  const avgSoc = live ? live.soc : (v.length ? v.reduce((s,i)=>s+(i.data.battery?.soc||0),0)/v.length : null);
   const totalToday = v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.today||0),0);
   const totalImpToday = v.reduce((s,i)=>s+(i.data.grid?.consumption?.today||0),0);
   const totalExpToday = v.reduce((s,i)=>s+(i.data.grid?.sold?.today||0),0);
@@ -378,7 +379,7 @@ function SiteHero({statuses}) {
     <div style={{background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"20px 20px",marginBottom:16,border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
-          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2}}>Site Production Now</div>
+          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>Site Production Now{live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:8,fontWeight:800,color:BATTERY}}>LIVE</span></span>}</div>
           <div style={{fontSize:36,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-1px",fontVariantNumeric:"tabular-nums"}}>{fmt(totalPv,2)}</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
@@ -1098,7 +1099,10 @@ function FlowDiagram({flow}) {
   return (
     <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"4px 8px 0"}}>
-        <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
+        <span style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
+          {flow.live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:9,fontWeight:800,color:BATTERY,letterSpacing:"0.04em"}}>LIVE</span></span>}
+        </span>
         {flow.updated&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>{fmtClock(flow.updated)}</span>}
       </div>
       <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
@@ -2070,6 +2074,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState("live");
   const [isAdmin, setIsAdmin] = useState(false);
   const [statuses, setStatuses] = useState([]);
+  const [liveFlow, setLiveFlow] = useState({}); // sn -> live {pv,grid,load,battery,soc,time} from flowrt (~5s)
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -2145,7 +2150,7 @@ export default function Dashboard() {
   }
 
   function handleSelectSite(s) {
-    setSite(s); setStatuses([]); setLiveLoading(true);
+    setSite(s); setStatuses([]); setLiveFlow({}); setLiveLoading(true);
     localStorage.setItem("midnite_selected_site", s.name);
     setAuthState("dashboard");
   }
@@ -2187,6 +2192,25 @@ export default function Dashboard() {
   const toggleInv = (sn) => setSelectedSns(prev=>{ const has=prev.includes(sn); if(has){ const next=prev.filter(x=>x!==sn); return next.length?next:prev; } return [...prev,sn]; });
   const selectAllInv = () => site && setSelectedSns(site.inverters.map(i=>i.sn));
   const snKey = selectedSns.join(",");
+
+  // Real-time power flow: getHybridFlowgraphRealTimeData refreshes ~every 5s (verified), so poll it
+  // every 5s for the selected inverters while on the Live tab and overlay it on the flow/hero.
+  useEffect(() => {
+    if(tab!=="live" || !site) return;
+    let alive = true, busy = false;
+    const sns = snKey ? snKey.split(",") : [];
+    const poll = async () => {
+      if(busy || !sns.length) return; busy = true;
+      try {
+        const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
+        if(!alive) return;
+        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false) next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
+      } catch(e){ /* keep polling */ } finally { busy = false; }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return ()=>{ alive=false; clearInterval(id); };
+  }, [tab, site, snKey]);
 
   useEffect(() => {
     if(tab!=="day"||!site) return;
@@ -2259,7 +2283,7 @@ export default function Dashboard() {
   // exactly (no second endpoint sampled a moment apart). grid.netW is +import/−export; battery is
   // net (+charge/−discharge); Home comes from the balance to handle smart/EPS-port AIO inverters.
   const selStatus = statuses.filter(s=>s&&s.ok&&s.data&&selectedSns.includes(s.sn));
-  const flowAgg = selStatus.length ? (()=>{
+  let flowAgg = selStatus.length ? (()=>{
     const sum = (fn)=>selStatus.reduce((s,x)=>s+(fn(x.data)||0),0);
     const portW = (p)=> (p?.lines||[]).reduce((b,l)=>b+(l.power||0),0);
     const pv = sum(d=>d.photovoltaic?.power?.totalDc);
@@ -2284,6 +2308,25 @@ export default function Dashboard() {
       updated: times.length ? times[times.length-1] : null,
       soc, capKwh, voltage, remainKwh, ratePctHr, rateSign: battery>0?"+":"−" };
   })() : null;
+
+  // Live overlay from the 5s flowrt feed (only when we have a reading for every selected inverter).
+  const liveSel = selectedSns.map(sn=>liveFlow[sn]).filter(Boolean);
+  const liveAgg = (liveSel.length && liveSel.length===selectedSns.length) ? {
+    pv: liveSel.reduce((s,x)=>s+(x.pv||0),0),
+    grid: liveSel.reduce((s,x)=>s+(x.grid||0),0),
+    battery: liveSel.reduce((s,x)=>s+(x.battery||0),0),
+    load: liveSel.reduce((s,x)=>s+(x.load>0?x.load:((x.pv||0)+(x.grid||0)-(x.battery||0))),0),
+    soc: liveSel.reduce((s,x)=>s+(x.soc||0),0)/liveSel.length,
+    time: liveSel.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null,
+  } : null;
+  // Merge live power into the flow diagram (keep gen/smart-load/capacity from the 5-min status).
+  if(flowAgg && liveAgg){
+    flowAgg = { ...flowAgg, pv:liveAgg.pv, grid:liveAgg.grid, battery:liveAgg.battery, load:liveAgg.load, soc:liveAgg.soc,
+      updated: liveAgg.time || flowAgg.updated, live: true,
+      remainKwh: (flowAgg.capKwh!=null && liveAgg.soc!=null) ? flowAgg.capKwh*liveAgg.soc/100 : flowAgg.remainKwh,
+      ratePctHr: (flowAgg.capKwh && Math.abs(liveAgg.battery)>20) ? Math.abs(liveAgg.battery)/1000/flowAgg.capKwh*100 : null,
+      rateSign: liveAgg.battery>0?"+":"−" };
+  }
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="login") return <LoginForm onLogin={handleLogin} error={loginError} loading={loginLoading}/>;
@@ -2335,7 +2378,7 @@ export default function Dashboard() {
                 ? <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting to Midnite portal…</div>
                 : <>
                   {flowAgg&&<FlowDiagram flow={flowAgg}/>}
-                  {allSelected&&<SiteHero statuses={statuses}/>}
+                  {allSelected&&<SiteHero statuses={statuses} live={liveAgg}/>}
                   {allSelected&&<BatteryPanel statuses={statuses}/>}
                   {allSelected&&<LifetimePanel statuses={statuses}/>}
                   {selectedSns.length===1 ? (
