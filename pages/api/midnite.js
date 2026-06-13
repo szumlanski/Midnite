@@ -319,9 +319,29 @@ export default async function handler(req, res) {
     // Account-management actions — no linked Midnite account required.
     if (action === "accounts") {
       const sb = supabaseAdmin();
-      const { data } = await sb.from("midnite_accounts")
-        .select("id,label,midnite_username,account_type,created_at").eq("user_id", user.id).order("created_at");
-      return res.json({ role, email: user.email, accounts: data || [] });
+      const [{ data }, { data: prof }, { data: photos }] = await Promise.all([
+        sb.from("midnite_accounts").select("id,label,midnite_username,account_type,created_at").eq("user_id", user.id).order("created_at"),
+        sb.from("profiles").select("display_name,avatar_url").eq("id", user.id).maybeSingle(),
+        sb.from("site_photos").select("site_name,url").eq("user_id", user.id),
+      ]);
+      const sitePhotos = Object.fromEntries((photos || []).map(p => [p.site_name, p.url]));
+      return res.json({ role, email: user.email, accounts: data || [], profile: prof || {}, sitePhotos });
+    }
+    if (action === "updateprofile") {
+      const { display_name, avatar_url } = req.body || {};
+      const patch = {};
+      if (display_name !== undefined) patch.display_name = display_name;
+      if (avatar_url !== undefined) patch.avatar_url = avatar_url;
+      if (Object.keys(patch).length) await supabaseAdmin().from("profiles").update(patch).eq("id", user.id);
+      return res.json({ ok: true });
+    }
+    if (action === "setsitephoto") {
+      const { site, url } = req.body || {};
+      if (!site) return res.status(400).json({ error: "site required" });
+      const sb = supabaseAdmin();
+      if (url) await sb.from("site_photos").upsert({ user_id: user.id, site_name: site, url, updated_at: new Date().toISOString() });
+      else await sb.from("site_photos").delete().eq("user_id", user.id).eq("site_name", site);
+      return res.json({ ok: true });
     }
     if (action === "linkaccount") {
       const { username, password, label } = req.body || {};

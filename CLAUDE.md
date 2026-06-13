@@ -35,9 +35,16 @@ The app uses **Supabase Auth** (Google OAuth + email/password, email confirmatio
 - **Users**: exactly one linked Midnite account (relink via **Settings**). **Admins**: multiple, with a header
   account switcher (`activeAccountId` in `localStorage.midnite_account_id`). A Midnite account links to one app
   login only (global unique index on `midnite_username_lc`).
-- DB schema + RLS in `supabase/schema.sql`. New proxy actions: `accounts` (list role+email+linked),
-  `linkaccount` (validate→encrypt→insert, enforces one-per-user for role `user`), `unlinkaccount`. The old
-  `login` action is gone (Supabase handles auth).
+- DB schema + RLS in `supabase/schema.sql`. New proxy actions: `accounts` (returns role+email+linked accounts
+  +profile+sitePhotos), `linkaccount` (validate→encrypt→insert, enforces one-per-user for role `user`),
+  `unlinkaccount`, `updateprofile` (display_name/avatar_url), `setsitephoto` ({site,url}). The old `login`
+  action is gone (Supabase handles auth).
+- **Settings page** (`AccountSettings` modal, sub-tabs): **Midnite** (link/unlink/switch), **Profile**
+  (display name + avatar), **Security** (change email/password via `supabase.auth.updateUser`), **Site Photos**
+  (per Midnite-site image). Avatars + site photos upload to **Supabase Storage** public buckets `avatars`/`sites`
+  (path `<uid>/…`, write-RLS to own folder); the public URL is saved to `profiles.avatar_url` / `site_photos`
+  via the proxy (service role) so clients can't touch `role`. Re-run `schema.sql` after pulling — it adds the
+  profile columns, `site_photos` table, buckets, and storage policies (idempotent).
 
 ## Midnite accounts (data sources behind the link)
 - **End-user (Wise Naples)**: Senergytec API, sees its own site. **Installer (FLOSOL2)**: Eagle API, sees all

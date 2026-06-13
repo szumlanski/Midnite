@@ -300,50 +300,124 @@ function LinkMidnite({email,onLinked,onSignOut}){
   );
 }
 // Account settings modal: relink (users) / manage multiple Midnite accounts + active switch (admins).
-function AccountSettings({email,role,accounts,activeId,onSetActive,onChanged,onClose}){
-  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(null); const [busy,setBusy]=useState(false); const [adding,setAdding]=useState(false);
+async function uploadMedia(bucket, path, file){
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert:true, cacheControl:"3600" });
+  if(error) throw error;
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+function AccountSettings({email,role,accounts,activeId,profile={},sites=[],sitePhotos={},onSetActive,onChanged,onClose}){
+  const [sec,setSec]=useState("accounts");
+  const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
   const isAdmin=role==="admin"; const canAdd=isAdmin||accounts.length===0;
-  const add=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null);
+  // Linked Midnite accounts
+  const [u,setU]=useState(""); const [p,setP]=useState(""); const [adding,setAdding]=useState(false);
+  const addAcct=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null);
     try{ const r=await api("linkaccount",{username:u,password:p}); setU("");setP("");setAdding(false); if(!activeId) onSetActive(r.account.id); onChanged(); }
-    catch(e){ setErr(e.message); } finally{ setBusy(false); }
-  };
+    catch(e){ setErr(e.message); } finally{ setBusy(false); } };
   const unlink=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Unlink this Midnite account?")) return; await api("unlinkaccount",{id}); onChanged(); };
+  // Profile
+  const [name,setName]=useState(profile.display_name||"");
+  const saveName=async()=>{ setBusy(true);setErr(null);setMsg(null); try{ await api("updateprofile",{display_name:name}); setMsg("Profile saved."); onChanged(); }catch(e){setErr(e.message);} finally{setBusy(false);} };
+  const ext=(f)=> (f.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
+  const onAvatar=async(e)=>{ const f=e.target.files?.[0]; if(!f) return; setBusy(true);setErr(null);setMsg(null);
+    try{ const { data:{user} }=await supabase.auth.getUser(); const url=await uploadMedia("avatars",`${user.id}/avatar.${ext(f)}`,f); await api("updateprofile",{avatar_url:`${url}?t=${Date.now()}`}); setMsg("Photo updated."); onChanged(); }
+    catch(e){setErr(e.message);} finally{setBusy(false);} };
+  // Security
+  const [newEmail,setNewEmail]=useState(""); const [newPw,setNewPw]=useState("");
+  const changeEmail=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null); try{ const {error}=await supabase.auth.updateUser({email:newEmail}); if(error)throw error; setMsg("Email change requested — you may need to confirm it."); setNewEmail(""); }catch(e){setErr(e.message);} finally{setBusy(false);} };
+  const changePw=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null); try{ const {error}=await supabase.auth.updateUser({password:newPw}); if(error)throw error; setMsg("Password updated."); setNewPw(""); }catch(e){setErr(e.message);} finally{setBusy(false);} };
+  // Site photos
+  const onSitePhoto=async(siteName,e)=>{ const f=e.target.files?.[0]; if(!f) return; setBusy(true);setErr(null);setMsg(null);
+    try{ const { data:{user} }=await supabase.auth.getUser(); const safe=encodeURIComponent(siteName).replace(/[^A-Za-z0-9]/g,"_").slice(0,60); const url=await uploadMedia("sites",`${user.id}/${safe}.${ext(f)}`,f); await api("setsitephoto",{site:siteName,url:`${url}?t=${Date.now()}`}); onChanged(); }
+    catch(e){setErr(e.message);} finally{setBusy(false);} };
+  const removeSitePhoto=async(siteName)=>{ setBusy(true); try{ await api("setsitephoto",{site:siteName,url:null}); onChanged(); }finally{setBusy(false);} };
+
+  const tabBtn=(id,label)=><button onClick={()=>{setSec(id);setErr(null);setMsg(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:sec===id?BG:"transparent",color:sec===id?TEXT:MUTED,fontSize:12,fontWeight:sec===id?700:500,cursor:"pointer",fontFamily:SANS}}>{label}</button>;
+  const fileBtn=(label,onChange)=>(<label style={{display:"inline-block",padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
+
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:480,width:"100%",maxHeight:"88vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`}}>
-          <div>
-            <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Account Settings</div>
-            <div style={{fontSize:11,color:FAINT}}>{email}{role==="admin"&&<span style={{marginLeft:6,color:SOLAR,fontWeight:700}}>ADMIN</span>}</div>
+      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,background:CARD,zIndex:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {profile.avatar_url
+              ? <img src={profile.avatar_url} alt="" style={{width:34,height:34,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`}}/>
+              : <div style={{width:34,height:34,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:MUTED}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:TEXT}}>{profile.display_name||"Account Settings"}</div>
+              <div style={{fontSize:11,color:FAINT}}>{email}{isAdmin&&<span style={{marginLeft:6,color:SOLAR,fontWeight:700}}>ADMIN</span>}</div>
+            </div>
           </div>
           <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
         </div>
+        <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}</div>
         <div style={{padding:"14px 18px"}}>
-          <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Linked Midnite accounts</div>
-          {accounts.length===0 && <div style={{fontSize:13,color:FAINT,marginBottom:12}}>None linked yet.</div>}
-          {accounts.map(a=>(
-            <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
-              {isAdmin && <input type="radio" name="activeacct" checked={activeId===a.id} onChange={()=>onSetActive(a.id)} style={{cursor:"pointer"}}/>}
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{a.label||a.midnite_username}{activeId===a.id&&<span style={{marginLeft:6,fontSize:9,color:BATTERY,fontWeight:800}}>ACTIVE</span>}</div>
-                <div style={{fontSize:11,color:FAINT,fontFamily:"monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
+          {err&&<div style={errBox}>{err}</div>}
+          {msg&&<div style={okBox}>{msg}</div>}
+
+          {sec==="accounts" && <>
+            <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Linked Midnite accounts</div>
+            {accounts.length===0 && <div style={{fontSize:13,color:FAINT,marginBottom:12}}>None linked yet.</div>}
+            {accounts.map(a=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
+                {isAdmin && <input type="radio" name="activeacct" checked={activeId===a.id} onChange={()=>onSetActive(a.id)} style={{cursor:"pointer"}}/>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{a.label||a.midnite_username}{activeId===a.id&&<span style={{marginLeft:6,fontSize:9,color:BATTERY,fontWeight:800}}>ACTIVE</span>}</div>
+                  <div style={{fontSize:11,color:FAINT,fontFamily:"monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
+                </div>
+                <button onClick={()=>unlink(a.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Unlink</button>
               </div>
-              <button onClick={()=>unlink(a.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Unlink</button>
+            ))}
+            {canAdd && !adding && <button onClick={()=>setAdding(true)} style={{marginTop:14,padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{accounts.length===0?"Link a Midnite account":"+ Add Midnite account"}</button>}
+            {!canAdd && accounts.length>0 && <div style={{marginTop:12,fontSize:11,color:FAINT}}>Your plan allows one linked Midnite account. Unlink the current one to connect a different system.</div>}
+            {adding && (
+              <form onSubmit={addAcct} style={{marginTop:14,padding:14,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
+                <div style={{marginBottom:10}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
+                <div style={{marginBottom:14}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
+                <div style={{display:"flex",gap:8}}>
+                  <button type="submit" disabled={busy||!u||!p} style={{...authBtn(busy||!u||!p),width:"auto",padding:"9px 18px"}}>{busy?"Linking…":"Link"}</button>
+                  <button type="button" onClick={()=>{setAdding(false);setErr(null);}} style={{padding:"9px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </>}
+
+          {sec==="profile" && <>
+            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+              {profile.avatar_url
+                ? <img src={profile.avatar_url} alt="" style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`}}/>
+                : <div style={{width:64,height:64,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:MUTED}}>{(name||email||"?").slice(0,1).toUpperCase()}</div>}
+              {fileBtn(busy?"Uploading…":"Upload photo", onAvatar)}
             </div>
-          ))}
-          {err&&<div style={{...errBox,marginTop:12}}>{err}</div>}
-          {canAdd && !adding && <button onClick={()=>setAdding(true)} style={{marginTop:14,padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{accounts.length===0?"Link a Midnite account":"+ Add Midnite account"}</button>}
-          {!canAdd && accounts.length>0 && <div style={{marginTop:12,fontSize:11,color:FAINT}}>Your plan allows one linked Midnite account. Unlink the current one to connect a different system.</div>}
-          {adding && (
-            <form onSubmit={add} style={{marginTop:14,padding:14,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
-              <div style={{marginBottom:10}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
-              <div style={{marginBottom:14}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
-              <div style={{display:"flex",gap:8}}>
-                <button type="submit" disabled={busy||!u||!p} style={{...authBtn(busy||!u||!p),width:"auto",padding:"9px 18px"}}>{busy?"Linking…":"Link"}</button>
-                <button type="button" onClick={()=>{setAdding(false);setErr(null);}} style={{padding:"9px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
-              </div>
+            <div style={{marginBottom:14}}><label style={lblS}>Display Name</label><input value={name} onChange={e=>setName(e.target.value)} style={authInput}/></div>
+            <button onClick={saveName} disabled={busy} style={{...authBtn(busy),width:"auto",padding:"10px 20px"}}>Save</button>
+          </>}
+
+          {sec==="security" && <>
+            <form onSubmit={changeEmail} style={{marginBottom:20}}>
+              <div style={{marginBottom:10}}><label style={lblS}>Change email (current: {email})</label><input type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="new@email.com" style={authInput}/></div>
+              <button type="submit" disabled={busy||!newEmail} style={{...authBtn(busy||!newEmail),width:"auto",padding:"10px 20px"}}>Update email</button>
             </form>
-          )}
+            <form onSubmit={changePw} style={{borderTop:`1px solid ${BORDER}`,paddingTop:18}}>
+              <div style={{marginBottom:10}}><label style={lblS}>New password</label><input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} autoComplete="new-password" style={authInput}/></div>
+              <button type="submit" disabled={busy||newPw.length<6} style={{...authBtn(busy||newPw.length<6),width:"auto",padding:"10px 20px"}}>Update password</button>
+            </form>
+          </>}
+
+          {sec==="sites" && <>
+            <div style={{fontSize:11,color:FAINT,marginBottom:12}}>Add a photo for each site. These show here and may be used elsewhere later.</div>
+            {sites.length===0 && <div style={{fontSize:13,color:FAINT}}>No sites yet — link a Midnite account first.</div>}
+            {sites.map(s=>(
+              <div key={s.name} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${BORDER}`}}>
+                {sitePhotos[s.name]
+                  ? <img src={sitePhotos[s.name]} alt="" style={{width:56,height:56,borderRadius:10,objectFit:"cover",border:`1px solid ${BORDER}`}}/>
+                  : <div style={{width:56,height:56,borderRadius:10,background:BG,border:`1px dashed ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🏠</div>}
+                <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                {fileBtn(sitePhotos[s.name]?"Replace":"Upload", e=>onSitePhoto(s.name,e))}
+                {sitePhotos[s.name] && <button onClick={()=>removeSitePhoto(s.name)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Remove</button>}
+              </div>
+            ))}
+          </>}
         </div>
       </div>
     </div>
@@ -2344,6 +2418,8 @@ export default function Dashboard() {
   const [role, setRole] = useState("user");
   const [userEmail, setUserEmail] = useState("");
   const [accounts, setAccounts] = useState([]);
+  const [profile, setProfile] = useState({});
+  const [sitePhotos, setSitePhotos] = useState({});
   const [activeAccountId, setActiveAccountId] = useState(typeof localStorage!=="undefined" ? localStorage.getItem("midnite_account_id")||null : null);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [statuses, setStatuses] = useState([]);
@@ -2404,8 +2480,9 @@ export default function Dashboard() {
 
   // Load app-account context (role, email, linked Midnite accounts) and route into the app.
   async function loadContext() {
-    const acc = await api("accounts"); // { role, email, accounts }
+    const acc = await api("accounts"); // { role, email, accounts, profile, sitePhotos }
     setRole(acc.role); setIsAdmin(acc.role==="admin"); setUserEmail(acc.email||""); setAccounts(acc.accounts||[]);
+    setProfile(acc.profile||{}); setSitePhotos(acc.sitePhotos||{});
     if(!acc.accounts || acc.accounts.length===0){ setActive(null); setAuthState("link"); return; }
     let aid = localStorage.getItem("midnite_account_id");
     if(!aid || !acc.accounts.find(a=>a.id===aid)) aid = acc.accounts[0].id;
@@ -2434,8 +2511,9 @@ export default function Dashboard() {
     localStorage.removeItem("midnite_selected_site");
     api("sites").then(handleSitesResponse).catch(e=>{ setLoginError(e.message); });
   }
-  async function reloadAccounts(){ // after link/unlink from settings
+  async function reloadAccounts(){ // after link/unlink/profile/site-photo changes from settings
     const acc = await api("accounts"); setRole(acc.role); setIsAdmin(acc.role==="admin"); setAccounts(acc.accounts||[]);
+    setProfile(acc.profile||{}); setSitePhotos(acc.sitePhotos||{});
     if(acc.accounts?.length){ if(!acc.accounts.find(a=>a.id===activeAccountId)) switchAccount(acc.accounts[0].id); }
     else { setActive(null); setShowAccountSettings(false); setSite(null); setSites([]); setAuthState("link"); }
   }
@@ -2742,7 +2820,7 @@ export default function Dashboard() {
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
         </div>
 
-        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
+        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
 
         {/* Mobile bottom nav */}
         <div className="bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:CARD,borderTop:`1px solid ${BORDER}`,padding:"8px 0 max(8px, env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>

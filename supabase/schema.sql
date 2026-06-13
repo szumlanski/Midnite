@@ -47,3 +47,29 @@ create policy "own accounts read" on public.midnite_accounts for select using (a
 
 -- Make yourself an admin (admins may link multiple Midnite accounts):
 --   update public.profiles set role = 'admin' where email = 'jason@floridasolardesigngroup.com';
+
+-- ── profile details (display name + avatar) ─────────────────────────────────
+alter table public.profiles add column if not exists display_name text;
+alter table public.profiles add column if not exists avatar_url   text;
+
+-- ── per-site photos (keyed by user + the Midnite site name) ─────────────────
+create table if not exists public.site_photos (
+  user_id    uuid not null references auth.users on delete cascade,
+  site_name  text not null,
+  url        text not null,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, site_name)
+);
+alter table public.site_photos enable row level security;
+drop policy if exists "own site photos read" on public.site_photos;
+create policy "own site photos read" on public.site_photos for select using (auth.uid() = user_id);
+
+-- ── storage buckets (public read) for avatars + site photos ─────────────────
+insert into storage.buckets (id, name, public) values ('avatars','avatars',true) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('sites','sites',true)     on conflict (id) do nothing;
+-- Authenticated users may write only inside their own <uid>/ folder.
+drop policy if exists "media write own folder" on storage.objects;
+create policy "media write own folder" on storage.objects for all to authenticated
+  using      (bucket_id in ('avatars','sites') and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id in ('avatars','sites') and (storage.foldername(name))[1] = auth.uid()::text);
+
