@@ -73,3 +73,120 @@ create policy "media write own folder" on storage.objects for all to authenticat
   using      (bucket_id in ('avatars','sites') and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id in ('avatars','sites') and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Notifications / alerts (Settings → Notifications + the heartbeat cron).
+-- Idempotent — safe to re-run. All writes go through /api/midnite (service role)
+-- and pages/api/notifications/heartbeat.js; RLS below is defense-in-depth for the
+-- anon key (users may only read their own rows).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── notification_rules: one alert rule per device + trigger ──────────────────
+-- trigger_type values MUST match TRIGGER_TYPES in lib/notifications/triggers.js
+-- (that module is the single source of truth; alertrule_save also validates
+-- against it at write time). device_id = the inverter serial number.
+create table if not exists public.notification_rules (
+  id                 uuid primary key default gen_random_uuid(),
+  user_id            uuid not null references auth.users on delete cascade,
+  account_id         uuid references public.midnite_accounts on delete cascade,
+  site_name          text,
+  device_id          text not null,
+  device_label       text,
+  name               text,
+  trigger_type       text not null,
+  threshold_value    double precision,
+  channel            text not null default 'email',
+  enabled            boolean not null default true,
+  cooldown_minutes   integer not null default 60,
+  last_triggered_at  timestamptz,
+  trigger_after_time text,            -- optional "HH:MM" time-gate (local)
+  created_at         timestamptz not null default now()
+);
+-- Keep CHECKs in lockstep with lib/notifications/triggers.js.
+alter table public.notification_rules drop constraint if exists notification_rules_trigger_chk;
+alter table public.notification_rules add constraint notification_rules_trigger_chk check (trigger_type in (
+  'battery_soc_below','battery_soc_above','battery_soh_below',
+  'battery_temp_above','inverter_temp_above',
+  'load_power_above','grid_import_above','grid_export_above',
+  'grid_voltage_above','grid_voltage_below',
+  'pv_today_below','device_offline'
+));
+alter table public.notification_rules drop constraint if exists notification_rules_channel_chk;
+alter table public.notification_rules add constraint notification_rules_channel_chk check (channel in ('email'));
+create index if not exists notification_rules_user_device on public.notification_rules (user_id, device_id);
+create index if not exists notification_rules_device_enabled on public.notification_rules (device_id, enabled);
+alter table public.notification_rules enable row level security;
+drop policy if exists "own rules read" on public.notification_rules;
+create policy "own rules read" on public.notification_rules for select using (auth.uid() = user_id);
+
+-- ── notification_log: send audit (every outcome: sent/failed/skipped/capped) ──
+create table if not exists public.notification_log (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users on delete cascade,
+  rule_id      uuid references public.notification_rules on delete set null,
+  device_id    text,
+  trigger_type text,
+  channel      text,
+  status       text not null,        -- 'sent' | 'failed' | 'skipped' | 'capped'
+  value        double precision,
+  detail       text,
+  sent_at      timestamptz not null default now()
+);
+create index if not exists notification_log_user_time on public.notification_log (user_id, sent_at desc);
+alter table public.notification_log enable row level security;
+drop policy if exists "own log read" on public.notification_log;
+create policy "own log read" on public.notification_log for select using (auth.uid() = user_id);
+
+-- ── device_snapshots: time-series captured by the heartbeat (offline detection) ──
+create table if not exists public.device_snapshots (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users on delete cascade,
+  account_id  uuid references public.midnite_accounts on delete cascade,
+  device_id   text not null,
+  site_name   text,
+  online      boolean not null default true,
+  metrics     jsonb not null default '{}'::jsonb,
+  captured_at timestamptz not null default now()
+);
+create index if not exists device_snapshots_device_time on public.device_snapshots (device_id, captured_at desc);
+create index if not exists device_snapshots_device_online on public.device_snapshots (device_id, online, captured_at desc);
+alter table public.device_snapshots enable row level security;
+drop policy if exists "own snapshots read" on public.device_snapshots;
+create policy "own snapshots read" on public.device_snapshots for select using (auth.uid() = user_id);
+
+-- ── notification_quota: atomic per-user/day send counter (daily cap) ─────────
+create table if not exists public.notification_quota (
+  user_id uuid not null references auth.users on delete cascade,
+  day     date not null,
+  count   integer not null default 0,
+  primary key (user_id, day)
+);
+alter table public.notification_quota enable row level security;
+drop policy if exists "own quota read" on public.notification_quota;
+create policy "own quota read" on public.notification_quota for select using (auth.uid() = user_id);
+
+-- Atomic increment — inserts or bumps today's counter, returns the new count.
+create or replace function public.notif_quota_increment(p_user uuid, p_day date, p_cap int)
+returns int language plpgsql security definer set search_path = public as $$
+declare new_count int;
+begin
+  insert into public.notification_quota (user_id, day, count) values (p_user, p_day, 1)
+  on conflict (user_id, day) do update set count = public.notification_quota.count + 1
+  returning count into new_count;
+  return new_count;  -- p_cap kept for signature/forward-compat; the app compares.
+end; $$;
+
+-- ── notification_digests: scaffold for periodic summary emails (not yet sent) ─
+create table if not exists public.notification_digests (
+  user_id    uuid not null references auth.users on delete cascade,
+  account_id uuid references public.midnite_accounts on delete cascade,
+  frequency  text not null default 'daily',     -- 'daily' | 'weekly'
+  channel    text not null default 'email',
+  enabled    boolean not null default false,
+  last_sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  primary key (user_id, frequency)
+);
+alter table public.notification_digests enable row level security;
+drop policy if exists "own digests read" on public.notification_digests;
+create policy "own digests read" on public.notification_digests for select using (auth.uid() = user_id);
+

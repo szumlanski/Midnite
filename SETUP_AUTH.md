@@ -39,6 +39,26 @@ update public.profiles set role = 'admin' where email = 'jason@floridasolardesig
 Keep the existing `MIDNITE_*` and `KV_*` vars. `CREDS_ENC_KEY` must never change once
 accounts are linked (it decrypts stored Midnite passwords) — back it up.
 
+## 6. Notifications / alerts (optional but recommended)
+Per-device email alerts (Settings → **Notifications**) + a 15-min heartbeat cron.
+
+1. **Re-run `supabase/schema.sql`** (idempotent) — adds the `notification_*` tables, `device_snapshots`, the
+   `notif_quota_increment()` function, and RLS.
+2. **Add env vars** and redeploy:
+
+| Var | Value |
+|-----|-------|
+| `RESEND_API_KEY` | Resend API key (resend.com). Without it, rules still save + evaluate but no email is sent. |
+| `ALERTS_FROM_EMAIL` | From address, e.g. `Midnite Sentinel <alerts@yourdomain.com>`. Defaults to `onboarding@resend.dev` for first-run tests. Verify your domain in Resend to send to arbitrary inboxes. |
+| `CRON_SECRET` | Shared secret protecting `/api/notifications/heartbeat`. Generate: `openssl rand -hex 32`. Vercel Cron sends it automatically as `Authorization: Bearer`. |
+| `ALERTS_DAILY_CAP` | *(optional)* Max alert emails per user per day. Default `50`. |
+| `NEXT_PUBLIC_APP_URL` | *(optional)* App URL for the email "Open dashboard" link. Default `https://midnite-rose.vercel.app`. |
+
+3. **Scheduler**: `vercel.json` already declares the cron (`/api/notifications/heartbeat`, every 15 min).
+   `*/15` requires a Vercel **Pro** plan; on **Hobby** (daily-only crons) instead point an external scheduler
+   (cron-job.org / GitHub Actions / Upstash QStash) at the endpoint with header `x-cron-secret: <CRON_SECRET>`.
+4. **Verify delivery**: Settings → Notifications → **Send test** on any device (emails your account address).
+
 ## How it works
 - App login → Supabase (Google/email). New users land on **Link your Midnite account**.
 - Midnite password is encrypted **AES-256-GCM** with `CREDS_ENC_KEY` and stored in

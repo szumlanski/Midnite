@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Head from "next/head";
 import { supabase, supabaseReady } from "../lib/supabaseClient";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
+import { triggerGroups, getTrigger } from "@/lib/notifications/triggers";
+import { summarizeRule } from "@/lib/notifications/engine";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -305,6 +307,133 @@ async function uploadMedia(bucket, path, file){
   if(error) throw error;
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
+// Settings → Notifications: per-device alert rules. The add-form is generated
+// entirely from the shared trigger metadata (lib/notifications/triggers.js), so
+// the UI and the DB CHECK can't drift. Rules save + evaluate even before an email
+// provider is configured; a banner flags that until RESEND_API_KEY is set.
+function NotificationsSettings({activeId, sites=[]}){
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState(null); const [msg,setMsg]=useState(null);
+  const [addingFor,setAddingFor]=useState(null);   // device sn currently showing the add-form
+  const [testing,setTesting]=useState(null);
+  const load=useCallback(async()=>{ setLoading(true); try{ const d=await api("alertrules"); setData(d); }catch(e){ setErr(e.message); } finally{ setLoading(false); } },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  const devices = sites.flatMap(s=>(s.inverters||[]).map(inv=>({ siteName:s.name, sn:inv.sn, label:inv.label||inv.sn })));
+  const rulesFor = (sn)=> (data?.rules||[]).filter(r=>r.device_id===sn);
+
+  const saveRule = async (dev, form)=>{
+    setErr(null); setMsg(null);
+    try{
+      await api("alertrule_save",{ account_id:activeId, site_name:dev.siteName, device_id:dev.sn, device_label:dev.label,
+        trigger_type:form.trigger_type, threshold_value:Number(form.threshold),
+        cooldown_minutes:Number(form.cooldown), trigger_after_time:form.afterTime||null, enabled:true });
+      setAddingFor(null); await load();
+    }catch(e){ setErr(e.message); }
+  };
+  const toggleRule = async (rule)=>{ setErr(null); try{ await api("alertrule_save",{ ...rule, enabled:!rule.enabled }); await load(); }catch(e){ setErr(e.message); } };
+  const delRule = async (id)=>{ if(typeof window!=="undefined"&&!window.confirm("Delete this alert rule?")) return; try{ await api("alertrule_delete",{id}); await load(); }catch(e){ setErr(e.message); } };
+  const sendTest = async (dev)=>{ setErr(null); setMsg(null); setTesting(dev.sn); try{ const r=await api("alerttest",{ site_name:dev.siteName, device_label:dev.label, device_id:dev.sn }); setMsg(`Test email sent to ${r.to}.`); }catch(e){ setErr(e.message); } finally{ setTesting(null); } };
+
+  if(loading) return <div style={{fontSize:13,color:FAINT,padding:"8px 0"}}>Loading alerts…</div>;
+  return (
+    <>
+      {err&&<div style={errBox}>{err}</div>}
+      {msg&&<div style={okBox}>{msg}</div>}
+      {data && !data.emailConfigured &&
+        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#92400E"}}>
+          Email delivery isn’t configured yet. Rules still save and evaluate every cycle — they just can’t send until <code style={{fontFamily:"monospace"}}>RESEND_API_KEY</code> is set in the environment.
+        </div>}
+      {data &&
+        <div style={{fontSize:11,color:FAINT,marginBottom:12}}>
+          Alerts go to your account email. Today: <strong style={{color:MUTED}}>{data.dailyUsed}</strong> / {data.dailyCap} sent.
+        </div>}
+      {devices.length===0 && <div style={{fontSize:13,color:FAINT}}>No devices yet — link a Midnite account first.</div>}
+      {devices.map(dev=>(
+        <div key={dev.sn} style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:TEXT}}>{dev.label}</div>
+              <div style={{fontSize:11,color:FAINT,fontFamily:"monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dev.siteName} · {dev.sn}</div>
+            </div>
+            <button onClick={()=>sendTest(dev)} disabled={testing===dev.sn} style={{padding:"5px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",whiteSpace:"nowrap"}}>{testing===dev.sn?"Sending…":"Send test"}</button>
+          </div>
+          {rulesFor(dev.sn).length===0 && addingFor!==dev.sn && <div style={{fontSize:12,color:FAINT,marginBottom:8}}>No alerts on this device.</div>}
+          {rulesFor(dev.sn).map(rule=>{
+            const t=getTrigger(rule.trigger_type);
+            return (
+              <div key={rule.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:`1px solid ${BORDER}`}}>
+                <button onClick={()=>toggleRule(rule)} title={rule.enabled?"Enabled — click to disable":"Disabled — click to enable"} style={{width:34,height:20,borderRadius:10,border:"none",background:rule.enabled?BATTERY:"#D6D3D1",position:"relative",cursor:"pointer",flexShrink:0}}>
+                  <span style={{position:"absolute",top:2,left:rule.enabled?16:2,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
+                </button>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:rule.enabled?TEXT:FAINT}}>{summarizeRule(rule)}{t?.group&&<span style={{marginLeft:6,fontSize:10,color:FAINT,fontWeight:500}}>{t.group}</span>}</div>
+                  <div style={{fontSize:10.5,color:FAINT}}>
+                    cooldown {rule.cooldown_minutes}m{rule.trigger_after_time?` · after ${rule.trigger_after_time}`:""}
+                    {rule.last_triggered_at?` · last sent ${new Date(rule.last_triggered_at).toLocaleString()}`:""}
+                  </div>
+                </div>
+                <button onClick={()=>delRule(rule.id)} style={{padding:"3px 8px",borderRadius:7,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>Delete</button>
+              </div>
+            );
+          })}
+          {addingFor===dev.sn
+            ? <RuleForm onCancel={()=>setAddingFor(null)} onSave={(form)=>saveRule(dev,form)}/>
+            : <button onClick={()=>{setAddingFor(dev.sn);setErr(null);setMsg(null);}} style={{marginTop:8,padding:"6px 12px",borderRadius:8,border:`1px dashed ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>+ Add alert</button>}
+        </div>
+      ))}
+    </>
+  );
+}
+
+// Add-rule form, generated from the trigger taxonomy.
+function RuleForm({onSave,onCancel}){
+  const groups=triggerGroups();
+  const first=groups[0].triggers[0];
+  const [type,setType]=useState(first.type);
+  const t=getTrigger(type);
+  const [threshold,setThreshold]=useState(String(first.defaultThreshold));
+  const [cooldown,setCooldown]=useState("60");
+  const [afterTime,setAfterTime]=useState(first.defaultAfterTime||"18:00");
+  const onType=(v)=>{ const nt=getTrigger(v); setType(v); setThreshold(String(nt.defaultThreshold)); if(nt.timeGate) setAfterTime(nt.defaultAfterTime||"18:00"); };
+  const selStyle={...authInput,padding:"9px 12px",fontSize:13,cursor:"pointer"};
+  const numStyle={...authInput,padding:"9px 12px",fontSize:13};
+  return (
+    <div style={{marginTop:10,padding:12,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
+      <div style={{marginBottom:10}}>
+        <label style={lblS}>When</label>
+        <select value={type} onChange={e=>onType(e.target.value)} style={selStyle}>
+          {groups.map(g=>(
+            <optgroup key={g.group} label={g.group}>
+              {g.triggers.map(tr=><option key={tr.type} value={tr.type}>{tr.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+      <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+        <div style={{flex:"1 1 120px"}}>
+          <label style={lblS}>{t.op==="gap"?"Minutes":"Threshold"} ({t.unit})</label>
+          <input type="number" value={threshold} min={t.min} max={t.max} step={t.step||1} onChange={e=>setThreshold(e.target.value)} style={numStyle}/>
+        </div>
+        <div style={{flex:"1 1 120px"}}>
+          <label style={lblS}>Cooldown (min)</label>
+          <input type="number" value={cooldown} min={0} step={5} onChange={e=>setCooldown(e.target.value)} style={numStyle}/>
+        </div>
+        {t.timeGate &&
+          <div style={{flex:"1 1 120px"}}>
+            <label style={lblS}>Only check after</label>
+            <input type="time" value={afterTime} onChange={e=>setAfterTime(e.target.value)} style={numStyle}/>
+          </div>}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>onSave({trigger_type:type,threshold,cooldown,afterTime:t.timeGate?afterTime:null})} disabled={threshold===""} style={{...authBtn(threshold===""),width:"auto",padding:"8px 18px",fontSize:13}}>Add alert</button>
+        <button onClick={onCancel} style={{padding:"8px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function AccountSettings({email,role,accounts,activeId,profile={},sites=[],sitePhotos={},onSetActive,onChanged,onClose}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
@@ -350,7 +479,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],siteP
           </div>
           <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
         </div>
-        <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}</div>
+        <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}{tabBtn("alerts","Notifications")}</div>
         <div style={{padding:"14px 18px"}}>
           {err&&<div style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
@@ -418,6 +547,8 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],siteP
               </div>
             ))}
           </>}
+
+          {sec==="alerts" && <NotificationsSettings activeId={activeId} sites={sites}/>}
         </div>
       </div>
     </div>

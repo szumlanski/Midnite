@@ -1,3 +1,7 @@
+import { getTrigger } from "@/lib/notifications/triggers";
+import { send, buildTestMessage, channelConfigured } from "@/lib/notifications/deliver";
+import { DAILY_CAP } from "@/lib/notifications/server";
+
 const CryptoJS = require("crypto-js");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
@@ -376,6 +380,96 @@ export default async function handler(req, res) {
       const sb = supabaseAdmin();
       await sb.from("midnite_accounts").delete().eq("id", id).eq("user_id", user.id);
       return res.json({ ok: true });
+    }
+
+    // ── Notifications / alerts (DB + email only — no Midnite login needed) ─────
+    if (action === "alertrules") {
+      const sb = supabaseAdmin();
+      const deviceId = req.body?.deviceId || null;
+      let q = sb.from("notification_rules").select("*").eq("user_id", user.id).order("created_at");
+      if (deviceId) q = q.eq("device_id", deviceId);
+      const { data: rulesList } = await q;
+      const day = new Date().toISOString().slice(0, 10);
+      const { data: qrow } = await sb.from("notification_quota").select("count").eq("user_id", user.id).eq("day", day).maybeSingle();
+      return res.json({
+        rules: rulesList || [],
+        entitled: true,                       // all signed-in users (see lib/notifications/server.js isEntitled)
+        emailConfigured: channelConfigured("email"),
+        dailyCap: DAILY_CAP(),
+        dailyUsed: qrow?.count || 0,
+      });
+    }
+    if (action === "alertrule_save") {
+      const b = req.body || {};
+      const t = getTrigger(b.trigger_type);
+      if (!t) return res.status(400).json({ error: "Unknown trigger type" });
+      let threshold = Number(b.threshold_value);
+      if (!Number.isFinite(threshold)) return res.status(400).json({ error: "A threshold value is required" });
+      if (t.min != null) threshold = Math.max(t.min, threshold);
+      if (t.max != null) threshold = Math.min(t.max, threshold);
+      if (!b.device_id) return res.status(400).json({ error: "device_id required" });
+      const sb = supabaseAdmin();
+      // Device ownership: the account the rule is attached to must belong to this user.
+      let accountId = b.account_id || null;
+      if (accountId) {
+        const { data: own } = await sb.from("midnite_accounts").select("id").eq("id", accountId).eq("user_id", user.id).maybeSingle();
+        if (!own) return res.status(403).json({ error: "That account isn't yours" });
+      }
+      const row = {
+        user_id: user.id,
+        account_id: accountId,
+        site_name: b.site_name || null,
+        device_id: String(b.device_id),
+        device_label: b.device_label || null,
+        name: b.name || null,
+        trigger_type: b.trigger_type,
+        threshold_value: threshold,
+        channel: "email",
+        enabled: b.enabled === undefined ? true : !!b.enabled,
+        cooldown_minutes: Number.isFinite(Number(b.cooldown_minutes)) ? Math.max(0, Math.round(Number(b.cooldown_minutes))) : 60,
+        trigger_after_time: t.timeGate ? (b.trigger_after_time || t.defaultAfterTime || null) : null,
+      };
+      if (b.id) {
+        const { data: upd, error } = await sb.from("notification_rules").update(row).eq("id", b.id).eq("user_id", user.id).select("*").single();
+        if (error) return res.status(500).json({ error: error.message });
+        return res.json({ rule: upd });
+      }
+      const { data: ins, error } = await sb.from("notification_rules").insert(row).select("*").single();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ rule: ins });
+    }
+    if (action === "alertrule_delete") {
+      const { id } = req.body || {};
+      if (!id) return res.status(400).json({ error: "id required" });
+      await supabaseAdmin().from("notification_rules").delete().eq("id", id).eq("user_id", user.id);
+      return res.json({ ok: true });
+    }
+    if (action === "alertlog") {
+      const { data: log } = await supabaseAdmin().from("notification_log")
+        .select("*").eq("user_id", user.id).order("sent_at", { ascending: false }).limit(50);
+      return res.json({ log: log || [] });
+    }
+    if (action === "alerttest") {
+      const b = req.body || {};
+      if (!channelConfigured("email"))
+        return res.status(400).json({ error: "Email isn't configured yet — set RESEND_API_KEY in the environment to enable delivery." });
+      const to = user.email;
+      if (!to) return res.status(400).json({ error: "No email is set on your account" });
+      let ruleSummary = "";
+      if (b.id) {
+        const { data: r } = await supabaseAdmin().from("notification_rules").select("*").eq("id", b.id).eq("user_id", user.id).maybeSingle();
+        if (r) { const tt = getTrigger(r.trigger_type); ruleSummary = tt ? `${tt.label} ${r.threshold_value} ${tt.unit}` : r.trigger_type; }
+      }
+      const message = buildTestMessage({ siteName: b.site_name || "", deviceLabel: b.device_label || "", deviceId: b.device_id || "(test)", ruleSummary });
+      const r = await send({ channel: "email", to, message });
+      try {
+        await supabaseAdmin().from("notification_log").insert({
+          user_id: user.id, device_id: b.device_id || null, trigger_type: "test", channel: "email",
+          status: r.ok ? "sent" : (r.skipped ? "skipped" : "failed"), detail: r.ok ? (r.providerId || "test") : (r.reason || ""),
+        });
+      } catch {}
+      if (!r.ok) return res.status(502).json({ error: r.reason || "send failed", to });
+      return res.json({ ok: true, to });
     }
 
     // ── Data actions: resolve the linked Midnite account, authenticate to Midnite ──

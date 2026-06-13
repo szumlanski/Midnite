@@ -431,6 +431,57 @@ Live panels. Effects key on `snKey` (the joined sns).
 
 ---
 
+## Notifications / Alerts
+Per-device threshold alerts (email) evaluated by a scheduled heartbeat. **A "device" = an inverter (by `sn`).**
+
+**Architecture (portable by design):** all vendor specifics end at a normalized **`DeviceSnapshot`**; rule
+evaluation is a **pure function** over it (zero API knowledge), so the system would port to a different app by
+swapping only the snapshot builder. The **trigger taxonomy is the single source of truth** that drives the UI
+form, server validation, and the DB CHECK constraint together (they can't drift).
+
+**Files:**
+- `lib/notifications/triggers.js` — canonical trigger metadata (`TRIGGERS`, `TRIGGER_TYPES`, `triggerGroups()`).
+  Isomorphic (imported by the UI **and** the server). The schema CHECK mirrors `TRIGGER_TYPES`; `alertrule_save`
+  also validates against it at write time.
+- `lib/notifications/snapshot.js` — `buildSnapshot(normalizedStatus)` → flat metric map (the portability boundary).
+- `lib/notifications/engine.js` — `evaluateRule()` / `describeRule()` / `summarizeRule()`, **pure**.
+- `lib/notifications/deliver.js` — `send()` channel wrapper (Resend email; **no-ops safely** if unconfigured) +
+  branded message builders. Channel is abstracted for future SMS/push.
+- `lib/notifications/server.js` — `evaluateNotificationsForDevice()` (entitlement → load rules → cooldown →
+  daily cap → send → stamp `last_triggered_at` **only on success** → audit log), `persistSnapshot()`,
+  `minutesSinceOnline()` (offline from the **snapshot time-gap**, never the API's health claim), `isEntitled()`.
+- `lib/midniteServer.js` — frozen copies of the proven Midnite sign/login/post/normalize helpers, so the
+  high-traffic `pages/api/midnite.js` stays untouched. (Source of truth for that logic is still `midnite.js`.)
+- `pages/api/notifications/heartbeat.js` — shared-secret cron: per device → login → fetch → snapshot → persist →
+  evaluate. `vercel.json` runs it every 15 min (`*/15 * * * *`).
+
+**Triggers** (derived only from metrics this app exposes): battery SOC below/above, SOH below, battery temp above,
+inverter temp above, house load above, grid import/export above, grid voltage above/below, **PV produced today
+below** (time-gated, e.g. only after 18:00), and **device offline** (heartbeat gap).
+
+**Proxy actions** (in `midnite.js`, before the Midnite-login step — DB/email only): `alertrules` (list + cap usage
++ `emailConfigured`), `alertrule_save` (create/update, validates trigger + account ownership), `alertrule_delete`,
+`alerttest` (sends a sample to your account email — verifies delivery), `alertlog`.
+
+**UI:** Settings → **Notifications** sub-tab (`NotificationsSettings`/`RuleForm` in `index.jsx`) — per-device rule
+list with enable/disable/delete, an add-form generated from the trigger metadata, a **Send test** button, and a
+"today: N/cap sent" line. Banner warns if email isn't configured yet (rules still save + evaluate).
+
+**Schema** (idempotent, appended to `supabase/schema.sql` — **re-run after pulling**): `notification_rules`,
+`notification_log`, `device_snapshots` (time-series for offline detection), `notification_quota` + the atomic
+`notif_quota_increment()` RPC (daily cap), and a `notification_digests` scaffold (no digest job yet). All RLS-gated
+to the owning user; all writes go through the service-role proxy + heartbeat.
+
+**Env vars (Vercel):** `RESEND_API_KEY` (enables email — without it alerts evaluate but don't send),
+`ALERTS_FROM_EMAIL` (e.g. `Midnite Sentinel <alerts@yourdomain>`; defaults to Resend's onboarding sender),
+`CRON_SECRET` (protects the heartbeat; Vercel Cron sends it as `Authorization: Bearer`), optional
+`ALERTS_DAILY_CAP` (default 50) and `NEXT_PUBLIC_APP_URL` (email link). **Entitlement** = all signed-in users
+(centralized `isEntitled()` — flip to paid later without touching the engine). **Note:** `*/15` Vercel Cron needs a
+**Pro** plan (Hobby = daily only); on Hobby, point any external cron at `/api/notifications/heartbeat` with the
+secret instead.
+
+---
+
 ## Deployment Rules
 
 1. Never add `vercel.json` unless you know exactly why.
