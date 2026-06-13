@@ -60,16 +60,34 @@ The app uses **Supabase Auth** (Google OAuth + email/password, email confirmatio
   AC `load` register reads 0 — hence `balanceLoad`).
 
 ## Current state / handoff (2026-06)
-Stable and deployed to `master` (auto-deploys to Vercel). Recent work this cycle: month/year production
-reconstruction; Day == Month consistency; Day chart rebuilt as ComposedChart (per-inverter or per-MPPT stacked
-areas + lines + zoom brush + per-inverter/total tooltip); multi-toggle inverter selector; balance-derived load;
-session caching; battery card (nominal-V capacity + rate/ETA); redesigned Live flow diagram (SVG inverter,
-squared connectors, value-relative speed, optional gen/smart-load/AC-couple nodes); **month/year bar alignment
-permanent fix** (single `stackId` + `stackOffset="sign"`); Admin page (access log on Vercel KV, energy-register
-read-out + fleet scan, full API debug runner + inverter-settings reader); **Explorer tab** (chart any raw inverter
-parameter(s) over a date range up to 7 days at 5-min resolution from the expanded `dayexcel` CSV parser; single-select
-inverter; auto-spawns a chart per axis-pair). **No open code tasks** — the Dotsikas export issue is diagnosed as
-inverter-side and intentionally left alone in the app.
+Stable and deployed to `master` (auto-deploys to Vercel). **This session** added the **SaaS auth layer**
+(Supabase Google+email login, encrypted linked Midnite accounts, role-based limits, Settings page) on top of
+the prior monitoring features. Full feature set now: month/year production reconstruction; Day == Month
+consistency; Day ComposedChart (per-inverter/per-MPPT areas+lines+zoom); multi-toggle inverter selector;
+balance-derived load; session caching; battery card; redesigned Live flow diagram; **month/year bar alignment
+fix** (single `stackId` + `stackOffset="sign"`); Admin page (KV access log, energy-register read-out + fleet
+scan, API debug runner, device-shadow probes); **Explorer tab** (chart any raw inverter parameter over ≤7 days
+at 5-min res); **real-time Live overlay** (`flowrt`/getHybridFlowgraphRealTimeData, 5s poll, EPS-aware Home,
+balance-derived battery); **per-inverter Settings ›** + fleet **Compare** (CSV export) from device-shadow
+registers (`SETTINGS_MAP`, certain mappings only); **SaaS auth** (see Authentication section + `SETUP_AUTH.md`).
+- **Ops note (this session):** a `/api/midnite` 500 spike came from per-request Midnite logins under 5s/1s
+  polling → fixed with `loginCached` (4-min token cache) + graceful 409 on decrypt failure. Build marker
+  (commit+time) shows at the top of the Admin panel to tell deploy-vs-cache.
+- **Google login** is gated behind `NEXT_PUBLIC_GOOGLE_AUTH=1` (email-only until set).
+
+### OPEN / PENDING
+- **Notifications & alerts system** — requested but **not started** (request was interrupted). Spec: real-time
+  threshold alerts (+ optional scheduled digests) modeled on a portable blueprint — normalize to a single
+  `DeviceSnapshot`, derive trigger taxonomy from available metrics, idempotent `rules`/send-log/`snapshots`
+  tables with RLS, pure `evaluateRule()`/`describeRule()`/`evaluateNotificationsForDevice()`, a secured
+  heartbeat scheduler that detects offline from snapshot-gap (not API health), a channel-abstracted `send()`,
+  optional daily cap, a Settings UI with CRUD + a `POST …/test` send, optional seeding, optional digests.
+  Run as Phase 0 (investigate) → Phase 1 (one batch of questions) → Phase 2 (build to done). NB: this app has
+  **no email/SMS provider yet** (propose one behind an env var); per-inverter live metrics come from `status`
+  (normalizeRich/Detail) + `flowrt`; offline detection needs a snapshots table (none exists). Auth/roles/RLS
+  and the Supabase service-role proxy pattern are already in place to model the new tables on.
+- **Recommended before paying customers:** security pass on the auth + `CREDS_ENC_KEY` encryption + RLS path.
+- **Nice-to-have:** surface site photos beyond Settings (site header / Sites picker).
 
 ---
 
