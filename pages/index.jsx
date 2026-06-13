@@ -225,6 +225,7 @@ const lblS = {fontSize:12,color:MUTED,fontWeight:600,display:"block",marginBotto
 const errBox = {background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:GRID_IN};
 const okBox = {background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:BATTERY};
 const authBtn = (disabled)=>({width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:disabled?"#E5E7EB":"linear-gradient(135deg,#FCD34D,#D97706)",color:disabled?FAINT:"#7C2D12",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:disabled?"wait":"pointer",boxShadow:disabled?"none":"0 4px 16px rgba(217,119,6,0.3)"});
+const GOOGLE_ON = process.env.NEXT_PUBLIC_GOOGLE_AUTH === "1" || process.env.NEXT_PUBLIC_GOOGLE_AUTH === "true";
 const GoogleG = ()=>(<svg width="16" height="16" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/><path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/><path fill="#EA4335" d="M24 9.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 2.97 29.93 1 24 1 15.4 1 7.96 5.93 4.34 14.12l7.35 5.7C13.42 13.62 18.27 9.75 24 9.75z"/></svg>);
 function AuthShell({children, subtitle}){
   return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -259,8 +260,10 @@ function AppLogin(){
       <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
         {err&&<div style={errBox}>{err}</div>}
         {msg&&<div style={okBox}>{msg}</div>}
-        <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:14,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:16}}><GoogleG/> Continue with Google</button>
-        <div style={{display:"flex",alignItems:"center",gap:10,margin:"4px 0 16px",color:FAINT,fontSize:12}}><div style={{flex:1,height:1,background:BORDER}}/>or<div style={{flex:1,height:1,background:BORDER}}/></div>
+        {GOOGLE_ON && <>
+          <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:14,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:16}}><GoogleG/> Continue with Google</button>
+          <div style={{display:"flex",alignItems:"center",gap:10,margin:"4px 0 16px",color:FAINT,fontSize:12}}><div style={{flex:1,height:1,background:BORDER}}/>or<div style={{flex:1,height:1,background:BORDER}}/></div>
+        </>}
         <form onSubmit={submit}>
           <div style={{marginBottom:14}}><label style={lblS}>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" style={authInput}/></div>
           <div style={{marginBottom:20}}><label style={lblS}>Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} autoComplete={mode==="signup"?"new-password":"current-password"} style={authInput}/></div>
