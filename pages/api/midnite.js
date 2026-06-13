@@ -146,6 +146,18 @@ async function login(user = null, pass = null) {
   return { token: senToken, senToken: senToken, memberAutoId, accountType: "enduser", username };
 }
 
+// Cache Midnite logins (tokens are long-lived) so high-frequency polling (5s flow, status, …) doesn't
+// hammer the Midnite login endpoint on every proxy call and trip its rate limits → 500s.
+const _midAuthCache = new Map(); // username(lc) → { auth, ts }
+async function loginCached(username, password) {
+  const k = (username || "").toLowerCase();
+  const hit = _midAuthCache.get(k);
+  if (hit && Date.now() - hit.ts < 4 * 60 * 1000) return hit.auth;
+  const auth = await login(username, password);
+  _midAuthCache.set(k, { auth, ts: Date.now() });
+  return auth;
+}
+
 // Handles the richer getInverterStatus response (has mppts[], smartPortA/B/C, etc.)
 function normalizeRich(raw) {
   if (!raw?.data) return null;
@@ -368,7 +380,10 @@ export default async function handler(req, res) {
 
     // ── Data actions: resolve the linked Midnite account, authenticate to Midnite ──
     const acct = await getLinkedAccount(user.id, req.body?.accountId);
-    const auth = await login(acct.midnite_username, decryptCred(acct.enc_password));
+    let midPw;
+    try { midPw = decryptCred(acct.enc_password); }
+    catch (e) { const er = new Error("Stored Midnite credentials couldn't be read — please relink your account in Settings."); er.code = 409; throw er; }
+    const auth = await loginCached(acct.midnite_username, midPw);
 
     switch (action) {
       case "logview": {
