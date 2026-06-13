@@ -1,9 +1,63 @@
 const CryptoJS = require("crypto-js");
+const crypto = require("crypto");
+const { createClient } = require("@supabase/supabase-js");
 
 const BASE = "https://service.midnitepower.com/API/CodeIgniter/index.php";
 const AES_KEY = "05469137076236813460585715952089";
 const AES_IV = "5161557162012237";
 const SALT = "05469137076236813460585715952089";
+
+// ── SaaS auth + credential encryption ───────────────────────────────────────
+let _sb = null;
+function supabaseAdmin() {
+  if (_sb) return _sb;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  _sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return _sb;
+}
+// 32-byte key from CREDS_ENC_KEY (accepts hex64 / base64-32 / any passphrase → sha256).
+function encKey() {
+  const k = process.env.CREDS_ENC_KEY || "";
+  if (/^[0-9a-fA-F]{64}$/.test(k)) return Buffer.from(k, "hex");
+  try { const b = Buffer.from(k, "base64"); if (b.length === 32) return b; } catch {}
+  return crypto.createHash("sha256").update(String(k)).digest();
+}
+function encryptCred(plain) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", encKey(), iv);
+  const ct = Buffer.concat([c.update(String(plain), "utf8"), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), ct]).toString("base64");
+}
+function decryptCred(blob) {
+  const b = Buffer.from(blob, "base64");
+  const d = crypto.createDecipheriv("aes-256-gcm", encKey(), b.subarray(0, 12));
+  d.setAuthTag(b.subarray(12, 28));
+  return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString("utf8");
+}
+// Verify the Supabase access token, ensure a profile exists, return { user, role }.
+async function getSaasUser(req) {
+  const sb = supabaseAdmin();
+  if (!sb) { const e = new Error("Auth not configured"); e.code = 500; throw e; }
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  if (!token) { const e = new Error("Not authenticated"); e.code = 401; throw e; }
+  const { data, error } = await sb.auth.getUser(token);
+  if (error || !data?.user) { const e = new Error("Invalid session"); e.code = 401; throw e; }
+  const user = data.user;
+  let { data: prof } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (!prof) { await sb.from("profiles").upsert({ id: user.id, email: user.email }); prof = { role: "user" }; }
+  return { user, role: prof.role || "user" };
+}
+// Resolve which linked Midnite account this request uses (by id, or the user's only one).
+async function getLinkedAccount(userId, accountId) {
+  const sb = supabaseAdmin();
+  let q = sb.from("midnite_accounts").select("*").eq("user_id", userId);
+  if (accountId) q = q.eq("id", accountId);
+  const { data } = await q.order("created_at").limit(1);
+  const acct = data && data[0];
+  if (!acct) { const e = new Error("No linked Midnite account"); e.code = 409; throw e; }
+  return acct;
+}
 
 function makeSign(params) {
   const filtered = Object.fromEntries(Object.entries(params).filter(([,v])=>v!==null&&v!==""&&typeof v!=="boolean"));
@@ -224,7 +278,6 @@ function normalizeDetail(raw, sn) {
 // ---- Access log (admin) ----------------------------------------------------
 // Persists to Vercel KV when KV_REST_API_URL/TOKEN are set; otherwise keeps a recent
 // in-memory buffer (resets on cold start / redeploy — add a KV store for durability).
-const ADMIN_USER = "flosol2";
 let _accessLog = [];
 function kvEnv() {
   return {
@@ -255,25 +308,55 @@ async function readAccessLog() {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const action = req.query.action;
   try {
-    const { username, password } = req.body || {};
-    const auth = await login(username, password);
+    // ── SaaS authentication (Supabase) ──────────────────────────────────────
+    const { user, role } = await getSaasUser(req);
+
+    // Account-management actions — no linked Midnite account required.
+    if (action === "accounts") {
+      const sb = supabaseAdmin();
+      const { data } = await sb.from("midnite_accounts")
+        .select("id,label,midnite_username,account_type,created_at").eq("user_id", user.id).order("created_at");
+      return res.json({ role, email: user.email, accounts: data || [] });
+    }
+    if (action === "linkaccount") {
+      const { username, password, label } = req.body || {};
+      if (!username || !password) return res.status(400).json({ error: "Midnite username and password required" });
+      let v; try { v = await login(username, password); } catch (e) { return res.status(400).json({ error: "Those Midnite credentials didn't work." }); }
+      const sb = supabaseAdmin();
+      const { data: mine } = await sb.from("midnite_accounts").select("id").eq("user_id", user.id);
+      if (role !== "admin" && (mine || []).length >= 1)
+        return res.status(403).json({ error: "Your plan allows one linked Midnite account. Relink it from Settings." });
+      const { data: ins, error } = await sb.from("midnite_accounts")
+        .insert({ user_id: user.id, label: label || username, midnite_username: username, enc_password: encryptCred(password), account_type: v.accountType })
+        .select("id,label,midnite_username,account_type,created_at").single();
+      if (error) return res.status(error.code === "23505" ? 409 : 500)
+        .json({ error: error.code === "23505" ? "This Midnite account is already linked to another login." : error.message });
+      await logAccess({ type: "link", user: user.email, account: username });
+      return res.json({ account: ins });
+    }
+    if (action === "unlinkaccount") {
+      const { id } = req.body || {};
+      const sb = supabaseAdmin();
+      await sb.from("midnite_accounts").delete().eq("id", id).eq("user_id", user.id);
+      return res.json({ ok: true });
+    }
+
+    // ── Data actions: resolve the linked Midnite account, authenticate to Midnite ──
+    const acct = await getLinkedAccount(user.id, req.body?.accountId);
+    const auth = await login(acct.midnite_username, decryptCred(acct.enc_password));
 
     switch (action) {
-      case "login": {
-        await logAccess({ type: "login", user: auth.username, account: auth.accountType });
-        return res.json({ ok: true, memberAutoId: auth.memberAutoId, accountType: auth.accountType });
-      }
       case "logview": {
-        await logAccess({ type: "view", user: auth.username, site: (req.body?.site || "").slice(0, 80) });
+        await logAccess({ type: "view", user: user.email, account: acct.midnite_username, site: (req.body?.site || "").slice(0, 80) });
         return res.json({ ok: true });
       }
       case "adminlog": {
-        if ((auth.username || "").trim().toLowerCase() !== ADMIN_USER) return res.status(403).json({ error: "forbidden" });
+        if (role !== "admin") return res.status(403).json({ error: "forbidden" });
         return res.json({ log: await readAccessLog(), persistent: !!kvEnv().url });
       }
       case "sites": {
@@ -1042,6 +1125,6 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error("[midnite proxy]", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(err.code || 500).json({ error: err.message });
   }
 }

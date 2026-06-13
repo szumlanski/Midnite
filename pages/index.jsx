@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Head from "next/head";
+import { supabase, supabaseReady } from "../lib/supabaseClient";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
 
 const today = new Date().toISOString().split("T")[0];
@@ -26,7 +27,8 @@ const fmtClock = (s) => { if(!s) return ""; const m=String(s).replace("T"," ").m
 // Session cache for historical, immutable data (past day/month/year + their MPPT export). The
 // current day/month/year is never cached so live periods stay fresh. Cleared on logout.
 const _apiCache = new Map();
-function _cacheKey(action, body){ return `${action}:${body?.sn||""}:${body?.date||""}:${body?.memberId||""}`; }
+const _activeAccountId = () => (typeof localStorage!=="undefined" ? localStorage.getItem("midnite_account_id")||"" : "");
+function _cacheKey(action, body){ return `${_activeAccountId()}:${action}:${body?.sn||""}:${body?.date||""}:${body?.memberId||""}`; }
 function _isHistorical(action, body){
   const d = body?.date;
   if(!d) return false;
@@ -39,10 +41,16 @@ async function api(action, body=null) {
   const cacheable = _isHistorical(action, body);
   const key = cacheable ? _cacheKey(action, body) : null;
   if(key && _apiCache.has(key)) return _apiCache.get(key);
-  const creds = JSON.parse(localStorage.getItem("midnite_creds") || "{}");
-  const merged = { ...body, username: creds.username, password: creds.password };
-  const res = await fetch(`/api/midnite?action=${action}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(merged) });
-  if(!res.ok) throw new Error(`API error ${res.status}`);
+  let token = null;
+  try { token = (await supabase?.auth.getSession())?.data?.session?.access_token || null; } catch {}
+  const accountId = _activeAccountId() || undefined;
+  const merged = { ...body, accountId };
+  const res = await fetch(`/api/midnite?action=${action}`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...(token?{ Authorization:`Bearer ${token}` }:{}) },
+    body:JSON.stringify(merged),
+  });
+  if(!res.ok){ let msg=`API error ${res.status}`; try{ msg=(await res.json()).error||msg; }catch{} const e=new Error(msg); e.status=res.status; throw e; }
   const data = await res.json();
   if(key) _apiCache.set(key, data);
   return data;
@@ -212,35 +220,130 @@ const PageHead = () => (
   </Head>
 );
 
-function LoginForm({onLogin, error, loading}) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const submit = (e) => { e.preventDefault(); if(username&&password) onLogin(username, password); };
-  return (
-    <>
-      <PageHead/>
-      <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-        <form onSubmit={submit} style={{width:"100%",maxWidth:360,animation:"fadeUp 0.4s ease"}}>
-          <div style={{textAlign:"center",marginBottom:32}}>
-            <div style={{marginBottom:16,display:"inline-block"}}><Logo size={64}/></div>
-            <div style={{fontSize:22,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Midnite Sentinel</div>
-            <div style={{fontSize:13,color:MUTED,marginTop:4}}>Sign in to your monitoring portal</div>
-          </div>
-          <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
-            {error&&<div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:GRID_IN}}>{error}</div>}
-            <div style={{marginBottom:16}}>
-              <label style={{fontSize:12,color:MUTED,fontWeight:600,display:"block",marginBottom:6}}>Username</label>
-              <input type="text" value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" autoFocus style={{width:"100%",padding:"11px 14px",background:BG,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:14,fontFamily:SANS,outline:"none"}}/>
-            </div>
-            <div style={{marginBottom:24}}>
-              <label style={{fontSize:12,color:MUTED,fontWeight:600,display:"block",marginBottom:6}}>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" style={{width:"100%",padding:"11px 14px",background:BG,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:14,fontFamily:SANS,outline:"none"}}/>
-            </div>
-            <button type="submit" disabled={loading||!username||!password} style={{width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:loading||!username||!password?"#E5E7EB":"linear-gradient(135deg,#FCD34D,#D97706)",color:loading||!username||!password?FAINT:"#7C2D12",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:loading?"wait":"pointer",letterSpacing:"0.01em",boxShadow:loading?"none":"0 4px 16px rgba(217,119,6,0.3)",transition:"all 0.15s"}}>{loading?"Signing in…":"Sign In"}</button>
-          </div>
-        </form>
+const authInput = {width:"100%",padding:"11px 14px",background:BG,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:14,fontFamily:SANS,outline:"none",boxSizing:"border-box"};
+const lblS = {fontSize:12,color:MUTED,fontWeight:600,display:"block",marginBottom:6};
+const errBox = {background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:GRID_IN};
+const okBox = {background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:BATTERY};
+const authBtn = (disabled)=>({width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:disabled?"#E5E7EB":"linear-gradient(135deg,#FCD34D,#D97706)",color:disabled?FAINT:"#7C2D12",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:disabled?"wait":"pointer",boxShadow:disabled?"none":"0 4px 16px rgba(217,119,6,0.3)"});
+const GoogleG = ()=>(<svg width="16" height="16" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/><path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/><path fill="#EA4335" d="M24 9.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 2.97 29.93 1 24 1 15.4 1 7.96 5.93 4.34 14.12l7.35 5.7C13.42 13.62 18.27 9.75 24 9.75z"/></svg>);
+function AuthShell({children, subtitle}){
+  return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{width:"100%",maxWidth:380,animation:"fadeUp 0.4s ease"}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <div style={{marginBottom:14,display:"inline-block"}}><Logo size={60}/></div>
+        <div style={{fontSize:22,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Midnite Sentinel</div>
+        {subtitle&&<div style={{fontSize:13,color:MUTED,marginTop:4}}>{subtitle}</div>}
       </div>
-    </>
+      {children}
+    </div>
+  </div></>);
+}
+// App account login (Supabase): Google OAuth + email/password (no email confirmation).
+function AppLogin(){
+  const [mode,setMode]=useState("signin");
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState("");
+  const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
+  if(!supabaseReady) return <AuthShell subtitle="Configuration needed"><div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW,fontSize:13,color:MUTED,lineHeight:1.7}}>Sign-in isn’t configured yet. Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in the environment and redeploy.</div></AuthShell>;
+  const submit=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null); setMsg(null);
+    try{
+      const { data, error } = mode==="signup"
+        ? await supabase.auth.signUp({email,password:pw})
+        : await supabase.auth.signInWithPassword({email,password:pw});
+      if(error) throw error;
+      if(mode==="signup" && !data.session) setMsg("Account created — sign in to continue.");
+    }catch(e){ setErr(e.message||String(e)); } finally{ setBusy(false); }
+  };
+  const google=async()=>{ setErr(null); const { error } = await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:typeof window!=="undefined"?window.location.origin:undefined}}); if(error) setErr(error.message); };
+  return (
+    <AuthShell subtitle={mode==="signup"?"Create your account":"Sign in to your portal"}>
+      <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
+        {err&&<div style={errBox}>{err}</div>}
+        {msg&&<div style={okBox}>{msg}</div>}
+        <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:14,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:16}}><GoogleG/> Continue with Google</button>
+        <div style={{display:"flex",alignItems:"center",gap:10,margin:"4px 0 16px",color:FAINT,fontSize:12}}><div style={{flex:1,height:1,background:BORDER}}/>or<div style={{flex:1,height:1,background:BORDER}}/></div>
+        <form onSubmit={submit}>
+          <div style={{marginBottom:14}}><label style={lblS}>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" style={authInput}/></div>
+          <div style={{marginBottom:20}}><label style={lblS}>Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} autoComplete={mode==="signup"?"new-password":"current-password"} style={authInput}/></div>
+          <button type="submit" disabled={busy||!email||!pw} style={authBtn(busy||!email||!pw)}>{busy?"Please wait…":mode==="signup"?"Create account":"Sign in"}</button>
+        </form>
+        <div style={{textAlign:"center",marginTop:16,fontSize:13,color:MUTED}}>
+          {mode==="signup"?"Already have an account? ":"New here? "}
+          <button onClick={()=>{setMode(mode==="signup"?"signin":"signup");setErr(null);setMsg(null);}} style={{border:"none",background:"none",color:SOLAR,fontWeight:700,cursor:"pointer",fontFamily:SANS,fontSize:13}}>{mode==="signup"?"Sign in":"Create one"}</button>
+        </div>
+      </div>
+    </AuthShell>
+  );
+}
+// First-run: connect a Midnite account to the signed-in app account.
+function LinkMidnite({email,onLinked,onSignOut}){
+  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(null); const [busy,setBusy]=useState(false);
+  const submit=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null);
+    try{ const r=await api("linkaccount",{username:u,password:p}); onLinked(r.account); }
+    catch(e){ setErr(e.message); setBusy(false); }
+  };
+  return (
+    <AuthShell subtitle="Link your Midnite account">
+      <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
+        <div style={{fontSize:13,color:MUTED,lineHeight:1.6,marginBottom:18}}>Signed in as <b style={{color:TEXT}}>{email}</b>. Connect your Midnite login to pull in your system’s data — your credentials are encrypted and never shown again.</div>
+        {err&&<div style={errBox}>{err}</div>}
+        <form onSubmit={submit}>
+          <div style={{marginBottom:14}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
+          <div style={{marginBottom:20}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
+          <button type="submit" disabled={busy||!u||!p} style={authBtn(busy||!u||!p)}>{busy?"Linking…":"Link account"}</button>
+        </form>
+        <div style={{textAlign:"center",marginTop:16}}><button onClick={onSignOut} style={{border:"none",background:"none",color:MUTED,fontWeight:600,cursor:"pointer",fontFamily:SANS,fontSize:13}}>Sign out</button></div>
+      </div>
+    </AuthShell>
+  );
+}
+// Account settings modal: relink (users) / manage multiple Midnite accounts + active switch (admins).
+function AccountSettings({email,role,accounts,activeId,onSetActive,onChanged,onClose}){
+  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(null); const [busy,setBusy]=useState(false); const [adding,setAdding]=useState(false);
+  const isAdmin=role==="admin"; const canAdd=isAdmin||accounts.length===0;
+  const add=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null);
+    try{ const r=await api("linkaccount",{username:u,password:p}); setU("");setP("");setAdding(false); if(!activeId) onSetActive(r.account.id); onChanged(); }
+    catch(e){ setErr(e.message); } finally{ setBusy(false); }
+  };
+  const unlink=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Unlink this Midnite account?")) return; await api("unlinkaccount",{id}); onChanged(); };
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:480,width:"100%",maxHeight:"88vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Account Settings</div>
+            <div style={{fontSize:11,color:FAINT}}>{email}{role==="admin"&&<span style={{marginLeft:6,color:SOLAR,fontWeight:700}}>ADMIN</span>}</div>
+          </div>
+          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{padding:"14px 18px"}}>
+          <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Linked Midnite accounts</div>
+          {accounts.length===0 && <div style={{fontSize:13,color:FAINT,marginBottom:12}}>None linked yet.</div>}
+          {accounts.map(a=>(
+            <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
+              {isAdmin && <input type="radio" name="activeacct" checked={activeId===a.id} onChange={()=>onSetActive(a.id)} style={{cursor:"pointer"}}/>}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{a.label||a.midnite_username}{activeId===a.id&&<span style={{marginLeft:6,fontSize:9,color:BATTERY,fontWeight:800}}>ACTIVE</span>}</div>
+                <div style={{fontSize:11,color:FAINT,fontFamily:"monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
+              </div>
+              <button onClick={()=>unlink(a.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Unlink</button>
+            </div>
+          ))}
+          {err&&<div style={{...errBox,marginTop:12}}>{err}</div>}
+          {canAdd && !adding && <button onClick={()=>setAdding(true)} style={{marginTop:14,padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{accounts.length===0?"Link a Midnite account":"+ Add Midnite account"}</button>}
+          {!canAdd && accounts.length>0 && <div style={{marginTop:12,fontSize:11,color:FAINT}}>Your plan allows one linked Midnite account. Unlink the current one to connect a different system.</div>}
+          {adding && (
+            <form onSubmit={add} style={{marginTop:14,padding:14,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
+              <div style={{marginBottom:10}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
+              <div style={{marginBottom:14}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
+              <div style={{display:"flex",gap:8}}>
+                <button type="submit" disabled={busy||!u||!p} style={{...authBtn(busy||!u||!p),width:"auto",padding:"9px 18px"}}>{busy?"Linking…":"Link"}</button>
+                <button type="button" onClick={()=>{setAdding(false);setErr(null);}} style={{padding:"9px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1802,12 +1905,12 @@ const CONFIG_CODES = new Set([
 // known live Hz/temp/battery-V codes. Polled every 10s so values can be correlated against the
 // live power-flow screen (which register tracks PV vs grid vs load vs battery).
 const WATCH_CODES = (()=>{ const a=[]; for(let i=0x3000;i<=0x301F;i++) a.push(i.toString(16).toUpperCase()); a.push("2562","2563","212F"); return a; })();
-function AdminPanel({site, inverters, statuses=[]}) {
+function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   const [log, setLog] = useState(null);
   const [logErr, setLogErr] = useState(null);
   const [persistent, setPersistent] = useState(false);
   const [hideSelf, setHideSelf] = useState(true); // suppress the admin's own log events by default
-  const myUser = (JSON.parse(localStorage.getItem("midnite_creds")||"{}").username||"").trim().toLowerCase();
+  const myUser = (userEmail||"").trim().toLowerCase();
   const shownLog = log && hideSelf ? log.filter(e=>(e.user||"").trim().toLowerCase()!==myUser) : log;
   const [action, setAction] = useState("status");
   const [bodyText, setBodyText] = useState("{}");
@@ -2235,6 +2338,11 @@ export default function Dashboard() {
 
   const [tab, setTab] = useState("live");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState("user");
+  const [userEmail, setUserEmail] = useState("");
+  const [accounts, setAccounts] = useState([]);
+  const [activeAccountId, setActiveAccountId] = useState(typeof localStorage!=="undefined" ? localStorage.getItem("midnite_account_id")||null : null);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [liveFlow, setLiveFlow] = useState({}); // sn -> live {pv,grid,load,battery,soc,time} from flowrt (~5s)
   const [showCompare, setShowCompare] = useState(false);
@@ -2289,27 +2397,44 @@ export default function Dashboard() {
     }
   }
 
-  async function handleLogin(username, password) {
-    setLoginLoading(true); setLoginError(null);
-    try {
-      localStorage.setItem("midnite_creds", JSON.stringify({username, password}));
-      setIsAdmin((username||"").trim().toLowerCase()==="flosol2");
-      await api("login");
-      const sitesData = await api("sites");
-      handleSitesResponse(sitesData);
-    } catch(e) {
-      localStorage.removeItem("midnite_creds");
-      setLoginError(e.message.includes("Login failed") ? "Invalid username or password" : e.message);
-      setAuthState("login");
-    } finally { setLoginLoading(false); }
+  const setActive = (id) => { if(typeof localStorage!=="undefined"){ if(id) localStorage.setItem("midnite_account_id", id); else localStorage.removeItem("midnite_account_id"); } setActiveAccountId(id); };
+
+  // Load app-account context (role, email, linked Midnite accounts) and route into the app.
+  async function loadContext() {
+    const acc = await api("accounts"); // { role, email, accounts }
+    setRole(acc.role); setIsAdmin(acc.role==="admin"); setUserEmail(acc.email||""); setAccounts(acc.accounts||[]);
+    if(!acc.accounts || acc.accounts.length===0){ setActive(null); setAuthState("link"); return; }
+    let aid = localStorage.getItem("midnite_account_id");
+    if(!aid || !acc.accounts.find(a=>a.id===aid)) aid = acc.accounts[0].id;
+    setActive(aid);
+    const sitesData = await api("sites");
+    handleSitesResponse(sitesData);
   }
 
-  function handleLogout() {
-    localStorage.removeItem("midnite_creds");
+  async function handleLogout() {
+    try { await supabase?.auth.signOut(); } catch {}
+    localStorage.removeItem("midnite_account_id");
     localStorage.removeItem("midnite_selected_site");
     _apiCache.clear();
-    setIsAdmin(false); if(tab==="admin") setTab("live");
-    setSite(null); setSites([]); setStatuses([]); setAuthState("login");
+    setIsAdmin(false); setRole("user"); setAccounts([]); setActiveAccountId(null);
+    if(tab==="admin") setTab("live");
+    setSite(null); setSites([]); setStatuses([]); setAuthState("appauth");
+  }
+
+  function handleLinked(account){
+    setAccounts(a=>[...a, account]); setActive(account.id); _apiCache.clear();
+    setAuthState("loading");
+    api("sites").then(handleSitesResponse).catch(e=>{ setLoginError(e.message); setAuthState("link"); });
+  }
+  function switchAccount(id){
+    setActive(id); _apiCache.clear(); setSite(null); setStatuses([]); setLiveFlow({}); setAuthState("loading");
+    localStorage.removeItem("midnite_selected_site");
+    api("sites").then(handleSitesResponse).catch(e=>{ setLoginError(e.message); });
+  }
+  async function reloadAccounts(){ // after link/unlink from settings
+    const acc = await api("accounts"); setRole(acc.role); setIsAdmin(acc.role==="admin"); setAccounts(acc.accounts||[]);
+    if(acc.accounts?.length){ if(!acc.accounts.find(a=>a.id===activeAccountId)) switchAccount(acc.accounts[0].id); }
+    else { setActive(null); setShowAccountSettings(false); setSite(null); setSites([]); setAuthState("link"); }
   }
 
   function handleSelectSite(s) {
@@ -2319,10 +2444,20 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    const creds = JSON.parse(localStorage.getItem("midnite_creds") || "null");
-    if(!creds) { setAuthState("login"); return; }
-    setIsAdmin((creds.username||"").trim().toLowerCase()==="flosol2");
-    api("sites").then(data=>handleSitesResponse(data)).catch(()=>{ localStorage.removeItem("midnite_creds"); setAuthState("login"); });
+    if(!supabaseReady){ setAuthState("appauth"); return; }
+    let active = true;
+    const route = async (session)=>{
+      if(!active) return;
+      if(!session){ setAuthState("appauth"); return; }
+      try { await loadContext(); }
+      catch(e){ if(active){ if(e.status===401){ setAuthState("appauth"); } else { setLoginError(e.message); setAuthState("appauth"); } } }
+    };
+    supabase.auth.getSession().then(({data})=>route(data.session));
+    const { data:sub } = supabase.auth.onAuthStateChange((event, session)=>{
+      if(event==="SIGNED_OUT"){ setAuthState("appauth"); return; }
+      if(event==="SIGNED_IN" || event==="INITIAL_SESSION"){ route(session); }
+    });
+    return ()=>{ active=false; sub?.subscription?.unsubscribe(); };
   }, []);
 
   // Log site views (admin access log). Fires once per site selection.
@@ -2499,7 +2634,8 @@ export default function Dashboard() {
   }
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
-  if(authState==="login") return <LoginForm onLogin={handleLogin} error={loginError} loading={loginLoading}/>;
+  if(authState==="appauth") return <AppLogin/>;
+  if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
   if(authState==="sites") return <SiteSelector sites={sites} onSelect={handleSelectSite} onLogout={handleLogout}/>;
 
   return (
@@ -2530,7 +2666,13 @@ export default function Dashboard() {
                 }}>{t.label}</button>
               ))}
             </div>
+            {isAdmin && accounts.length>1 && (
+              <select value={activeAccountId||""} onChange={e=>switchAccount(e.target.value)} title="Active Midnite account" style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",maxWidth:160}}>
+                {accounts.map(a=><option key={a.id} value={a.id}>{a.label||a.midnite_username}</option>)}
+              </select>
+            )}
             {sites.length>1&&<button onClick={()=>{setAuthState("sites");setSite(null);setStatuses([]);}} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sites</button>}
+            <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings</button>
             <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
           </div>
         </div>
@@ -2594,8 +2736,10 @@ export default function Dashboard() {
               ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label}/>
               : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:13}}>No inverter selected.</div>
           )}
-          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses}/>}
+          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
         </div>
+
+        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
 
         {/* Mobile bottom nav */}
         <div className="bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:CARD,borderTop:`1px solid ${BORDER}`,padding:"8px 0 max(8px, env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>

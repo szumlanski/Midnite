@@ -14,16 +14,34 @@
 - No `vercel.json`. No `output: standalone`. Standard Next.js build. Framework preset = Next.js.
 - Deployment protection is OFF in Vercel settings.
 
-**Environment variables in Vercel** (fallback only, login is dynamic):
-- `MIDNITE_USERNAME` = `Wise Naples`
-- `MIDNITE_PASSWORD` = `921551`
+**Environment variables in Vercel**:
+- `MIDNITE_USERNAME` / `MIDNITE_PASSWORD` — legacy fallback only (not used in the SaaS flow).
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase (client auth).
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only (proxy reads/decrypts linked accounts).
+- `CREDS_ENC_KEY` — 32-byte secret for AES-256-GCM encryption of Midnite passwords. **Never change once accounts are linked.**
 
 ---
 
-## Accounts
+## Authentication (SaaS)  — see `SETUP_AUTH.md`
+The app uses **Supabase Auth** (Google OAuth + email/password, email confirmation OFF). Flow:
+1. **App login** (Supabase) → if no Midnite account linked, the **Link your Midnite account** screen.
+2. The Midnite password is **encrypted AES-256-GCM** (`CREDS_ENC_KEY`, server-side) and stored in
+   `midnite_accounts.enc_password` — plaintext never touches the browser or the DB.
+3. `api()` sends the Supabase JWT (`Authorization: Bearer`) + the active `accountId`. The proxy verifies the
+   JWT (`getSaasUser`), loads the user's linked account (`getLinkedAccount`, service role), `decryptCred`s it,
+   and calls Midnite via `login()`.
+- **Role** = `profiles.role` (`'user'` | `'admin'`). `isAdmin` (Admin tab + multi-account) is driven by this,
+  NOT by the Midnite username anymore. Make an admin: `update profiles set role='admin' where email=…`.
+- **Users**: exactly one linked Midnite account (relink via **Settings**). **Admins**: multiple, with a header
+  account switcher (`activeAccountId` in `localStorage.midnite_account_id`). A Midnite account links to one app
+  login only (global unique index on `midnite_username_lc`).
+- DB schema + RLS in `supabase/schema.sql`. New proxy actions: `accounts` (list role+email+linked),
+  `linkaccount` (validate→encrypt→insert, enforces one-per-user for role `user`), `unlinkaccount`. The old
+  `login` action is gone (Supabase handles auth).
 
-- **End-user (Wise Naples)**: username `Wise Naples`, password `921551`. Logs in via Senergytec API. Sees only their own site.
-- **Installer / admin (FLOSOL2)**: username `FLOSOL2`, password `F78qq13m!`. Logs in via Eagle API. Sees all managed sites via `terminaluserinfo`. **This is also the admin account** — when the logged-in username is `FLOSOL2` (case-insensitive, constant `ADMIN_USER` in the proxy / `isAdmin` in the frontend) the **Admin tab** appears. No other account sees it.
+## Midnite accounts (data sources behind the link)
+- **End-user (Wise Naples)**: Senergytec API, sees its own site. **Installer (FLOSOL2)**: Eagle API, sees all
+  managed sites via `terminaluserinfo`. These are what users/admins *link*; app admin is now a separate role flag.
 
 ## Site Data
 
