@@ -24,36 +24,84 @@ const fmtHrs = (h) => { if(!isFinite(h)||h<=0) return "--"; if(h>=48) return `${
 // without timezone conversion (don't use Date()).
 const fmtClock = (s) => { if(!s) return ""; const m=String(s).replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2}):(\d{2})/); if(!m) return String(s); let h=+m[4]; const ap=h>=12?"PM":"AM"; h=h%12||12; return `${+m[2]}/${+m[3]}/${m[1]} ${h}:${m[5]} ${ap}`; };
 
-// Session cache for historical, immutable data (past day/month/year + their MPPT export). The
-// current day/month/year is never cached so live periods stay fresh. Cleared on logout.
-const _apiCache = new Map();
+// Two-tier session cache. Historical (past day/month/year + their MPPT export) is immutable, so it's
+// cached with no expiry. Current-period reads (today / this-month / this-year / live `status`) get a
+// short TTL — inverters only report to the cloud every ~5 min, so a reload inside that window can't
+// show anything new; serving the cached copy makes an impatient Ctrl-R essentially free. The cache is
+// mirrored to sessionStorage so it SURVIVES a hard refresh (it's gone on tab close / logout). An
+// in-flight map coalesces duplicate concurrent requests. Cleared on logout / account switch.
+const CURRENT_TTL = 3 * 60 * 1000;   // current-period reads stay fresh ~3 min (under the 5-min report cadence)
+const _CACHE_SS_KEY = "midnite_api_cache_v1";
+const _apiCache = new Map();          // key → { data, exp }  (exp = Infinity for immutable historical)
+const _inflight = new Map();          // key → Promise (dedup concurrent identical requests)
 const _activeAccountId = () => (typeof localStorage!=="undefined" ? localStorage.getItem("midnite_account_id")||"" : "");
-function _cacheKey(action, body){ return `${_activeAccountId()}:${action}:${body?.sn||""}:${body?.date||""}:${body?.memberId||""}`; }
-function _isHistorical(action, body){
-  const d = body?.date;
-  if(!d) return false;
-  if(action==="day"||action==="dayexcel") return d < today;
-  if(action==="month") return d < thisMonth;
-  if(action==="year") return d < thisYear;
-  return false;
+function _cacheKey(action, body){
+  const serials = Array.isArray(body?.serials) ? body.serials.join("+") : "";
+  return `${_activeAccountId()}:${action}:${body?.sn||""}:${body?.date||""}:${body?.memberId||""}:${serials}`;
 }
-async function api(action, body=null) {
-  const cacheable = _isHistorical(action, body);
-  const key = cacheable ? _cacheKey(action, body) : null;
-  if(key && _apiCache.has(key)) return _apiCache.get(key);
-  let token = null;
-  try { token = (await supabase?.auth.getSession())?.data?.session?.access_token || null; } catch {}
-  const accountId = _activeAccountId() || undefined;
-  const merged = { ...body, accountId };
-  const res = await fetch(`/api/midnite?action=${action}`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json", ...(token?{ Authorization:`Bearer ${token}` }:{}) },
-    body:JSON.stringify(merged),
-  });
-  if(!res.ok){ let msg=`API error ${res.status}`; try{ msg=(await res.json()).error||msg; }catch{} const e=new Error(msg); e.status=res.status; throw e; }
-  const data = await res.json();
-  if(key) _apiCache.set(key, data);
-  return data;
+// null = not cacheable; Infinity = immutable historical; a number = ms TTL for current-period data.
+function _cacheTTL(action, body){
+  const d = body?.date;
+  if(action==="day"||action==="dayexcel"){ if(!d) return null; return d < today ? Infinity : CURRENT_TTL; }
+  if(action==="month"){ if(!d) return null; return d < thisMonth ? Infinity : CURRENT_TTL; }
+  if(action==="year"){ if(!d) return null; return d < thisYear ? Infinity : CURRENT_TTL; }
+  if(action==="status") return CURRENT_TTL;   // live cards — short TTL so a reload reuses, polls force-refresh
+  return null;
+}
+// Hydrate from sessionStorage on load (this is what makes Ctrl-R cheap), dropping expired entries.
+(function _hydrateCache(){
+  if(typeof sessionStorage==="undefined") return;
+  try {
+    const obj = JSON.parse(sessionStorage.getItem(_CACHE_SS_KEY) || "{}");
+    const now = Date.now();
+    for(const [k,v] of Object.entries(obj)){
+      const exp = v.exp===null ? Infinity : v.exp;
+      if(exp===Infinity || exp>now) _apiCache.set(k, { data: v.data, exp });
+    }
+  } catch {}
+})();
+let _ssWriteTimer = null;
+function _persistCache(){
+  if(typeof sessionStorage==="undefined" || _ssWriteTimer) return;
+  _ssWriteTimer = setTimeout(()=>{
+    _ssWriteTimer = null;
+    try {
+      const now = Date.now(), obj = {};
+      for(const [k,v] of _apiCache){ if(v.exp===Infinity || v.exp>now) obj[k] = { data: v.data, exp: v.exp===Infinity?null:v.exp }; }
+      sessionStorage.setItem(_CACHE_SS_KEY, JSON.stringify(obj));
+    } catch {}   // quota / serialization — non-fatal, in-memory cache still works
+  }, 250);
+}
+function clearApiCache(){ _apiCache.clear(); _inflight.clear(); try { sessionStorage.removeItem(_CACHE_SS_KEY); } catch {} }
+// opts.force bypasses the cache READ (used by live polls so intervals always pull fresh + refresh the
+// cache) while still writing the result back, so a subsequent Ctrl-R is served from it.
+async function api(action, body=null, opts=null) {
+  const force = !!opts?.force;
+  const ttl = _cacheTTL(action, body);
+  const key = ttl!=null ? _cacheKey(action, body) : null;
+  if(key && !force){
+    const hit = _apiCache.get(key);
+    if(hit && (hit.exp===Infinity || hit.exp>Date.now())) return hit.data;
+    const pending = _inflight.get(key);
+    if(pending) return pending;
+  }
+  const run = (async ()=>{
+    let token = null;
+    try { token = (await supabase?.auth.getSession())?.data?.session?.access_token || null; } catch {}
+    const accountId = _activeAccountId() || undefined;
+    const merged = { ...body, accountId };
+    const res = await fetch(`/api/midnite?action=${action}`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...(token?{ Authorization:`Bearer ${token}` }:{}) },
+      body:JSON.stringify(merged),
+    });
+    if(!res.ok){ let msg=`API error ${res.status}`; try{ msg=(await res.json()).error||msg; }catch{} const e=new Error(msg); e.status=res.status; throw e; }
+    const data = await res.json();
+    if(key){ _apiCache.set(key, { data, exp: ttl===Infinity?Infinity:Date.now()+ttl }); _persistCache(); }
+    return data;
+  })();
+  if(key && !force){ _inflight.set(key, run); run.finally(()=>{ if(_inflight.get(key)===run) _inflight.delete(key); }); }
+  return run;
 }
 
 // Keeps per-inverter series (pv{i} above zero, loadNeg{i} below zero) for the stacked-area
@@ -2495,19 +2543,19 @@ export default function Dashboard() {
     try { await supabase?.auth.signOut(); } catch {}
     localStorage.removeItem("midnite_account_id");
     localStorage.removeItem("midnite_selected_site");
-    _apiCache.clear();
+    clearApiCache();
     setIsAdmin(false); setRole("user"); setAccounts([]); setActiveAccountId(null);
     if(tab==="admin") setTab("live");
     setSite(null); setSites([]); setStatuses([]); setAuthState("appauth");
   }
 
   function handleLinked(account){
-    setAccounts(a=>[...a, account]); setActive(account.id); _apiCache.clear();
+    setAccounts(a=>[...a, account]); setActive(account.id); clearApiCache();
     setAuthState("loading");
     api("sites").then(handleSitesResponse).catch(e=>{ setLoginError(e.message); setAuthState("link"); });
   }
   function switchAccount(id){
-    setActive(id); _apiCache.clear(); setSite(null); setStatuses([]); setLiveFlow({}); setAuthState("loading");
+    setActive(id); clearApiCache(); setSite(null); setStatuses([]); setLiveFlow({}); setAuthState("loading");
     localStorage.removeItem("midnite_selected_site");
     api("sites").then(handleSitesResponse).catch(e=>{ setLoginError(e.message); });
   }
@@ -2544,21 +2592,35 @@ export default function Dashboard() {
   // Log site views (admin access log). Fires once per site selection.
   useEffect(() => { if(site) api("logview", { site: site.name }).catch(()=>{}); }, [site]);
 
-  const fetchLive = useCallback(async () => {
+  const fetchLive = useCallback(async (force=false) => {
     if(!site) return;
     try {
       const {results} = await api("status", {
         serials: site.inverters.map(i=>i.sn),
         autoIds: site.inverters.map(i=>i.autoId),
         memberAutoId: site.memberAutoId,
-      });
+      }, force ? { force:true } : null);
       setStatuses(results.map((r,idx)=>({...r,label:site.inverters[idx]?.label})));
       setLastUpdate(new Date()); setLiveError(null);
     } catch(e) { setLiveError(e.message); }
     finally { setLiveLoading(false); }
   }, [site]);
 
-  useEffect(() => { if(!site) return; setLiveLoading(true); fetchLive(); const t=setInterval(fetchLive,60000); return()=>clearInterval(t); }, [fetchLive]);
+  // Status feed (cards/hero): poll every 60s while the tab is VISIBLE — when the user isn't looking
+  // (tab hidden/backgrounded) it pauses entirely so it costs nothing, and refreshes immediately on
+  // return. The mount/return reads are non-forced so a Ctrl-R within the TTL is served from cache;
+  // interval ticks force a fresh pull.
+  useEffect(() => {
+    if(!site) return;
+    setLiveLoading(true); fetchLive(false);
+    let id = null;
+    const start = ()=>{ if(!id) id = setInterval(()=>{ if(document.visibilityState==="visible") fetchLive(true); }, 60000); };
+    const stop  = ()=>{ if(id){ clearInterval(id); id=null; } };
+    const onVis = ()=>{ if(document.visibilityState==="visible"){ fetchLive(true); start(); } else stop(); };
+    if(document.visibilityState==="visible") start();
+    document.addEventListener("visibilitychange", onVis);
+    return ()=>{ stop(); document.removeEventListener("visibilitychange", onVis); };
+  }, [fetchLive]);
 
   // Multi-select: selectedSns holds the serials currently shown. Default to all when a site loads.
   useEffect(() => { if(site){ setSelectedSns(site.inverters.map(i=>i.sn)); setExplorerSn(site.inverters[0]?.sn||null); } }, [site]);
@@ -2572,23 +2634,66 @@ export default function Dashboard() {
   const selectAllInv = () => site && setSelectedSns(site.inverters.map(i=>i.sn));
   const snKey = selectedSns.join(",");
 
-  // Real-time power flow: getHybridFlowgraphRealTimeData refreshes ~every 5s (verified), so poll it
-  // every 5s for the selected inverters while on the Live tab and overlay it on the flow/hero.
+  // Real-time power flow: getHybridFlowgraphRealTimeData refreshes ~every 5s (verified). One BATCHED
+  // `flow` call per tick covers every selected inverter (one Vercel invocation instead of N).
+  // Cost controls — all measured against ACTIVE (visible) watching time, which resets on refresh:
+  //   • base 5s; after 3 min → 10s; after 5 min → 20s; after 10 min → pause indefinitely.
+  //   • tab hidden/backgrounded → pause entirely (no API calls); on return, refresh immediately and
+  //     resume at the rate for the accumulated active time (hidden time does not count).
+  // The current refresh rate is logged to the console so it can be watched live.
   useEffect(() => {
     if(tab!=="live" || !site) return;
-    let alive = true, busy = false;
     const sns = snKey ? snKey.split(",") : [];
+    if(!sns.length) return;
+    // Backoff schedule by accumulated active-watching time.
+    const STAGES = [
+      { until: 3*60*1000,  interval: 5000  },
+      { until: 5*60*1000,  interval: 10000 },
+      { until: 10*60*1000, interval: 20000 },
+    ];
+    const intervalFor = (ms) => { for(const s of STAGES) if(ms < s.until) return s.interval; return null; }; // null = paused
+    let alive = true, busy = false, timer = null;
+    let activeMs = 0, lastTick = Date.now(), loggedInterval = undefined;
+    const logRate = (intv) => {
+      if(intv === loggedInterval) return; loggedInterval = intv;
+      const mins = (activeMs/60000).toFixed(1);
+      if(intv === null) console.log(`[live-flow] paused after ${mins} min of active watching — refresh to resume`);
+      else console.log(`[live-flow] refresh rate ${intv/1000}s (${mins} min active watching)`);
+    };
     const poll = async () => {
-      if(busy || !sns.length) return; busy = true;
+      if(busy) return; busy = true;
       try {
-        const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
+        const { results } = await api("flow", { serials: sns });
         if(!alive) return;
-        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false) next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
+        setLiveFlow(prev=>{ const next={...prev}; for(const r of (results||[])){ if(r && r.ok) next[r.sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
       } catch(e){ /* keep polling */ } finally { busy = false; }
     };
-    poll();
-    const id = setInterval(poll, 5000);
-    return ()=>{ alive=false; clearInterval(id); };
+    const schedule = () => {
+      if(!alive) return;
+      const now = Date.now();
+      if(document.visibilityState==="visible") activeMs += now - lastTick;
+      lastTick = now;
+      if(document.visibilityState!=="visible") return;   // hidden → idle until visibility returns
+      const intv = intervalFor(activeMs);
+      logRate(intv);
+      if(intv === null) return;                           // backed off to paused
+      poll();
+      timer = setTimeout(schedule, intv);
+    };
+    const onVis = () => {
+      if(document.visibilityState==="visible"){
+        lastTick = Date.now();                            // resume clock without counting hidden time
+        if(!timer && intervalFor(activeMs) !== null) schedule();
+      } else {
+        const now = Date.now(); activeMs += now - lastTick; lastTick = now;
+        if(timer){ clearTimeout(timer); timer = null; }
+        console.log(`[live-flow] tab hidden — polling paused`);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    lastTick = Date.now();
+    schedule();
+    return ()=>{ alive=false; if(timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVis); };
   }, [tab, site, snKey]);
 
   useEffect(() => {
