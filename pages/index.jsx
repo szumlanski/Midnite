@@ -2557,6 +2557,7 @@ export default function Dashboard() {
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [liveFlow, setLiveFlow] = useState({}); // sn -> live {pv,grid,load,battery,soc,time} from flowrt (~5s)
+  const lastLiveAggRef = useRef({ key:null, agg:null }); // last COMPLETE live snapshot (all inverters), per selection
   const [showCompare, setShowCompare] = useState(false);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
@@ -2821,7 +2822,10 @@ export default function Dashboard() {
       soc, capKwh, voltage, remainKwh, ratePctHr, rateSign: battery>0?"+":"−" };
   })() : null;
 
-  // Live overlay from the 5s flowrt feed (only when we have a reading for every selected inverter).
+  // Live overlay from the 5s flowrt feed. We only trust a "complete" poll — one where EVERY selected
+  // inverter reported. When the current poll is incomplete, we keep showing the LAST complete snapshot
+  // for this selection (old-but-correct beats new-but-partial/invalid), and only fall back to the 5-min
+  // status before the first complete live snapshot has ever arrived.
   const liveSel = selectedSns.map(sn=>liveFlow[sn]).filter(Boolean);
   const liveAgg = (liveSel.length && liveSel.length===selectedSns.length) ? (()=>{
     // AIO/EPS units serve the house through the EPS port, so loadCurrpac reads 0 — use epsCurrpac.
@@ -2830,9 +2834,9 @@ export default function Dashboard() {
     const grid = liveSel.reduce((s,x)=>s+(x.grid||0),0);
     const gen = liveSel.reduce((s,x)=>s+(x.gen||0),0);
     const load = liveSel.reduce((s,x)=>s+homeOf(x),0);
-    // Smart load from the live feed: only a genuine SEPARATE EPS/backup load (load>0 AND eps>0).
-    // On AIO units the EPS port IS the house (load=0 → home=eps), so there's no separate smart load.
-    // flowrt carries no other smart-load signal, so this prevents a stale 5-min value from showing.
+    // Smart load: only a genuine SEPARATE EPS/backup load (load>0 AND eps>0). On AIO units the EPS port
+    // IS the house (load=0 → home=eps), so there's no separate smart load; flowrt carries no other
+    // smart-load signal, so this keeps a phantom value from ever showing.
     const smartLoad = liveSel.reduce((s,x)=>s+(((x.load||0)>0 && (x.eps||0)>0) ? x.eps : 0),0);
     // Battery net (+charge/−discharge) from the energy balance — the live Pbat sign is unreliable.
     const battery = pv + grid + gen - load;
@@ -2841,16 +2845,20 @@ export default function Dashboard() {
     const time = liveSel.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null;
     return { pv, grid, load, battery, gen, smartLoad, soc, time };
   })() : null;
-  // Merge live power into the flow diagram. gen + smart-load come from the live feed too (so they can't
+  // Cache the last complete snapshot (keyed to this exact selection) and reuse it when a poll is
+  // incomplete — so a missing inverter never drops us back to partial or stale 5-min values.
+  if(liveAgg) lastLiveAggRef.current = { key: snKey, agg: liveAgg };
+  const effLive = liveAgg || (lastLiveAggRef.current.key===snKey ? lastLiveAggRef.current.agg : null);
+  // Merge the complete live snapshot into the flow diagram (gen + smart-load included, so they can't
   // sit stale next to live values); only battery capacity/ratings stay from the 5-min status.
-  if(flowAgg && liveAgg){
-    const soc = liveAgg.soc!=null ? liveAgg.soc : flowAgg.soc;
-    flowAgg = { ...flowAgg, pv:liveAgg.pv, grid:liveAgg.grid, battery:liveAgg.battery, load:liveAgg.load,
-      gen:liveAgg.gen, smartLoad:liveAgg.smartLoad, soc,
-      updated: liveAgg.time || flowAgg.updated, live: true,
+  if(flowAgg && effLive){
+    const soc = effLive.soc!=null ? effLive.soc : flowAgg.soc;
+    flowAgg = { ...flowAgg, pv:effLive.pv, grid:effLive.grid, battery:effLive.battery, load:effLive.load,
+      gen:effLive.gen, smartLoad:effLive.smartLoad, soc,
+      updated: effLive.time || flowAgg.updated, live: true,
       remainKwh: (flowAgg.capKwh!=null && soc!=null) ? flowAgg.capKwh*soc/100 : flowAgg.remainKwh,
-      ratePctHr: (flowAgg.capKwh && Math.abs(liveAgg.battery)>20) ? Math.abs(liveAgg.battery)/1000/flowAgg.capKwh*100 : null,
-      rateSign: liveAgg.battery>0?"+":"−" };
+      ratePctHr: (flowAgg.capKwh && Math.abs(effLive.battery)>20) ? Math.abs(effLive.battery)/1000/flowAgg.capKwh*100 : null,
+      rateSign: effLive.battery>0?"+":"−" };
   }
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
