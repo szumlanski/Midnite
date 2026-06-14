@@ -465,7 +465,7 @@ form, server validation, and the DB CHECK constraint together (they can't drift)
 - `lib/midniteServer.js` — frozen copies of the proven Midnite sign/login/post/normalize helpers, so the
   high-traffic `pages/api/midnite.js` stays untouched. (Source of truth for that logic is still `midnite.js`.)
 - `pages/api/notifications/heartbeat.js` — shared-secret cron: per device → login → fetch → snapshot → persist →
-  evaluate. `vercel.json` runs it every 15 min (`*/15 * * * *`).
+  evaluate. `vercel.json` runs it every 5 min (`*/5 * * * *`).
 
 **Triggers** (derived only from metrics this app exposes): battery SOC below/above, SOH below, battery temp above,
 inverter temp above, house load above, grid import/export above, grid voltage above/below, **PV produced today
@@ -488,9 +488,9 @@ to the owning user; all writes go through the service-role proxy + heartbeat.
 `ALERTS_FROM_EMAIL` (e.g. `Midnite Sentinel <alerts@yourdomain>`; defaults to Resend's onboarding sender),
 `CRON_SECRET` (protects the heartbeat; Vercel Cron sends it as `Authorization: Bearer`), optional
 `ALERTS_DAILY_CAP` (default 50) and `NEXT_PUBLIC_APP_URL` (email link). **Entitlement** = all signed-in users
-(centralized `isEntitled()` — flip to paid later without touching the engine). **Note:** `*/15` Vercel Cron needs a
-**Pro** plan (Hobby = daily only); on Hobby, point any external cron at `/api/notifications/heartbeat` with the
-secret instead.
+(centralized `isEntitled()` — flip to paid later without touching the engine). **Note:** sub-daily Vercel Cron
+(e.g. `*/5`) needs a **Pro** plan (Hobby = daily only); on Hobby, point any external cron at
+`/api/notifications/heartbeat` with the secret instead.
 
 ---
 

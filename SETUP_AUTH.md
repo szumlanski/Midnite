@@ -54,9 +54,9 @@ Per-device email alerts (Settings → **Notifications**) + a 15-min heartbeat cr
 | `ALERTS_DAILY_CAP` | *(optional)* Max alert emails per user per day. Default `50`. |
 | `NEXT_PUBLIC_APP_URL` | *(optional)* App URL for the email "Open dashboard" link. Default `https://midnite-rose.vercel.app`. |
 
-3. **Scheduler**: `vercel.json` already declares the cron (`/api/notifications/heartbeat`, every 15 min).
-   `*/15` requires a Vercel **Pro** plan; on **Hobby** (daily-only crons) instead point an external scheduler
-   (cron-job.org / GitHub Actions / Upstash QStash) at the endpoint with header `x-cron-secret: <CRON_SECRET>`.
+3. **Scheduler**: `vercel.json` already declares the cron (`/api/notifications/heartbeat`, every 5 min).
+   Sub-daily crons (`*/5`) require a Vercel **Pro** plan; on **Hobby** (daily-only crons) instead point an external
+   scheduler (cron-job.org / GitHub Actions / Upstash QStash) at the endpoint with header `x-cron-secret: <CRON_SECRET>`.
 4. **Verify delivery**: Settings → Notifications → **Send test** on any device (emails your account address).
 
 ## How it works

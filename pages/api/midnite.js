@@ -388,7 +388,10 @@ export default async function handler(req, res) {
       const deviceId = req.body?.deviceId || null;
       let q = sb.from("notification_rules").select("*").eq("user_id", user.id).order("created_at");
       if (deviceId) q = q.eq("device_id", deviceId);
-      const { data: rulesList } = await q;
+      const { data: rulesList, error: lerr } = await q;
+      if (lerr) return res.status(500).json({ error: lerr.code === "42P01"
+        ? "Notifications tables are missing — run supabase/schema.sql in the Supabase SQL editor."
+        : lerr.message });
       const day = new Date().toISOString().slice(0, 10);
       const { data: qrow } = await sb.from("notification_quota").select("count").eq("user_id", user.id).eq("day", day).maybeSingle();
       return res.json({
@@ -429,13 +432,16 @@ export default async function handler(req, res) {
         cooldown_minutes: Number.isFinite(Number(b.cooldown_minutes)) ? Math.max(0, Math.round(Number(b.cooldown_minutes))) : 60,
         trigger_after_time: t.timeGate ? (b.trigger_after_time || t.defaultAfterTime || null) : null,
       };
+      const saveErr = (error) => error.code === "42P01"
+        ? "Notifications tables are missing — run supabase/schema.sql in the Supabase SQL editor."
+        : error.message;
       if (b.id) {
         const { data: upd, error } = await sb.from("notification_rules").update(row).eq("id", b.id).eq("user_id", user.id).select("*").single();
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return res.status(500).json({ error: saveErr(error) });
         return res.json({ rule: upd });
       }
       const { data: ins, error } = await sb.from("notification_rules").insert(row).select("*").single();
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: saveErr(error) });
       return res.json({ rule: ins });
     }
     if (action === "alertrule_delete") {

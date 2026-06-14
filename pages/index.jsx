@@ -311,7 +311,7 @@ async function uploadMedia(bucket, path, file){
 // entirely from the shared trigger metadata (lib/notifications/triggers.js), so
 // the UI and the DB CHECK can't drift. Rules save + evaluate even before an email
 // provider is configured; a banner flags that until RESEND_API_KEY is set.
-function NotificationsSettings({activeId, sites=[]}){
+function NotificationsSettings({activeId, site=null}){
   const [data,setData]=useState(null);
   const [loading,setLoading]=useState(true);
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null);
@@ -320,7 +320,8 @@ function NotificationsSettings({activeId, sites=[]}){
   const load=useCallback(async()=>{ setLoading(true); try{ const d=await api("alertrules"); setData(d); }catch(e){ setErr(e.message); } finally{ setLoading(false); } },[]);
   useEffect(()=>{ load(); },[load]);
 
-  const devices = sites.flatMap(s=>(s.inverters||[]).map(inv=>({ siteName:s.name, sn:inv.sn, label:inv.label||inv.sn })));
+  // Only the currently selected system's inverters (not every site in the account).
+  const devices = (site?.inverters||[]).map(inv=>({ siteName:site.name, sn:inv.sn, label:inv.label||inv.sn }));
   const rulesFor = (sn)=> (data?.rules||[]).filter(r=>r.device_id===sn);
 
   const saveRule = async (dev, form)=>{
@@ -329,7 +330,7 @@ function NotificationsSettings({activeId, sites=[]}){
       await api("alertrule_save",{ account_id:activeId, site_name:dev.siteName, device_id:dev.sn, device_label:dev.label,
         trigger_type:form.trigger_type, threshold_value:Number(form.threshold),
         cooldown_minutes:Number(form.cooldown), trigger_after_time:form.afterTime||null, enabled:true });
-      setAddingFor(null); await load();
+      setAddingFor(null); setMsg("Alert added."); await load();
     }catch(e){ setErr(e.message); }
   };
   const toggleRule = async (rule)=>{ setErr(null); try{ await api("alertrule_save",{ ...rule, enabled:!rule.enabled }); await load(); }catch(e){ setErr(e.message); } };
@@ -347,9 +348,10 @@ function NotificationsSettings({activeId, sites=[]}){
         </div>}
       {data &&
         <div style={{fontSize:11,color:FAINT,marginBottom:12}}>
-          Alerts go to your account email. Today: <strong style={{color:MUTED}}>{data.dailyUsed}</strong> / {data.dailyCap} sent.
+          Alerts for <strong style={{color:MUTED}}>{site?.name||"this system"}</strong> go to your account email. Today: <strong style={{color:MUTED}}>{data.dailyUsed}</strong> / {data.dailyCap} sent.
         </div>}
-      {devices.length===0 && <div style={{fontSize:13,color:FAINT}}>No devices yet — link a Midnite account first.</div>}
+      {!site && <div style={{fontSize:13,color:FAINT}}>Select a system to manage its alerts.</div>}
+      {site && devices.length===0 && <div style={{fontSize:13,color:FAINT}}>No devices on this system.</div>}
       {devices.map(dev=>(
         <div key={dev.sn} style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
@@ -434,7 +436,7 @@ function RuleForm({onSave,onCancel}){
   );
 }
 
-function AccountSettings({email,role,accounts,activeId,profile={},sites=[],sitePhotos={},onSetActive,onChanged,onClose}){
+function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
   const isAdmin=role==="admin"; const canAdd=isAdmin||accounts.length===0;
@@ -548,7 +550,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],siteP
             ))}
           </>}
 
-          {sec==="alerts" && <NotificationsSettings activeId={activeId} sites={sites}/>}
+          {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
         </div>
       </div>
     </div>
@@ -2951,7 +2953,7 @@ export default function Dashboard() {
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
         </div>
 
-        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
+        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
 
         {/* Mobile bottom nav */}
         <div className="bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:CARD,borderTop:`1px solid ${BORDER}`,padding:"8px 0 max(8px, env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>
