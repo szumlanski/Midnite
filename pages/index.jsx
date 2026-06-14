@@ -25,6 +25,19 @@ const fmtHrs = (h) => { if(!isFinite(h)||h<=0) return "--"; if(h>=48) return `${
 // Format an inverter DataTime ("YYYY-MM-DD HH:MM:SS", already in site/ET time) as M/D/YYYY h:mm AM/PM
 // without timezone conversion (don't use Date()).
 const fmtClock = (s) => { if(!s) return ""; const m=String(s).replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2}):(\d{2})/); if(!m) return String(s); let h=+m[4]; const ap=h>=12?"PM":"AM"; h=h%12||12; return `${+m[2]}/${+m[3]}/${m[1]} ${h}:${m[5]} ${ap}`; };
+// Age of a 5-min sample: minutes between its DataTime (ET wall-clock, "YYYY-MM-DD HH:MM:SS") and
+// now-in-ET — both parsed as wall time via Date.UTC so the timezone cancels. Null if unparseable.
+const _wallMs = (s) => { const m=String(s||"").replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2}):(\d{2})(?::(\d{2}))?/); return m? Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0)) : null; };
+const _etNow = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date());
+const ageMin = (s) => { const a=_wallMs(s), b=_wallMs(_etNow()); return (a!=null&&b!=null)? Math.max(0,Math.round((b-a)/60000)) : null; };
+const fmtAge = (m) => m==null?null : m<1?"just now" : m<60?`${m}m ago` : m<1440?`${Math.floor(m/60)}h ${m%60}m ago` : `${Math.floor(m/1440)}d ago`;
+// "Updated Xm ago" chip — turns amber past `stale` minutes (data refreshes ~every 5 min, so >10 = a missed report).
+function UpdatedChip({time, stale=10}){
+  const m = ageMin(time);
+  if(m==null) return null;
+  const old = m>stale;
+  return <span style={{fontSize:10,fontWeight:600,color:old?"#92400E":FAINT,background:old?"#FDE68A":"transparent",padding:old?"2px 7px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0}}>{old?"⚠ ":""}Updated {fmtAge(m)}</span>;
+}
 
 // Session cache for historical, immutable data (past day/month/year + their MPPT export). The
 // current day/month/year is never cached so live periods stay fresh. Cleared on logout.
@@ -672,6 +685,7 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
 
 function SiteHero({statuses, live=null}) {
   const v = statuses.filter(s=>s?.ok&&s?.data);
+  const updated = v.map(i=>i.data.inverter?.lastUpdateTime).filter(Boolean).sort().slice(-1)[0] || null;
   // Power "now" comes from the live 5s feed when available; energy-today tiles stay on the 5-min status.
   const totalPv = live ? live.pv : v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
   const totalLoad = live ? live.load : v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
@@ -693,7 +707,7 @@ function SiteHero({statuses, live=null}) {
     <div style={{background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"20px 20px",marginBottom:16,border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
-          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>Site Production Now{live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:8,fontWeight:800,color:BATTERY}}>LIVE</span></span>}</div>
+          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>Site Production Now{live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:8,fontWeight:800,color:BATTERY}}>LIVE</span></span>}{!live&&<UpdatedChip time={updated}/>}</div>
           <div style={{fontSize:36,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-1px",fontVariantNumeric:"tabular-nums"}}>{fmt(totalPv,2)}</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
@@ -757,6 +771,8 @@ function BatteryPanel({statuses}) {
   // Open loop = no BMS brand on any inverter
   const closedLoop = valid.some(s => !!s.data.battery.brand);
   const brand = valid.find(s => s.data.battery.brand)?.data.battery.brand || "";
+  // Freshest 5-min sample time across inverters (for the "Updated N ago" staleness chip).
+  const updated = valid.map(s=>s.data.inverter?.lastUpdateTime).filter(Boolean).sort().slice(-1)[0] || null;
 
   const isCharging    = totalCharge    > 20;
   const isDischarging = totalDischarge > 20;
@@ -777,6 +793,7 @@ function BatteryPanel({statuses}) {
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <UpdatedChip time={updated}/>
           {isCharging    && <span style={{fontSize:11,fontWeight:700,color:BATTERY,background:"#DCFCE7",padding:"3px 8px",borderRadius:10}}>↑ {fmt(totalCharge)}</span>}
           {isDischarging && <span style={{fontSize:11,fontWeight:700,color:SOLAR,background:"#FEF3C7",padding:"3px 8px",borderRadius:10}}>↓ {fmt(totalDischarge)}</span>}
           {!isCharging && !isDischarging && <span style={{fontSize:11,fontWeight:600,color:FAINT}}>Idle</span>}

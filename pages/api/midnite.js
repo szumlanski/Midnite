@@ -276,7 +276,9 @@ function normalizeDetail(raw, sn) {
     },
     battery: {
       brand: raw.brand || "",
-      capacityAh: parseFloat(raw.capacity || 0),
+      // Total bank Ah across BOTH BMS inputs (capacity is per-BMS total; a 2nd parallel bank lands in
+      // capacity2). Summing fixes dual-BMS undercounts; single-bank systems keep capacity (capacity2 empty → +0).
+      capacityAh: parseFloat(raw.capacity || 0) + parseFloat(raw.capacity2 || 0),
       voltage: parseFloat(raw.volt || 0),
       current: parseFloat(raw.cur || 0),
       charge: batChargeW,
