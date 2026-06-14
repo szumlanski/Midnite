@@ -2830,17 +2830,23 @@ export default function Dashboard() {
     const grid = liveSel.reduce((s,x)=>s+(x.grid||0),0);
     const gen = liveSel.reduce((s,x)=>s+(x.gen||0),0);
     const load = liveSel.reduce((s,x)=>s+homeOf(x),0);
+    // Smart load from the live feed: only a genuine SEPARATE EPS/backup load (load>0 AND eps>0).
+    // On AIO units the EPS port IS the house (load=0 → home=eps), so there's no separate smart load.
+    // flowrt carries no other smart-load signal, so this prevents a stale 5-min value from showing.
+    const smartLoad = liveSel.reduce((s,x)=>s+(((x.load||0)>0 && (x.eps||0)>0) ? x.eps : 0),0);
     // Battery net (+charge/−discharge) from the energy balance — the live Pbat sign is unreliable.
     const battery = pv + grid + gen - load;
     const socs = liveSel.map(x=>x.soc).filter(v=>v>0); // live SOC can come back 0; fall back to status
     const soc = socs.length ? socs.reduce((a,b)=>a+b,0)/socs.length : null;
     const time = liveSel.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null;
-    return { pv, grid, load, battery, soc, time };
+    return { pv, grid, load, battery, gen, smartLoad, soc, time };
   })() : null;
-  // Merge live power into the flow diagram (keep gen/smart-load/capacity from the 5-min status).
+  // Merge live power into the flow diagram. gen + smart-load come from the live feed too (so they can't
+  // sit stale next to live values); only battery capacity/ratings stay from the 5-min status.
   if(flowAgg && liveAgg){
     const soc = liveAgg.soc!=null ? liveAgg.soc : flowAgg.soc;
-    flowAgg = { ...flowAgg, pv:liveAgg.pv, grid:liveAgg.grid, battery:liveAgg.battery, load:liveAgg.load, soc,
+    flowAgg = { ...flowAgg, pv:liveAgg.pv, grid:liveAgg.grid, battery:liveAgg.battery, load:liveAgg.load,
+      gen:liveAgg.gen, smartLoad:liveAgg.smartLoad, soc,
       updated: liveAgg.time || flowAgg.updated, live: true,
       remainKwh: (flowAgg.capKwh!=null && soc!=null) ? flowAgg.capKwh*soc/100 : flowAgg.remainKwh,
       ratePctHr: (flowAgg.capKwh && Math.abs(liveAgg.battery)>20) ? Math.abs(liveAgg.battery)/1000/flowAgg.capKwh*100 : null,
