@@ -2832,6 +2832,10 @@ export default function Dashboard() {
     const homeOf = (x) => (x.load>0 ? x.load : (x.eps||0));
     const pv = liveSel.reduce((s,x)=>s+(x.pv||0),0);
     const grid = liveSel.reduce((s,x)=>s+(x.grid||0),0);
+    // Generator from the live genCurrpac. A smart port designated as "generator input" is reported here
+    // by the real-time flow feed, so a running gen shows live and reads 0 when off. This is the only live
+    // gen signal — the 5-min smart-port gen value was phantom (e.g. 25.8 kW on an idle gen) and is dropped.
+    // gen is part of the balance below, so when it runs the battery figure stays correct (not double-fed).
     const gen = liveSel.reduce((s,x)=>s+(x.gen||0),0);
     const load = liveSel.reduce((s,x)=>s+homeOf(x),0);
     // Smart load: only a genuine SEPARATE EPS/backup load (load>0 AND eps>0). On AIO units the EPS port

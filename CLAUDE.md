@@ -393,10 +393,24 @@ diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **d
 - Node text sits on the side **away** from the inverter (`place="above"` top nodes / `"below"` bottom) so
   connectors never cross labels.
 - Grid icon = drawn **transmission pylon** (`gridPylon`, passed via `iconSvg`), not a bank emoji.
-- **Optional nodes** appear only when active (>20 W): **Generator** (top-center, from `gen` smart-port power),
-  **Smart Load** (bottom-center) and **AC Couple** (left). Smart Load is **suppressed when it ≈ Home**
-  (`|smartLoad − load| < max(80, load*0.1)`) — on AIO units the house is served through a smart port, so the
-  reading IS Home and must not be shown twice.
+- **Optional nodes** appear only when active (>20 W): **Generator** (top-center), **Smart Load** (bottom-center)
+  and **AC Couple** (left). Smart Load is **suppressed when it ≈ Home** (`|smartLoad − load| < max(80, load*0.1)`)
+  — on AIO units the house is served through a smart port, so the reading IS Home and must not be shown twice.
+- **Live gen + smart-load source (important):** in the live overlay, **gen and smart-load come from the 5s
+  `flowrt` feed, NOT the 5-min `status`** (the 5-min smart-port values were phantom — e.g. a 25.8 kW "GEN" on an
+  idle generator, an 8 kW "SMART LOAD" that was really the EPS house load). Gen = `flowrt.genCurrpac`; smart-load
+  shows only a **genuine separate** EPS/backup load (`load>0 AND eps>0`) — zero on AIO units where the EPS port
+  IS the house (folded into Home). **Smart loads are not a live signal** (`flowrt` carries no smart-port
+  breakdown); that detail stays in the 5-min cards/Day/Explorer. **Generator-on-a-smart-port assumption:** when a
+  smart port is configured as "generator input", we assume the inverter reports its power in `flowrt.genCurrpac`
+  (the vendor's real-time flow field), so a running gen shows live and reads 0 when off. (Unverified — no gen has
+  run during testing. If a future `flowrt` sample shows `genCurrpac:0` while a smart-port gen is running, the
+  fallback is to derive gen from the live balance `gen = home − pv − grid − battery_net`, using `Pbat` magnitude
+  with the sign from the SOC trend.)
+- **Last-complete-snapshot:** when a `flowrt` poll doesn't cover every selected inverter, the diagram reuses the
+  last poll where **all** inverters reported (cached per selection) rather than dropping to partial sums or the
+  5-min status — old-but-correct over new-but-invalid. Only the cold start (before any complete live snapshot)
+  uses the 5-min status.
 
 ## Inverter Selector — multi-toggle
 `selectedSns` (array). Each pill toggles in/out (can't deselect the last); **All** selects everything. Applies to
