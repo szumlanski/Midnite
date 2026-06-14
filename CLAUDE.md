@@ -76,16 +76,10 @@ registers (`SETTINGS_MAP`, certain mappings only); **SaaS auth** (see Authentica
 - **Google login** is gated behind `NEXT_PUBLIC_GOOGLE_AUTH=1` (email-only until set).
 
 ### OPEN / PENDING
-- **Notifications & alerts system** — requested but **not started** (request was interrupted). Spec: real-time
-  threshold alerts (+ optional scheduled digests) modeled on a portable blueprint — normalize to a single
-  `DeviceSnapshot`, derive trigger taxonomy from available metrics, idempotent `rules`/send-log/`snapshots`
-  tables with RLS, pure `evaluateRule()`/`describeRule()`/`evaluateNotificationsForDevice()`, a secured
-  heartbeat scheduler that detects offline from snapshot-gap (not API health), a channel-abstracted `send()`,
-  optional daily cap, a Settings UI with CRUD + a `POST …/test` send, optional seeding, optional digests.
-  Run as Phase 0 (investigate) → Phase 1 (one batch of questions) → Phase 2 (build to done). NB: this app has
-  **no email/SMS provider yet** (propose one behind an env var); per-inverter live metrics come from `status`
-  (normalizeRich/Detail) + `flowrt`; offline detection needs a snapshots table (none exists). Auth/roles/RLS
-  and the Supabase service-role proxy pattern are already in place to model the new tables on.
+- **Notifications & alerts system** — ✅ **BUILT** (see the **Notifications / Alerts** section below). Per-device
+  email threshold alerts + a 15-min heartbeat cron, portable `DeviceSnapshot` + pure engine, RLS tables, daily
+  cap, Settings → Notifications UI with CRUD + test-send. Delivery via **Resend** (`RESEND_API_KEY`); cron secured
+  by `CRON_SECRET`. Scheduled **digests** are scaffolded (table only) — not yet sending.
 - **Recommended before paying customers:** security pass on the auth + `CREDS_ENC_KEY` encryption + RLS path.
 - **Nice-to-have:** surface site photos beyond Settings (site header / Sites picker).
 
