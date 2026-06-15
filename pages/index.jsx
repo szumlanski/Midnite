@@ -31,6 +31,9 @@ const _wallMs = (s) => { const m=String(s||"").replace("T"," ").match(/(\d{4})-(
 const _etNow = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date());
 const ageMin = (s) => { const a=_wallMs(s), b=_wallMs(_etNow()); return (a!=null&&b!=null)? Math.max(0,Math.round((b-a)/60000)) : null; };
 const fmtAge = (m) => m==null?null : m<1?"just now" : m<60?`${m}m ago` : m<1440?`${Math.floor(m/60)}h ${m%60}m ago` : `${Math.floor(m/1440)}d ago`;
+// Current time in the VIEWER's local timezone (browser clock) — used for the live flow timestamp,
+// which must not trust the inverter's own clock (some units report UTC / are 12h off → "zulu").
+const localClock = () => { const d=new Date(); let h=d.getHours(); const ap=h>=12?"PM":"AM"; h=h%12||12; return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()} ${h}:${String(d.getMinutes()).padStart(2,"0")} ${ap}`; };
 // "Updated Xm ago" chip — turns amber past `stale` minutes (data refreshes ~every 5 min, so >10 = a missed report).
 function UpdatedChip({time, stale=10}){
   const m = ageMin(time);
@@ -1595,7 +1598,7 @@ function FlowDiagram({flow}) {
           <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
           {flow.live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:9,fontWeight:800,color:BATTERY,letterSpacing:"0.04em"}}>LIVE</span></span>}
         </span>
-        {flow.updated&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>{fmtClock(flow.updated)}</span>}
+        {(flow.live||flow.updated)&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>{flow.live?localClock():fmtClock(flow.updated)}</span>}
       </div>
       <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
