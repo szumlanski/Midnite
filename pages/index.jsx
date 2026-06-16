@@ -951,6 +951,9 @@ const SETTINGS_MAP = [
   { code:"213F", label:"Generator Input Location (Grid Side)", group:"Generator", bool:true },
   // Battery
   { code:"2110", label:"Battery Brand", group:"Battery", enum:{17:"MidNite Battery",33:"Lithium Battery (No BMS)"} },
+  // Capacity Mode (0 = SOC %, 1 = Voltage) selects whether the charge/discharge setpoints below are
+  // percentages or volts. The Settings + Compare views show only the matching set (mode:"soc"/"voltage").
+  { code:"2124", label:"Capacity Mode", group:"Battery", enum:{0:"SOC (%)",1:"Voltage (V)"} },
   { code:"2115", label:"Charge By Grid",  group:"Battery", bool:true },
   { code:"218C", label:"Force Charging",  group:"Battery", bool:true },
   { code:"21B4", label:"Battery Charge Efficiency",         group:"Battery", unit:"%" },
@@ -960,13 +963,21 @@ const SETTINGS_MAP = [
   { code:"211A", label:"Maximum Discharge Power",           group:"Battery", unit:"W" },
   { code:"2116", label:"Maximum Allowed Charging Power",    group:"Battery", unit:"W" },
   { code:"2150", label:"Maximum Grid Recovery Charge Power",group:"Battery", unit:"W" },
-  { code:"2114", label:"Floating Charge Voltage",           group:"Battery", unit:"V", scale:0.1 },
-  { code:"2180", label:"Absorb Voltage Setpoint",           group:"Battery", unit:"V", scale:0.1 },
-  { code:"2113", label:"Stop Discharge Voltage",            group:"Battery", unit:"V", scale:0.1 },
-  { code:"2148", label:"Stop Charging Voltage",             group:"Battery", unit:"V", scale:0.1 },
-  { code:"2146", label:"Start Recovery Charge Voltage",     group:"Battery", unit:"V", scale:0.1 },
-  { code:"2147", label:"Stop Recovery Charge Voltage",      group:"Battery", unit:"V", scale:0.1 },
-  { code:"214B", label:"Discharge End Voltage (On-Grid)",   group:"Battery", unit:"V", scale:0.1 },
+  // SOC-mode setpoints (shown when Capacity Mode = SOC). Raw integer percent (no scale).
+  { code:"211B", label:"Discharge To",                     group:"Battery", unit:"%", mode:"soc" },
+  { code:"2119", label:"Charge To",                        group:"Battery", unit:"%", mode:"soc" },
+  { code:"2144", label:"Start Recovery Charging At",       group:"Battery", unit:"%", mode:"soc" },
+  { code:"2145", label:"Stop Recovery Charging At",        group:"Battery", unit:"%", mode:"soc" },
+  { code:"214A", label:"Discharge End SOC (On-Grid)",      group:"Battery", unit:"%", mode:"soc" },
+  // Voltage-mode setpoints (shown when Capacity Mode = Voltage) — twins of the SOC rows above.
+  { code:"2113", label:"Stop Discharge Voltage",           group:"Battery", unit:"V", scale:0.1, mode:"voltage" },
+  { code:"2114", label:"Floating Charge Voltage",          group:"Battery", unit:"V", scale:0.1, mode:"voltage" },
+  { code:"2180", label:"Absorb Voltage Setpoint",          group:"Battery", unit:"V", scale:0.1, mode:"voltage" },
+  { code:"2146", label:"Start Recovery Charge Voltage",    group:"Battery", unit:"V", scale:0.1, mode:"voltage" },
+  { code:"2147", label:"Stop Recovery Charge Voltage",     group:"Battery", unit:"V", scale:0.1, mode:"voltage" },
+  { code:"214B", label:"Discharge End Voltage (On-Grid)",  group:"Battery", unit:"V", scale:0.1, mode:"voltage" },
+  // Always shown (protection / maintenance — independent of Capacity Mode)
+  { code:"2148", label:"Stop Charging Voltage",            group:"Battery", unit:"V", scale:0.1 },
   { code:"212F", label:"Stop Discharge Reconnect Voltage (Off-Grid)", group:"Battery", unit:"V", scale:0.1 },
   { code:"2181", label:"Equalize Voltage",                  group:"Battery", unit:"V", scale:0.1 },
   { code:"2182", label:"Equalize Time",                     group:"Battery", unit:"min" },
@@ -1028,7 +1039,11 @@ function SettingsModal({inv, onClose}){
     return ()=>{ alive=false; };
   }, [inv.autoId]);
   const groups = [...new Set(SETTINGS_MAP.map(s=>s.group))];
-  const shown = (g)=> SETTINGS_MAP.filter(s=>s.group===g && data && (s.code in data));
+  // Capacity Mode (2124): 0 = SOC %, 1 = Voltage. Show only the matching setpoint set; absent → voltage
+  // (legacy default). Rows without a `mode` (power limits, protection, etc.) always show.
+  const isSoc = !!data && String(data["2124"]) === "0";
+  const modeOk = (s)=> !s.mode || s.mode === (isSoc ? "soc" : "voltage");
+  const shown = (g)=> SETTINGS_MAP.filter(s=>s.group===g && data && (s.code in data) && modeOk(s));
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:560,width:"100%",maxHeight:"85vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
@@ -1083,7 +1098,15 @@ function SettingsCompareModal({inverters, onClose}){
     return ()=>{ alive=false; };
   }, []);
   const groups = [...new Set(SETTINGS_MAP.map(s=>s.group))];
-  const valsOf = (s)=> cols.map(inv=> { const raw = data?.[inv.sn]?.[s.code]; return raw===undefined||raw==="" ? null : fmtSetting(s, raw); });
+  // Each inverter shows its own Capacity Mode's setpoints (2124: 0=SOC, 1=Voltage); the off-mode twin
+  // is blanked so a SOC-mode unit shows % and a Voltage-mode unit shows V in the same comparison.
+  const isSocInv = (sn)=> String(data?.[sn]?.["2124"]) === "0";
+  const valsOf = (s)=> cols.map(inv=> {
+    const raw = data?.[inv.sn]?.[s.code];
+    if(raw===undefined||raw==="") return null;
+    if(s.mode && s.mode !== (isSocInv(inv.sn) ? "soc" : "voltage")) return null;
+    return fmtSetting(s, raw);
+  });
   const isDiff = (vals)=>{ const p = vals.filter(v=>v!=null); return p.length>1 && new Set(p).size>1; };
   const rows = SETTINGS_MAP.map(s=>({ s, vals: valsOf(s) })).filter(r=> r.vals.some(v=>v!=null) && (!diffOnly || isDiff(r.vals)));
   const diffCount = SETTINGS_MAP.map(s=>valsOf(s)).filter(isDiff).length;

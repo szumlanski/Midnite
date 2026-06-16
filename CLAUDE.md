@@ -187,6 +187,14 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
   reads `SETTINGS_MAP` for **every** inverter at the site and renders a table (settings = rows grouped by section,
   inverters = columns). Rows whose formatted values differ across inverters are **highlighted amber with a ⚠**;
   a "Differences only" filter collapses to just those. The per-card **Settings ›** modal stays for single-inverter view.
+- **Capacity Mode (SOC vs Voltage) — conditional battery setpoints:** the battery charge/discharge setpoints exist
+  as BOTH an SOC-% set and a Voltage set; register **`2124` "Capacity Mode"** (`0`=SOC %, `1`=Voltage) selects which
+  is active. `SETTINGS_MAP` tags each setpoint `mode:"soc"` or `mode:"voltage"` and the Settings modal +
+  Compare table show only the set matching that inverter's `2124` (mode-independent rows — power limits, equalize,
+  protection — always show). SOC codes: `211B` Discharge To, `2119` Charge To, `2144`/`2145` Start/Stop Recovery,
+  `214A` Discharge End SOC. Voltage twins: `2113`/`2114`/`2180`/`2146`/`2147`/`214B`. Codes captured from the
+  Remote-Setting form input ids (`hybridForm_211B` etc.) — certain, not guessed. (Battery **Capacity** `2112` was
+  dropped: not a reliable register, and capacity is a live BMS value shown on the Battery card, not a config.)
 - **`shadowsweep` action** (read-only discovery probe): sweeps a hex code range (`{autoId, from, to, chunk}`,
   ≤2048 codes/call) through the same `readDeviceShadow_RA_New_AutoID` `Force:1` live read and returns every
   code that resolved to a value. Surfaced in **Admin → Live Register Probe** — one **Read all** button sweeps the
