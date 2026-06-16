@@ -323,6 +323,14 @@ async function readAccessLog() {
   return _accessLog;
 }
 
+// Detect "notifications tables not set up" across Postgres (42P01) and PostgREST
+// (PGRST205 / "schema cache") error shapes, so we can show a clear setup hint.
+function schemaMissing(err) {
+  if (!err) return false;
+  return err.code === "42P01" || err.code === "PGRST205" || /schema cache|Could not find the table/i.test(err.message || "");
+}
+const SCHEMA_HINT = "Notifications tables aren't set up yet — run supabase/schema.sql in the Supabase SQL editor, then reload.";
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -391,9 +399,7 @@ export default async function handler(req, res) {
       let q = sb.from("notification_rules").select("*").eq("user_id", user.id).order("created_at");
       if (deviceId) q = q.eq("device_id", deviceId);
       const { data: rulesList, error: lerr } = await q;
-      if (lerr) return res.status(500).json({ error: lerr.code === "42P01"
-        ? "Notifications tables are missing — run supabase/schema.sql in the Supabase SQL editor."
-        : lerr.message });
+      if (lerr) return res.status(500).json({ error: schemaMissing(lerr) ? SCHEMA_HINT : lerr.message });
       const day = new Date().toISOString().slice(0, 10);
       const { data: qrow } = await sb.from("notification_quota").select("count").eq("user_id", user.id).eq("day", day).maybeSingle();
       return res.json({
@@ -434,9 +440,7 @@ export default async function handler(req, res) {
         cooldown_minutes: Number.isFinite(Number(b.cooldown_minutes)) ? Math.max(0, Math.round(Number(b.cooldown_minutes))) : 60,
         trigger_after_time: t.timeGate ? (b.trigger_after_time || t.defaultAfterTime || null) : null,
       };
-      const saveErr = (error) => error.code === "42P01"
-        ? "Notifications tables are missing — run supabase/schema.sql in the Supabase SQL editor."
-        : error.message;
+      const saveErr = (error) => schemaMissing(error) ? SCHEMA_HINT : error.message;
       if (b.id) {
         const { data: upd, error } = await sb.from("notification_rules").update(row).eq("id", b.id).eq("user_id", user.id).select("*").single();
         if (error) return res.status(500).json({ error: saveErr(error) });
