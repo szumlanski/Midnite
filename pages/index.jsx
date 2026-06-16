@@ -953,7 +953,6 @@ const SETTINGS_MAP = [
   { code:"2110", label:"Battery Brand", group:"Battery", enum:{17:"MidNite Battery",33:"Lithium Battery (No BMS)"} },
   { code:"2115", label:"Charge By Grid",  group:"Battery", bool:true },
   { code:"218C", label:"Force Charging",  group:"Battery", bool:true },
-  { code:"2112", label:"Battery Capacity",                  group:"Battery", unit:"Ah" },
   { code:"21B4", label:"Battery Charge Efficiency",         group:"Battery", unit:"%" },
   { code:"21B5", label:"Battery Rated Temperature",         group:"Battery", unit:"°C" },
   { code:"214F", label:"Lead-Acid Battery Impedance",       group:"Battery", unit:"mΩ" },
