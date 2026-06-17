@@ -2744,7 +2744,14 @@ export default function Dashboard() {
   const expShift = (delta) => { const span=dayDiff(expStart,expEnd); let s=addDays(expStart,delta), e=addDays(expEnd,delta); if(e>today){ e=today; s=addDays(e,-span); } setExpStart(s); setExpEnd(e); };
   const chartInverters = site ? site.inverters.filter(i=>selectedSns.includes(i.sn)) : [];
   const allSelected = site ? selectedSns.length===site.inverters.length && selectedSns.length>0 : false;
-  const toggleInv = (sn) => setSelectedSns(prev=>{ const has=prev.includes(sn); if(has){ const next=prev.filter(x=>x!==sn); return next.length?next:prev; } return [...prev,sn]; });
+  // Tap behavior: when ALL are selected (the default aggregate), the first tap FOCUSES to just that
+  // inverter; once narrowed to a subset, taps add/remove to build a custom set (can't remove the last).
+  const toggleInv = (sn) => setSelectedSns(prev=>{
+    const total = site ? site.inverters.length : 0;
+    if(total && prev.length===total) return [sn];                     // focus from "all" → only this one
+    if(prev.includes(sn)){ const next=prev.filter(x=>x!==sn); return next.length?next:prev; } // remove (keep ≥1)
+    return [...prev,sn];                                              // add to the subset
+  });
   const selectAllInv = () => site && setSelectedSns(site.inverters.map(i=>i.sn));
   const snKey = selectedSns.join(",");
 

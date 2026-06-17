@@ -420,10 +420,12 @@ diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **d
   5-min status — old-but-correct over new-but-invalid. Only the cold start (before any complete live snapshot)
   uses the 5-min status.
 
-## Inverter Selector — multi-toggle
-`selectedSns` (array). Each pill toggles in/out (can't deselect the last); **All** selects everything. Applies to
-Day/Month/Year/Live. `chartInverters` = inverters whose sn ∈ `selectedSns`; `allSelected` gates the aggregate
-Live panels. Effects key on `snKey` (the joined sns).
+## Inverter Selector — focus-then-subset
+`selectedSns` (array), defaults to all. **Tap behavior** (`toggleInv`): when *all* are selected (the default
+aggregate), the first tap **focuses** to just that inverter; once narrowed to a subset, taps add/remove to build
+a custom set (can't remove the last). **All** reselects everything. Applies to Day/Month/Year/Live. `chartInverters`
+= inverters whose sn ∈ `selectedSns`; `allSelected` gates the aggregate Live panels. Effects key on `snKey` (the
+joined sns). (Explorer uses `InverterSelector single` → `onPick`, unaffected.)
 
 ## Battery Panel
 - Capacity kWh uses **nominal 51.2 V** (`capacityAh * 51.2 / 1000`), not live voltage.
