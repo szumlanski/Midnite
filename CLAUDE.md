@@ -152,7 +152,17 @@ All actions accept optional `username` and `password` in the request body. Falls
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
 
 **Debug actions** (Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`,
-`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `shadowsweep`, `iotshadow`, `codelookup`.
+`installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `shadowsweep`, `iotshadow`, `codelookup`,
+`rtsweep`.
+
+**Real-time data exploration** (read-only): the live power-flow path is already `flowrt`
+(`getHybridFlowgraphRealTimeData`) — a synchronous query down the dongle's persistent Aliyun-IoT link, ~5s
+refresh (the device's own sampling ceiling; 1s polling returns duplicates). To hunt for anything faster:
+`vendorsrc` (crawls the vendor site's **public** JS bundles — no login needed — now also reports `streaming`
+= any WebSocket/SSE/socket.io/signalr/mqtt transport + `realtimeContext` = how the flow graphic is fed/polled)
+and **`rtsweep`** (`{serial}`, uses the installer token: probes ~22 candidate real-time endpoint names × Eagle/
+Senergytec, flags any returning power-ish data, "interesting" hits first). Device-shadow is NOT a faster path
+(only a partial 0x3000 power block, no live SOC/grid-V).
 
 **`iotshadow`** (salvaged from a parallel session) is a *different* shadow path: the **Aliyun IoT** command
 channel — `POST /Aliyuniotapi/iot/setShadowCommand` `{GoodsID, Command, sign}` writes a command into the unit's

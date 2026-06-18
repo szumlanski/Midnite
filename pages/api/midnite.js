@@ -933,8 +933,65 @@ export default async function handler(req, res) {
           out.periodIdentifiers = [...periodSet].sort();
           out.baseClues = [...baseSet].sort().slice(0, 40);
           out.context = ctx;
+
+          // ── Real-time transport hunt: does the live view use a PUSH stream (WebSocket / SSE /
+          // socket.io / signalr / mqtt), or just poll an endpoint — and at what interval? ─────────
+          const streamSet = new Set();
+          const STREAM_RE = [
+            /new\s+WebSocket\s*\([^)]{0,80}/gi,
+            /\bwss?:\/\/[^"'`\s]{4,120}/gi,
+            /new\s+EventSource\s*\([^)]{0,80}/gi,
+            /text\/event-stream/gi,
+            /socket\.io|io\(\s*["'`][^"'`]{0,60}/gi,
+            /signalr|@microsoft\/signalr|HubConnection/gi,
+            /mqtt:\/\/|mqttws|\bpaho\b|MqttClient/gi,
+            /\.(?:subscribe|on)\(\s*["'`](?:message|data|flow|realtime|realTime)["'`]/gi,
+          ];
+          for (const re of STREAM_RE) for (const m of big.matchAll(re)) streamSet.add(m[0].replace(/\s+/g, " ").slice(0, 120));
+          out.streaming = [...streamSet].slice(0, 60);
+          // Context around real-time / flowgraph / polling keywords (how the flow graphic is fed + cadence)
+          const rtCtx = [];
+          for (const key of ["getHybridFlowgraphRealTimeData", "RealTimeData", "RealtimeData", "flowgraph", "Flowgraph", "EventSource", "WebSocket", "setInterval", "setTimeout"]) {
+            let i = 0, n = 0;
+            while ((i = big.indexOf(key, i)) >= 0 && n < 3) {
+              rtCtx.push(`[${key}] …${big.slice(Math.max(0, i - 60), i + 100).replace(/\s+/g, " ")}…`);
+              i += key.length; n++;
+            }
+          }
+          out.realtimeContext = rtCtx;
         } catch (e) { out.error = e.message; }
         return res.json(out);
+      }
+      case "rtsweep": {
+        // READ-ONLY discovery: probe candidate "real-time" endpoint names for the given serial, to find
+        // anything that beats getHybridFlowgraphRealTimeData (the ~5s flowrt path). Reports which return
+        // power-ish data. Run after vendorsrc shows what the vendor's own live view actually calls.
+        const { serial } = req.body || {};
+        if (!serial) return res.status(400).json({ error: "serial required" });
+        const EAG = "/Eagle/v1/Inverterapi/";
+        const SEN = "/Senergytec/web/v2/Inverterapi/";
+        const names = [
+          "getHybridFlowgraphRealTimeData",  // known ~5s baseline (for comparison)
+          "getRealTimeData", "getRealtimeData", "getLiveData", "getCurrentData", "getCurrentPower",
+          "getInverterRealTimeData", "getInverterRealtimeData", "getInverterRealTime", "realTimeData",
+          "getFlowgraphData", "getFlowgraphRealTimeData", "getHybridFlowgraphData", "getPowerFlowRealTime",
+          "getRealTimePower", "getLivePower", "getNowData", "getInstantData", "getRealtimePower",
+          "getInverterLiveData", "getRealTimeFlow", "getRealTimeStatus", "getInverterRealTimeStatus",
+        ];
+        const out = [];
+        for (const ns of [EAG, SEN]) {
+          for (const m of names) {
+            const body = { GoodsID: serial }; body.sign = makeSign(body);
+            try {
+              const r = await midnitePost(ns + m, body, auth.token);
+              const txt = JSON.stringify(r);
+              const interesting = /Currpac|TotalDCpower|Pbat|SystemTime|SOC|power/i.test(txt) && !/no params|"status":\s*false|not found/i.test(txt);
+              out.push({ ep: ns.split("/")[1] + ":" + m, ok: true, interesting, keys: (r && typeof r === "object" ? Object.keys(r) : []).slice(0, 20), sample: txt.slice(0, 220) });
+            } catch (e) { out.push({ ep: ns.split("/")[1] + ":" + m, ok: false, err: e.message.slice(0, 80) }); }
+          }
+        }
+        out.sort((a, b) => (b.interesting ? 1 : 0) - (a.interesting ? 1 : 0)); // surface hits first
+        return res.json({ serial, probe: out });
       }
       case "viewtest": {
         // TEMPORARY — prove the consumer "view" host returns correct month data by logging
