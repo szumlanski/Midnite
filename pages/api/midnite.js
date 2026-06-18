@@ -874,9 +874,15 @@ export default async function handler(req, res) {
           out.rootHtml = home.text.slice(0, 1500);
           const srcs = [...home.text.matchAll(/(?:src|href)=["']([^"']+\.js[^"']*)["']/gi)].map(m => m[1]);
 
+          // Resolve relative asset refs against the app's real base dir. umi/webpack builds are often
+          // served under /dist/ even though the index uses "./" paths (e.g. favicon at /dist/img/...),
+          // so "./umi.x.js" must resolve to /dist/umi.x.js, not a 404 at the origin root.
+          const rootDir = new URL(ROOT).pathname.replace(/[^/]*$/, "") || "/";
+          const rootBase = origin + ((/\/dist\//.test(home.text) && !rootDir.includes("/dist/")) ? "/dist/" : rootDir);
+
           // BFS-crawl same-origin .js chunks (follow the webpack/umi chunk graph)
           const seen = new Set();
-          const queue = [...new Set(srcs)].map(s => abs(s)).filter(u => u.startsWith(origin));
+          const queue = [...new Set(srcs)].map(s => abs(s, rootBase)).filter(u => u.startsWith(origin));
           const results = [];
           let totalBytes = 0;
           while (queue.length && seen.size < 50 && totalBytes < 30_000_000) {
