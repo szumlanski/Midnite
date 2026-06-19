@@ -22,24 +22,30 @@ const fmtE = (wh) => { if(wh==null) return "--"; if(wh>=1000000) return `${(wh/1
 // register reads 0 and the real consumption only shows up in this balance.
 const balanceLoad = (d) => d ? Math.max(0, (d.photovoltaic?.power?.totalDc||0) + (d.grid?.netW||0) + (d.battery?.discharge||0) - (d.battery?.charge||0)) : null;
 const fmtHrs = (h) => { if(!isFinite(h)||h<=0) return "--"; if(h>=48) return `${(h/24).toFixed(1)} days`; const H=Math.floor(h), M=Math.round((h-H)*60); return M? `${H}h ${M}m` : `${H}h`; };
-// Format an inverter DataTime ("YYYY-MM-DD HH:MM:SS", already in site/ET time) as M/D/YYYY h:mm AM/PM
-// without timezone conversion (don't use Date()).
-const fmtClock = (s) => { if(!s) return ""; const m=String(s).replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2}):(\d{2})/); if(!m) return String(s); let h=+m[4]; const ap=h>=12?"PM":"AM"; h=h%12||12; return `${+m[2]}/${+m[3]}/${m[1]} ${h}:${m[5]} ${ap}`; };
-// Age of a 5-min sample: minutes between its DataTime (ET wall-clock, "YYYY-MM-DD HH:MM:SS") and
-// now-in-ET — both parsed as wall time via Date.UTC so the timezone cancels. Null if unparseable.
+// Data-age in minutes from an inverter report timestamp (DataTime / lastUpdateTime, ET wall-clock
+// "YYYY-MM-DD HH:MM:SS"): parse both it and now-in-ET as wall time via Date.UTC so the timezone cancels.
+// Null if unparseable. This is the inverter's REPORT time, not our fetch time — how delayed the data is.
 const _wallMs = (s) => { const m=String(s||"").replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2}):(\d{2})(?::(\d{2}))?/); return m? Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0)) : null; };
 const _etNow = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date());
 const ageMin = (s) => { const a=_wallMs(s), b=_wallMs(_etNow()); return (a!=null&&b!=null)? Math.max(0,Math.round((b-a)/60000)) : null; };
 const fmtAge = (m) => m==null?null : m<1?"just now" : m<60?`${m}m ago` : m<1440?`${Math.floor(m/60)}h ${m%60}m ago` : `${Math.floor(m/1440)}d ago`;
-// Current time in the VIEWER's local timezone (browser clock) — used for the live flow timestamp,
-// which must not trust the inverter's own clock (some units report UTC / are 12h off → "zulu").
-const localClock = () => { const d=new Date(); let h=d.getHours(); const ap=h>=12?"PM":"AM"; h=h%12||12; return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()} ${h}:${String(d.getMinutes()).padStart(2,"0")} ${ap}`; };
 // "Updated Xm ago" chip — turns amber past `stale` minutes (data refreshes ~every 5 min, so >10 = a missed report).
 function UpdatedChip({time, stale=10}){
   const m = ageMin(time);
   if(m==null) return null;
   const old = m>stale;
   return <span style={{fontSize:10,fontWeight:600,color:old?"#92400E":FAINT,background:old?"#FDE68A":"transparent",padding:old?"2px 7px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0}}>{old?"⚠ ":""}Updated {fmtAge(m)}</span>;
+}
+// Live freshness chip — seconds since the last FRESH flowrt sample arrived (ticks every 1s on its own).
+// `atMs` is set when the inverter's real-time sample actually advanced (its report time), not on every poll.
+function LiveChip({atMs, stale=30}){
+  const [,setT]=useState(0);
+  useEffect(()=>{ const id=setInterval(()=>setT(t=>t+1),1000); return ()=>clearInterval(id); },[]);
+  if(!atMs) return null;
+  const s = Math.max(0, Math.round((Date.now()-atMs)/1000));
+  const old = s>stale;
+  const label = s<3 ? "just now" : s<60 ? `${s}s ago` : `${Math.floor(s/60)}m ${s%60}s ago`;
+  return <span style={{fontSize:10,fontWeight:600,color:old?"#92400E":BATTERY,background:old?"#FDE68A":"transparent",padding:old?"2px 7px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0,display:"inline-flex",alignItems:"center",gap:3}}>{!old&&<span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/>}Updated {label}</span>;
 }
 
 // Session cache for historical, immutable data (past day/month/year + their MPPT export). The
@@ -686,7 +692,7 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
   );
 }
 
-function SiteHero({statuses, live=null}) {
+function SiteHero({statuses, live=null, liveAt=null}) {
   const v = statuses.filter(s=>s?.ok&&s?.data);
   const updated = v.map(i=>i.data.inverter?.lastUpdateTime).filter(Boolean).sort().slice(-1)[0] || null;
   // Power "now" comes from the live 5s feed when available; energy-today tiles stay on the 5-min status.
@@ -710,7 +716,7 @@ function SiteHero({statuses, live=null}) {
     <div style={{background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"20px 20px",marginBottom:16,border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
-          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>Site Production Now{live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:8,fontWeight:800,color:BATTERY}}>LIVE</span></span>}{!live&&<UpdatedChip time={updated}/>}</div>
+          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>Site Production Now{live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:8,fontWeight:800,color:BATTERY}}>LIVE</span></span>}{live ? <LiveChip atMs={liveAt}/> : <UpdatedChip time={updated}/>}</div>
           <div style={{fontSize:36,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-1px",fontVariantNumeric:"tabular-nums"}}>{fmt(totalPv,2)}</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
@@ -1353,7 +1359,7 @@ function InverterDetailPanel({inv, status}) {
           <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
             {stateLabel&&<span style={{fontSize:11,fontWeight:700,color:stateColor,padding:"3px 10px",borderRadius:12,background:stateColor===BATTERY?"#DCFCE7":"#F1F5F9"}}>{stateLabel}</span>}
             {workLabel&&<span style={{fontSize:10,color:MUTED,fontWeight:500}}>{workLabel}</span>}
-            {d.inverter?.lastUpdateTime&&<span style={{fontSize:10,color:FAINT}}>{d.inverter.lastUpdateTime.slice(11,19)}</span>}
+            <UpdatedChip time={d.inverter?.lastUpdateTime}/>
             {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid #FDE68A`,background:"#FFFBEB",color:"#92400E",fontSize:10,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
           </div>
         </div>
@@ -1519,7 +1525,7 @@ function InverterDetailPanel({inv, status}) {
               {d.inverter?.csbVer     &&<StatTile label="CSB"         value={d.inverter.csbVer}      color={MUTED}/>}
               {d.inverter?.wifiSignal!=null&&<StatTile label="WiFi Signal" value={`${d.inverter.wifiSignal}`} color={MUTED}/>}
               {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<StatTile label="BMS FW"     value={bat.bmsFWVer}           color={MUTED}/>}
-              {d.inverter?.lastUpdateTime&&<StatTile label="Last Update" value={d.inverter.lastUpdateTime.slice(0,16)} color={FAINT}/>}
+              {d.inverter?.lastUpdateTime&&<StatTile label="Last Update" value={fmtAge(ageMin(d.inverter.lastUpdateTime))||d.inverter.lastUpdateTime.slice(11,16)} sub={d.inverter.lastUpdateTime.slice(0,16)} color={FAINT}/>}
             </div>
           </div>
         )}
@@ -1620,7 +1626,7 @@ function FlowDiagram({flow}) {
           <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
           {flow.live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:9,fontWeight:800,color:BATTERY,letterSpacing:"0.04em"}}>LIVE</span></span>}
         </span>
-        {(flow.live||flow.updated)&&<span style={{fontSize:10,color:FAINT,fontVariantNumeric:"tabular-nums"}}>{flow.live?localClock():fmtClock(flow.updated)}</span>}
+        {flow.live ? <LiveChip atMs={flow.liveAt}/> : (flow.updated&&<UpdatedChip time={flow.updated}/>)}
       </div>
       <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
@@ -2600,6 +2606,8 @@ export default function Dashboard() {
   const [statuses, setStatuses] = useState([]);
   const [liveFlow, setLiveFlow] = useState({}); // sn -> live {pv,grid,load,battery,soc,time} from flowrt (~5s)
   const lastLiveAggRef = useRef({ key:null, agg:null }); // last COMPLETE live snapshot (all inverters), per selection
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState(null); // browser time the last FRESH flowrt sample arrived (its report time, not our fetch time)
+  const lastFlowTimesRef = useRef({}); // sn -> last seen flowrt SystemTime, to detect a genuinely NEW sample (not a duplicate poll)
   const [showCompare, setShowCompare] = useState(false);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveError, setLiveError] = useState(null);
@@ -2759,6 +2767,7 @@ export default function Dashboard() {
   // every 5s for the selected inverters while on the Live tab and overlay it on the flow/hero.
   useEffect(() => {
     if(tab!=="live" || !site) return;
+    lastFlowTimesRef.current = {}; setLiveUpdatedAt(null); // reset freshness for the new selection/site
     let alive = true, busy = false;
     const sns = snKey ? snKey.split(",") : [];
     const poll = async () => {
@@ -2767,6 +2776,11 @@ export default function Dashboard() {
         const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
         if(!alive) return;
         setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false) next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
+        // Stamp freshness only when a sample genuinely ADVANCED (its SystemTime changed) — so the age
+        // reflects the inverter's report time, and duplicate polls let the "X ago" honestly grow.
+        let fresh=false;
+        for(const {sn,r} of res){ if(r && r.ok!==false && r.time && lastFlowTimesRef.current[sn]!==r.time){ lastFlowTimesRef.current[sn]=r.time; fresh=true; } }
+        if(fresh) setLiveUpdatedAt(Date.now());
       } catch(e){ /* keep polling */ } finally { busy = false; }
     };
     poll();
@@ -2908,7 +2922,7 @@ export default function Dashboard() {
     const soc = effLive.soc!=null ? effLive.soc : flowAgg.soc;
     flowAgg = { ...flowAgg, pv:effLive.pv, grid:effLive.grid, battery:effLive.battery, load:effLive.load,
       gen:effLive.gen, smartLoad:effLive.smartLoad, soc,
-      updated: effLive.time || flowAgg.updated, live: true,
+      updated: effLive.time || flowAgg.updated, live: true, liveAt: liveUpdatedAt,
       remainKwh: (flowAgg.capKwh!=null && soc!=null) ? flowAgg.capKwh*soc/100 : flowAgg.remainKwh,
       ratePctHr: (flowAgg.capKwh && Math.abs(effLive.battery)>20) ? Math.abs(effLive.battery)/1000/flowAgg.capKwh*100 : null,
       rateSign: effLive.battery>0?"+":"−" };
@@ -2972,7 +2986,7 @@ export default function Dashboard() {
                 ? <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting to Midnite portal…</div>
                 : <>
                   {flowAgg&&<FlowDiagram flow={flowAgg}/>}
-                  {allSelected&&<SiteHero statuses={statuses} live={liveAgg}/>}
+                  {allSelected&&<SiteHero statuses={statuses} live={liveAgg} liveAt={liveUpdatedAt}/>}
                   {allSelected&&<BatteryPanel statuses={statuses}/>}
                   {allSelected&&<LifetimePanel statuses={statuses}/>}
                   {site.inverters.some(i=>i.autoId) && (

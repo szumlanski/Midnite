@@ -387,6 +387,15 @@ If a color genuinely needs changing, confirm with Jason first.
 
 ---
 
+## "Last updated" freshness indicators (data delay, NOT fetch time)
+Every Live-tab surface shows how stale its data actually is, from the inverter's REPORT time — never our fetch
+time. Two chips: **`UpdatedChip`** (`ageMin(lastUpdateTime)` = the 5-min `DataTime`, "Updated Xm ago", amber
+>10 min) on the 5-min surfaces (inverter cards, battery card, hero/flow when not live); **`LiveChip`** (seconds,
+self-ticking each 1s, green ●) on the live `flowrt` surfaces (hero PV + flow when the LIVE overlay is active).
+`liveUpdatedAt` is stamped only when a flowrt sample's `SystemTime` genuinely ADVANCES (a new report), not on
+every poll — so duplicate polls let the "Xs ago" honestly grow and it's timezone-robust (browser clock, not the
+inverter's unreliable clock). Age helpers (`ageMin`/`fmtAge`) compare ET wall-clock via `Date.UTC` so the tz cancels.
+
 ## Live — Power Flow Diagram
 Animated SVG (`FlowDiagram`/`FlowNode`/`FlowEdge`/`InverterGraphic`). Solar (top-left), Grid (top-right),
 Battery (bottom-left), Home (bottom-right) around a center **SVG inverter cabinet** (`InverterGraphic`, a drawn
