@@ -303,6 +303,427 @@ function AppLogin(){
     </AuthShell>
   );
 }
+// ── Landing / marketing page (shown when logged out) ────────────────────────
+function LandingPage(){
+  const [mode,setMode]=useState("signup");
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState(""); const [tc,setTc]=useState(false);
+  const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
+
+  const submit=async(e)=>{
+    e.preventDefault();
+    if(mode==="signup"&&!tc){setErr("Please accept the Terms & Conditions to continue.");return;}
+    if(!supabaseReady){setErr("Configuration error — contact support.");return;}
+    setBusy(true);setErr(null);setMsg(null);
+    try{
+      const{data,error}=mode==="signup"
+        ?await supabase.auth.signUp({email,password:pw})
+        :await supabase.auth.signInWithPassword({email,password:pw});
+      if(error)throw error;
+      if(mode==="signup"&&!data.session)setMsg("Account created! Sign in to continue.");
+    }catch(ex){setErr(ex.message||String(ex));}finally{setBusy(false);}
+  };
+
+  const google=async()=>{
+    if(!supabaseReady)return;
+    setErr(null);
+    const{error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:typeof window!=="undefined"?window.location.origin:undefined}});
+    if(error)setErr(error.message);
+  };
+
+  const scrollToAuth=()=>{const el=document.getElementById("lp-auth");if(el)el.scrollIntoView({behavior:"smooth"});};
+
+  const features=[
+    {
+      tag:"Live Data",title:"Real-Time Power Flow",
+      desc:"Watch solar, battery, grid, and home load update every 5 seconds. Animated flow arrows show exactly where every watt is going — no guessing.",
+      bullets:["Live 5-second refresh","EPS/AIO inverter support","Per-inverter breakdown"],
+      mockup:(
+        <svg viewBox="0 0 460 300" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",borderRadius:16,boxShadow:SHADOW}}>
+          <rect width="460" height="300" rx="16" fill={BG}/>
+          <rect width="460" height="36" rx="16" fill="#0D1F33"/><rect y="20" width="460" height="16" fill="#0D1F33"/>
+          <circle cx="14" cy="18" r="5" fill="#FF6058"/><circle cx="30" cy="18" r="5" fill="#FFBD2E"/><circle cx="46" cy="18" r="5" fill="#28C840"/>
+          <text x="230" y="22" textAnchor="middle" fill="white" fontSize="11" fontFamily="system-ui" opacity="0.7">Live Power Flow</text>
+          <rect x="14" y="52" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
+          <text x="68" y="78" textAnchor="middle" fill={SOLAR} fontSize="22">☀</text>
+          <text x="68" y="94" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Solar</text>
+          <text x="68" y="108" textAnchor="middle" fill={SOLAR} fontSize="12" fontFamily="system-ui" fontWeight="700">8.3 kW</text>
+          <rect x="338" y="52" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
+          <text x="392" y="78" textAnchor="middle" fill={GRID_OUT} fontSize="18">⚡</text>
+          <text x="392" y="94" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Grid</text>
+          <text x="392" y="108" textAnchor="middle" fill={GRID_OUT} fontSize="12" fontFamily="system-ui" fontWeight="700">{"↑ 3.1 kW"}</text>
+          <rect x="163" y="116" width="134" height="76" rx="12" fill="#0D1F33"/>
+          <text x="230" y="142" textAnchor="middle" fill="#F59E0B" fontSize="10" fontFamily="system-ui" fontWeight="700">MIDNITE AIO</text>
+          <text x="230" y="157" textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize="8" fontFamily="system-ui">15kW Inverter</text>
+          <rect x="178" y="165" width="104" height="14" rx="4" fill="rgba(255,255,255,0.1)"/>
+          <rect x="180" y="167" width="82" height="10" rx="3" fill="#22C55E" opacity="0.8"/>
+          <text x="230" y="177" textAnchor="middle" fill="white" fontSize="7" fontFamily="system-ui">SOC 82%</text>
+          <rect x="14" y="220" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
+          <text x="68" y="246" textAnchor="middle" fill={BATTERY} fontSize="18">🔋</text>
+          <text x="68" y="262" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Battery</text>
+          <text x="68" y="276" textAnchor="middle" fill={BATTERY} fontSize="12" fontFamily="system-ui" fontWeight="700">Idle · 82%</text>
+          <rect x="338" y="220" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
+          <text x="392" y="246" textAnchor="middle" fill={LOAD_C} fontSize="18">🏠</text>
+          <text x="392" y="262" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Home</text>
+          <text x="392" y="276" textAnchor="middle" fill={LOAD_C} fontSize="12" fontFamily="system-ui" fontWeight="700">5.2 kW</text>
+          <line x1="122" y1="84" x2="163" y2="140" stroke={SOLAR} strokeWidth="2" strokeDasharray="5,3" opacity="0.7"/>
+          <line x1="297" y1="140" x2="338" y2="84" stroke={GRID_OUT} strokeWidth="2" strokeDasharray="5,3" opacity="0.7"/>
+          <line x1="163" y1="168" x2="122" y2="252" stroke={BORDER} strokeWidth="1.5" opacity="0.6"/>
+          <line x1="297" y1="168" x2="338" y2="252" stroke={LOAD_C} strokeWidth="2" strokeDasharray="5,3" opacity="0.7"/>
+          <rect x="10" y="40" width="48" height="16" rx="8" fill="#22C55E"/>
+          <circle cx="20" cy="48" r="3" fill="white"/>
+          <text x="36" y="52" textAnchor="middle" fill="white" fontSize="8" fontFamily="system-ui" fontWeight="700">LIVE</text>
+        </svg>
+      ),
+    },
+    {
+      tag:"Fleet",title:"Fleet Management",
+      desc:"Manage a whole portfolio of sites from one dashboard. Spot offline systems instantly, see live PV output per site, and drill in with one click.",
+      bullets:["Unlimited sites","Offline detection + alerts","CSV export for reporting"],
+      mockup:(
+        <svg viewBox="0 0 460 258" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",borderRadius:16,boxShadow:SHADOW}}>
+          <rect width="460" height="258" rx="16" fill={BG}/>
+          <rect width="460" height="36" rx="16" fill="#0D1F33"/><rect y="20" width="460" height="16" fill="#0D1F33"/>
+          <circle cx="14" cy="18" r="5" fill="#FF6058"/><circle cx="30" cy="18" r="5" fill="#FFBD2E"/><circle cx="46" cy="18" r="5" fill="#28C840"/>
+          <text x="230" y="22" textAnchor="middle" fill="white" fontSize="11" fontFamily="system-ui" opacity="0.7">Fleet View</text>
+          <rect x="12" y="48" width="96" height="40" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="60" y="63" textAnchor="middle" fill={MUTED} fontSize="8" fontFamily="system-ui">Sites Online</text>
+          <text x="60" y="79" textAnchor="middle" fill={BATTERY} fontSize="14" fontFamily="system-ui" fontWeight="700">7 / 8</text>
+          <rect x="116" y="48" width="96" height="40" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="164" y="63" textAnchor="middle" fill={MUTED} fontSize="8" fontFamily="system-ui">Fleet PV Now</text>
+          <text x="164" y="79" textAnchor="middle" fill={SOLAR} fontSize="14" fontFamily="system-ui" fontWeight="700">42.1 kW</text>
+          <rect x="220" y="48" width="96" height="40" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="268" y="63" textAnchor="middle" fill={MUTED} fontSize="8" fontFamily="system-ui">PV Today</text>
+          <text x="268" y="79" textAnchor="middle" fill={CHART_PROD} fontSize="14" fontFamily="system-ui" fontWeight="700">187 kWh</text>
+          <rect x="324" y="48" width="124" height="40" rx="8" fill="#FEF3C7" stroke="#FCD34D"/>
+          <text x="386" y="63" textAnchor="middle" fill="#92400E" fontSize="8" fontFamily="system-ui">Need Attention</text>
+          <text x="386" y="79" textAnchor="middle" fill="#D97706" fontSize="14" fontFamily="system-ui" fontWeight="700">1 site ⚠</text>
+          <rect x="12" y="100" width="436" height="20" rx="4" fill="#F1EDE8"/>
+          <text x="52" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">SITE</text>
+          <text x="148" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">STATUS</text>
+          <text x="210" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">PV NOW</text>
+          <text x="272" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">BATTERY</text>
+          <text x="342" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">LOAD</text>
+          <text x="410" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">UPDATED</text>
+          <rect x="12" y="122" width="436" height="30" rx="4" fill={CARD}/>
+          <text x="52" y="141" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Wise Naples</text>
+          <rect x="148" y="130" width="42" height="14" rx="7" fill="#DCFCE7"/>
+          <text x="169" y="141" textAnchor="middle" fill={BATTERY} fontSize="7" fontFamily="system-ui" fontWeight="700">Online</text>
+          <text x="210" y="141" fill={SOLAR} fontSize="9" fontFamily="system-ui" fontWeight="600">8.3 kW</text>
+          <text x="272" y="141" fill={BATTERY} fontSize="9" fontFamily="system-ui" fontWeight="600">{"82% ↑"}</text>
+          <text x="342" y="141" fill={LOAD_C} fontSize="9" fontFamily="system-ui">5.2 kW</text>
+          <text x="410" y="141" fill={MUTED} fontSize="8" fontFamily="system-ui">2m ago</text>
+          <rect x="12" y="154" width="436" height="30" rx="4" fill={BG}/>
+          <text x="52" y="173" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Daggett Cayo Costa</text>
+          <rect x="148" y="162" width="42" height="14" rx="7" fill="#DCFCE7"/>
+          <text x="169" y="173" textAnchor="middle" fill={BATTERY} fontSize="7" fontFamily="system-ui" fontWeight="700">Online</text>
+          <text x="210" y="173" fill={SOLAR} fontSize="9" fontFamily="system-ui" fontWeight="600">6.8 kW</text>
+          <text x="272" y="173" fill={BATTERY} fontSize="9" fontFamily="system-ui" fontWeight="600">{"68% →"}</text>
+          <text x="342" y="173" fill={LOAD_C} fontSize="9" fontFamily="system-ui">4.1 kW</text>
+          <text x="410" y="173" fill={MUTED} fontSize="8" fontFamily="system-ui">5m ago</text>
+          <rect x="12" y="186" width="436" height="30" rx="4" fill="#FFF7F7"/>
+          <text x="52" y="205" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Bochan Residence</text>
+          <rect x="148" y="194" width="42" height="14" rx="7" fill="#FEE2E2"/>
+          <text x="169" y="205" textAnchor="middle" fill={GRID_IN} fontSize="7" fontFamily="system-ui" fontWeight="700">Offline</text>
+          <text x="210" y="205" fill={MUTED} fontSize="9" fontFamily="system-ui">—</text>
+          <text x="272" y="205" fill={MUTED} fontSize="9" fontFamily="system-ui">—</text>
+          <text x="342" y="205" fill={MUTED} fontSize="9" fontFamily="system-ui">—</text>
+          <text x="410" y="205" fill={GRID_IN} fontSize="8" fontFamily="system-ui">47m ago</text>
+          <text x="230" y="242" textAnchor="middle" fill={FAINT} fontSize="8" fontFamily="system-ui">+ 5 more sites</text>
+        </svg>
+      ),
+    },
+    {
+      tag:"Alerts",title:"Smart Alerts",
+      desc:"Set threshold alerts for battery SOC, temperature, grid import/export, or device offline events. Alerts fire by email with configurable cooldowns and daily caps.",
+      bullets:["12+ trigger types","Per-device rules","Time-gated alerts (e.g. after 18:00)"],
+      mockup:(
+        <svg viewBox="0 0 460 258" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",borderRadius:16,boxShadow:SHADOW}}>
+          <rect width="460" height="258" rx="16" fill={BG}/>
+          <rect width="460" height="36" rx="16" fill="#0D1F33"/><rect y="20" width="460" height="16" fill="#0D1F33"/>
+          <circle cx="14" cy="18" r="5" fill="#FF6058"/><circle cx="30" cy="18" r="5" fill="#FFBD2E"/><circle cx="46" cy="18" r="5" fill="#28C840"/>
+          <text x="230" y="22" textAnchor="middle" fill="white" fontSize="11" fontFamily="system-ui" opacity="0.7">Notifications · Settings</text>
+          <rect x="12" y="48" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
+          <rect x="22" y="58" width="26" height="26" rx="8" fill="#FEF3C7"/>
+          <text x="35" y="76" textAnchor="middle" fill={SOLAR} fontSize="14">🔋</text>
+          <text x="58" y="68" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Battery SOC below 20%</text>
+          <text x="58" y="83" fill={MUTED} fontSize="8" fontFamily="system-ui">All inverters · Email · 60 min cooldown</text>
+          <rect x="376" y="62" width="34" height="16" rx="8" fill={BATTERY} opacity="0.2"/>
+          <rect x="382" y="66" width="20" height="8" rx="4" fill={BATTERY}/>
+          <circle cx="402" cy="70" r="6" fill={BATTERY}/>
+          <rect x="12" y="106" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
+          <rect x="22" y="116" width="26" height="26" rx="8" fill="#FEE2E2"/>
+          <text x="35" y="134" textAnchor="middle" fill={GRID_IN} fontSize="14">⚡</text>
+          <text x="58" y="126" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Grid import above 2 kW</text>
+          <text x="58" y="141" fill={MUTED} fontSize="8" fontFamily="system-ui">Wise Naples · Email · 30 min cooldown</text>
+          <rect x="376" y="120" width="34" height="16" rx="8" fill="#E5E7EB"/>
+          <circle cx="388" cy="128" r="6" fill="#9CA3AF"/>
+          <rect x="12" y="164" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
+          <rect x="22" y="174" width="26" height="26" rx="8" fill="#EFF6FF"/>
+          <text x="35" y="192" textAnchor="middle" fill={LOAD_C} fontSize="14">📡</text>
+          <text x="58" y="184" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Device offline</text>
+          <text x="58" y="199" fill={MUTED} fontSize="8" fontFamily="system-ui">All sites · Email · 120 min cooldown · After 08:00</text>
+          <rect x="376" y="178" width="34" height="16" rx="8" fill={BATTERY} opacity="0.2"/>
+          <rect x="382" y="182" width="20" height="8" rx="4" fill={BATTERY}/>
+          <circle cx="402" cy="186" r="6" fill={BATTERY}/>
+          <rect x="12" y="222" width="436" height="24" rx="8" fill="#F0FDF4" stroke="#BBF7D0"/>
+          <text x="20" y="238" fill={BATTERY} fontSize="8" fontFamily="system-ui">✓ Test alert sent — 3 of 50 daily emails used</text>
+        </svg>
+      ),
+    },
+    {
+      tag:"Analytics",title:"Deep Analytics",
+      desc:"Monthly and yearly production history, per-MPPT intraday breakdown, and an Explorer to chart any raw inverter parameter over up to 7 days at 5-minute resolution.",
+      bullets:["Per-MPPT day charts","Explorer: 60+ metrics","Month ↔ Day consistency"],
+      mockup:(
+        <svg viewBox="0 0 460 258" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",borderRadius:16,boxShadow:SHADOW}}>
+          <rect width="460" height="258" rx="16" fill={BG}/>
+          <rect width="460" height="36" rx="16" fill="#0D1F33"/><rect y="20" width="460" height="16" fill="#0D1F33"/>
+          <circle cx="14" cy="18" r="5" fill="#FF6058"/><circle cx="30" cy="18" r="5" fill="#FFBD2E"/><circle cx="46" cy="18" r="5" fill="#28C840"/>
+          <text x="230" y="22" textAnchor="middle" fill="white" fontSize="11" fontFamily="system-ui" opacity="0.7">Month · June 2025</text>
+          <rect x="12" y="48" width="100" height="38" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="62" y="62" textAnchor="middle" fill={MUTED} fontSize="7" fontFamily="system-ui">Produced</text>
+          <text x="62" y="78" textAnchor="middle" fill={CHART_PROD} fontSize="13" fontFamily="system-ui" fontWeight="700">412 kWh</text>
+          <rect x="120" y="48" width="100" height="38" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="170" y="62" textAnchor="middle" fill={MUTED} fontSize="7" fontFamily="system-ui">Consumed</text>
+          <text x="170" y="78" textAnchor="middle" fill={CHART_CONS} fontSize="13" fontFamily="system-ui" fontWeight="700">298 kWh</text>
+          <rect x="228" y="48" width="100" height="38" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="278" y="62" textAnchor="middle" fill={MUTED} fontSize="7" fontFamily="system-ui">Exported</text>
+          <text x="278" y="78" textAnchor="middle" fill={GRID_OUT} fontSize="13" fontFamily="system-ui" fontWeight="700">114 kWh</text>
+          <rect x="336" y="48" width="112" height="38" rx="8" fill={CARD} stroke={BORDER}/>
+          <text x="392" y="62" textAnchor="middle" fill={MUTED} fontSize="7" fontFamily="system-ui">Self-sufficient</text>
+          <text x="392" y="78" textAnchor="middle" fill={BATTERY} fontSize="13" fontFamily="system-ui" fontWeight="700">94%</text>
+          <rect x="12" y="96" width="436" height="148" rx="10" fill={CARD} stroke={BORDER}/>
+          {[0,1,2].map(i=><line key={i} x1="38" y1={130+i*36} x2="440" y2={130+i*36} stroke={BORDER} strokeWidth="0.5"/>)}
+          {[18,20,22,15,25,28,24,22,20,18,26,24,22,20,28,30,27,25,22,20,24,26,22,19,24,22,25,23,21,28].map((h,i)=>{
+            const x=40+i*13;
+            return <g key={i}><rect x={x} y={202-h*2.8} width={6} height={h*2.8} fill={CHART_PROD} opacity="0.85" rx="1"/><rect x={x} y={202} width={6} height={h*2.2} fill={CHART_CONS} opacity="0.8" rx="1"/></g>;
+          })}
+          <rect x="280" y="228" width="8" height="8" rx="1" fill={CHART_PROD} opacity="0.85"/>
+          <text x="293" y="236" fill={MUTED} fontSize="8" fontFamily="system-ui">Produced</text>
+          <rect x="346" y="228" width="8" height="8" rx="1" fill={CHART_CONS} opacity="0.8"/>
+          <text x="359" y="236" fill={MUTED} fontSize="8" fontFamily="system-ui">Consumed</text>
+        </svg>
+      ),
+    },
+  ];
+
+  const steps=[
+    {n:"1",title:"Create your account",body:"Sign up with email — no credit card needed. Your account is free during pre-launch."},
+    {n:"2",title:"Link your Midnite inverter",body:"Enter your Midnite portal credentials once. They're encrypted with AES-256-GCM and stored securely — never visible again."},
+    {n:"3",title:"Monitor everything",body:"Your dashboard populates instantly. Live data, charts, alerts, and fleet view are all ready."},
+  ];
+
+  const freeFt=["Live power flow (5-sec refresh)","Day / Month / Year charts","Per-MPPT intraday breakdown","Battery + temperature monitoring","Email alerts (50/day)","1 Midnite account linked"];
+  const proFt=["Everything in Free","Fleet view (multi-site)","Site sharing (view-only)","Explorer — 60+ metrics, 7-day range","Multiple linked accounts","CSV export","Priority support"];
+
+  const contactEmail=()=>['jason+midnite','floridasolardesigngroup.com'].join('@');
+
+  return (<>
+    <PageHead title="Midnite Sentinel — Solar Monitoring Platform"/>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+      *{box-sizing:border-box;}
+      .lp-hero{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+      .lp-feat{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+      .lp-feat.rev{direction:rtl;}
+      .lp-feat.rev>*{direction:ltr;}
+      .lp-price{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:800px;margin:0 auto;}
+      .lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
+      @media(max-width:768px){
+        .lp-hero,.lp-feat,.lp-price,.lp-steps{grid-template-columns:1fr;}
+        .lp-feat.rev{direction:ltr;}
+      }
+      .lp-pbtn{background:linear-gradient(135deg,#FCD34D,#D97706);color:#7C2D12;border:none;border-radius:10px;padding:13px 28px;font-size:15px;font-weight:700;font-family:${SANS};cursor:pointer;box-shadow:0 4px 16px rgba(217,119,6,0.3);transition:opacity .15s;}
+      .lp-pbtn:hover{opacity:.9;}
+      .lp-pbtn:disabled{background:#E5E7EB;color:${FAINT};box-shadow:none;cursor:default;opacity:1;}
+      .lp-obtn{background:transparent;color:${SOLAR};border:2px solid ${SOLAR};border-radius:10px;padding:11px 24px;font-size:14px;font-weight:700;font-family:${SANS};cursor:pointer;transition:all .15s;}
+      .lp-obtn:hover{background:${SOLAR};color:white;}
+      .lp-chk::before{content:"✓";color:${BATTERY};font-weight:700;margin-right:8px;}
+      .lp-flink{color:rgba(255,255,255,0.6);text-decoration:none;font-weight:500;}
+      .lp-flink:hover{color:white;}
+      .lp-nav-link{font-size:14px;font-weight:600;color:${MUTED};text-decoration:none;}
+      .lp-nav-link:hover{color:${TEXT};}
+    `}</style>
+
+    {/* NAV */}
+    <nav style={{position:"sticky",top:0,zIndex:100,background:"rgba(247,244,239,0.92)",backdropFilter:"blur(12px)",borderBottom:`1px solid ${BORDER}`,padding:"0 24px"}}>
+      <div style={{maxWidth:1100,margin:"0 auto",height:60,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <a href="/" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
+          <Logo size={32}/>
+          <span style={{fontWeight:800,fontSize:16,color:TEXT,letterSpacing:"-0.5px"}}>Midnite Sentinel</span>
+        </a>
+        <div style={{display:"flex",alignItems:"center",gap:20}}>
+          <a href="/faq" className="lp-nav-link">FAQ</a>
+          <a href="/terms" className="lp-nav-link">Terms</a>
+          <button className="lp-pbtn" style={{padding:"9px 20px",fontSize:13}} onClick={scrollToAuth}>Sign in</button>
+        </div>
+      </div>
+    </nav>
+
+    {/* HERO */}
+    <section style={{background:`linear-gradient(160deg,#FFFBF0 0%,${BG} 60%)`,padding:"72px 24px 80px"}}>
+      <div style={{maxWidth:1100,margin:"0 auto"}} className="lp-hero">
+        <div>
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:700,color:"#92400E",marginBottom:20}}>
+            ✦ Pre-launch — all features free
+          </div>
+          <h1 style={{fontSize:"clamp(32px,5vw,52px)",fontWeight:800,lineHeight:1.15,letterSpacing:"-1.5px",color:TEXT,marginBottom:20}}>
+            Monitor Your Solar<br/><span style={{color:SOLAR}}>In Real Time</span>
+          </h1>
+          <p style={{fontSize:17,lineHeight:1.7,color:MUTED,marginBottom:32,maxWidth:480}}>
+            Midnite Sentinel gives solar owners and installers a live window into every watt — power flow, battery state, grid interaction, and fleet health — all in one clean dashboard.
+          </p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:16}}>
+            {["Live 5-sec updates","Email alerts","Fleet management","Site sharing"].map(f=>(
+              <span key={f} style={{fontSize:13,color:MUTED,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:BATTERY,fontWeight:700}}>✓</span>{f}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div id="lp-auth">
+          <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW,border:`1px solid ${BORDER}`}}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{fontWeight:800,fontSize:18,color:TEXT,marginBottom:4}}>{mode==="signup"?"Start monitoring free":"Welcome back"}</div>
+              <div style={{fontSize:13,color:MUTED}}>{mode==="signup"?"No credit card required.":"Sign in to your portal."}</div>
+            </div>
+            {err&&<div style={errBox}>{err}</div>}
+            {msg&&<div style={okBox}>{msg}</div>}
+            {GOOGLE_ON&&<>
+              <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:14,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:14}}><GoogleG/> Continue with Google</button>
+              <div style={{display:"flex",alignItems:"center",gap:10,margin:"0 0 14px",color:FAINT,fontSize:12}}>
+                <div style={{flex:1,height:1,background:BORDER}}/>or<div style={{flex:1,height:1,background:BORDER}}/>
+              </div>
+            </>}
+            <form onSubmit={submit}>
+              <div style={{marginBottom:12}}><label style={lblS}>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" style={authInput}/></div>
+              <div style={{marginBottom:14}}><label style={lblS}>Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} autoComplete={mode==="signup"?"new-password":"current-password"} placeholder={mode==="signup"?"Choose a password":"Your password"} style={authInput}/></div>
+              {mode==="signup"&&(
+                <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",fontSize:12,color:MUTED,marginBottom:16,lineHeight:1.5}}>
+                  <input type="checkbox" checked={tc} onChange={e=>setTc(e.target.checked)} style={{marginTop:2,accentColor:SOLAR,cursor:"pointer",flexShrink:0}}/>
+                  <span>I agree to the <a href="/terms" target="_blank" style={{color:SOLAR,fontWeight:600}}>Terms &amp; Conditions</a>. During pre-launch, all features are free — pricing TBD.</span>
+                </label>
+              )}
+              <button type="submit" disabled={busy||!email||!pw||(mode==="signup"&&!tc)} className="lp-pbtn" style={{width:"100%"}}>
+                {busy?"Please wait…":mode==="signup"?"Create free account":"Sign in"}
+              </button>
+            </form>
+            <div style={{textAlign:"center",marginTop:14,fontSize:13,color:MUTED}}>
+              {mode==="signup"?"Already have an account? ":"New here? "}
+              <button onClick={()=>{setMode(mode==="signup"?"signin":"signup");setErr(null);setMsg(null);setTc(false);}} style={{border:"none",background:"none",color:SOLAR,fontWeight:700,cursor:"pointer",fontFamily:SANS,fontSize:13}}>
+                {mode==="signup"?"Sign in":"Create free account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {/* FEATURES */}
+    <section style={{padding:"80px 24px",background:BG}}>
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        <div style={{textAlign:"center",marginBottom:64}}>
+          <h2 style={{fontSize:"clamp(26px,4vw,40px)",fontWeight:800,letterSpacing:"-1px",color:TEXT,marginBottom:12}}>Everything your system needs</h2>
+          <p style={{fontSize:16,color:MUTED,maxWidth:540,margin:"0 auto"}}>Built for Midnite solar systems — from a single home installation to a full installer fleet.</p>
+        </div>
+        {features.map((f,i)=>(
+          <div key={i} className={`lp-feat${i%2===1?" rev":""}`} style={{marginBottom:i<features.length-1?80:0}}>
+            <div>
+              <div style={{display:"inline-block",background:"#FEF3C7",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700,color:"#92400E",marginBottom:14}}>{f.tag}</div>
+              <h3 style={{fontSize:"clamp(22px,3vw,32px)",fontWeight:800,letterSpacing:"-0.5px",color:TEXT,marginBottom:14}}>{f.title}</h3>
+              <p style={{fontSize:15,lineHeight:1.7,color:MUTED,marginBottom:20}}>{f.desc}</p>
+              <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:8,padding:0}}>
+                {f.bullets.map(b=><li key={b} className="lp-chk" style={{fontSize:14,color:TEXT}}>{b}</li>)}
+              </ul>
+            </div>
+            <div>{f.mockup}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    {/* HOW IT WORKS */}
+    <section style={{padding:"80px 24px",background:CARD,borderTop:`1px solid ${BORDER}`,borderBottom:`1px solid ${BORDER}`}}>
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        <div style={{textAlign:"center",marginBottom:48}}>
+          <h2 style={{fontSize:"clamp(26px,4vw,40px)",fontWeight:800,letterSpacing:"-1px",color:TEXT,marginBottom:12}}>Up and running in minutes</h2>
+        </div>
+        <div className="lp-steps">
+          {steps.map((s,i)=>(
+            <div key={i} style={{background:BG,borderRadius:16,padding:28,border:`1px solid ${BORDER}`}}>
+              <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:20,color:"#7C2D12",marginBottom:16}}>{s.n}</div>
+              <h4 style={{fontWeight:700,fontSize:16,color:TEXT,marginBottom:8}}>{s.title}</h4>
+              <p style={{fontSize:14,color:MUTED,lineHeight:1.6}}>{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    {/* PRICING */}
+    <section style={{padding:"80px 24px",background:BG}}>
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <h2 style={{fontSize:"clamp(26px,4vw,40px)",fontWeight:800,letterSpacing:"-1px",color:TEXT,marginBottom:16}}>Simple pricing</h2>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"6px 16px",fontSize:13,fontWeight:700,color:"#92400E"}}>
+            ✦ Pre-launch: Pro features free for all users — pricing TBD
+          </div>
+        </div>
+        <div className="lp-price">
+          <div style={{background:CARD,borderRadius:20,padding:32,border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM}}>
+            <div style={{fontWeight:700,fontSize:11,color:MUTED,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Free</div>
+            <div style={{fontSize:36,fontWeight:800,color:TEXT,marginBottom:4}}>$0<span style={{fontSize:14,fontWeight:500,color:MUTED}}>/mo</span></div>
+            <div style={{fontSize:13,color:MUTED,marginBottom:24}}>Forever free for individual owners</div>
+            <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
+              {freeFt.map(f=><li key={f} className="lp-chk" style={{fontSize:13,color:TEXT}}>{f}</li>)}
+            </ul>
+            <button className="lp-obtn" style={{width:"100%"}} onClick={scrollToAuth}>Get started free</button>
+          </div>
+          <div style={{background:"#0D1F33",borderRadius:20,padding:32,border:"2px solid #F59E0B",boxShadow:"0 8px 32px rgba(217,119,6,0.2)",position:"relative"}}>
+            <div style={{position:"absolute",top:16,right:16,background:"#F59E0B",borderRadius:12,padding:"3px 10px",fontSize:11,fontWeight:700,color:"#7C2D12"}}>Pre-launch: FREE</div>
+            <div style={{fontWeight:700,fontSize:11,color:"#F59E0B",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Pro</div>
+            <div style={{fontSize:36,fontWeight:800,color:"white",marginBottom:4}}>TBD<span style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,0.5)"}}>/mo</span></div>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginBottom:24}}>For installers managing a fleet</div>
+            <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
+              {proFt.map(f=><li key={f} style={{fontSize:13,color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:8}}><span style={{color:"#F59E0B",fontWeight:700}}>✓</span>{f}</li>)}
+            </ul>
+            <button className="lp-pbtn" style={{width:"100%"}} onClick={scrollToAuth}>Start free during pre-launch</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {/* FAQ CTA */}
+    <section style={{padding:"60px 24px",background:CARD,borderTop:`1px solid ${BORDER}`}}>
+      <div style={{maxWidth:700,margin:"0 auto",textAlign:"center"}}>
+        <h2 style={{fontSize:"clamp(22px,3vw,32px)",fontWeight:800,color:TEXT,marginBottom:12}}>Questions?</h2>
+        <p style={{fontSize:15,color:MUTED,marginBottom:28,lineHeight:1.6}}>Our FAQ covers everything from getting started to advanced fleet features. Or email us directly.</p>
+        <div style={{display:"flex",justifyContent:"center",gap:16,flexWrap:"wrap"}}>
+          <a href="/faq" style={{textDecoration:"none"}}><button className="lp-pbtn">Read the FAQ</button></a>
+          <a href={"mailto:"+contactEmail()} style={{textDecoration:"none"}}><button className="lp-obtn">Email us</button></a>
+        </div>
+      </div>
+    </section>
+
+    {/* FOOTER */}
+    <footer style={{background:"#0D1F33",padding:"40px 24px",color:"rgba(255,255,255,0.5)",fontSize:13,fontFamily:SANS}}>
+      <div style={{maxWidth:1100,margin:"0 auto",display:"flex",flexWrap:"wrap",gap:24,justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <Logo size={28}/>
+          <div>
+            <div style={{fontWeight:700,color:"white",fontSize:14}}>Midnite Sentinel</div>
+            <div style={{fontSize:11}}>{`© ${new Date().getFullYear()} Second Stream LLC. All rights reserved.`}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+          <a href="/faq" className="lp-flink">FAQ</a>
+          <a href="/terms" className="lp-flink">Terms &amp; Conditions</a>
+          <a href={"mailto:"+contactEmail()} className="lp-flink">Contact</a>
+        </div>
+      </div>
+    </footer>
+  </>);
+}
 // First-run: connect a Midnite account to the signed-in app account.
 function LinkMidnite({email,onLinked,onSignOut}){
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(null); const [busy,setBusy]=useState(false);
@@ -3335,7 +3756,7 @@ export default function Dashboard() {
   const activeIsShared = sharedAccounts.some(a=>a.id===activeAccountId);
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
-  if(authState==="appauth") return <AppLogin/>;
+  if(authState==="appauth") return <LandingPage/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
   if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos} onPhotoChanged={reloadAccounts} readOnly={sharedAccounts.some(a=>a.id===activeAccountId)}/>;
 
