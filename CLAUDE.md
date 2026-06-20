@@ -564,8 +564,20 @@ list with enable/disable/delete, an add-form generated from the trigger metadata
 `send_hour`/`timezone`/`site_name`/`last_sent_date` columns added idempotently). All RLS-gated to the owning
 user; all writes go through the service-role proxy + heartbeat/digest crons.
 
-**Env vars (Vercel):** `RESEND_API_KEY` (enables email — without it alerts evaluate but don't send),
-`ALERTS_FROM_EMAIL` (e.g. `Midnite Sentinel <alerts@yourdomain>`; defaults to Resend's onboarding sender),
+**Email transport (`lib/notifications/deliver.js`) — first configured wins:**
+1. **SMTP** (`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`, optional `SMTP_SECURE`) — any SMTP relay; **needs no
+   domain verification**, so it's the pre-launch "send now" path. Gmail/Google Workspace: `SMTP_HOST=smtp.gmail.com`,
+   `SMTP_PORT=465`, `SMTP_USER=you@floridasolardesigngroup.com`, `SMTP_PASS=<16-char Google App Password>` (requires
+   2-Step Verification on the Google account; create at myaccount.google.com → Security → App passwords). Nodemailer
+   is lazy-imported so it never reaches the client bundle.
+2. **Resend** (`RESEND_API_KEY`) — used only if SMTP isn't set. Needs a **verified domain** to email arbitrary
+   recipients; `onboarding@resend.dev` (the default From) only reaches your own Resend-account email. Note: the
+   Resend sending domain is **independent of the app's host** — verify any domain you own (e.g.
+   `floridasolardesigngroup.com`) and set `ALERTS_FROM_EMAIL`; the Vercel subdomain is irrelevant.
+
+**Env vars (Vercel):** the transport vars above, plus
+`ALERTS_FROM_EMAIL` (e.g. `Midnite Sentinel <alerts@yourdomain>`; for SMTP, Gmail rewrites the From to the
+authed user unless it's an allowed Send-As alias; defaults to `SMTP_USER` then Resend's onboarding sender),
 `CRON_SECRET` (protects the heartbeat; Vercel Cron sends it as `Authorization: Bearer`), optional
 `ALERTS_DAILY_CAP` (default 50) and `NEXT_PUBLIC_APP_URL` (email link). **Entitlement** = all signed-in users
 (centralized `isEntitled()` — flip to paid later without touching the engine). **Note:** sub-daily Vercel Cron
@@ -576,7 +588,7 @@ user; all writes go through the service-role proxy + heartbeat/digest crons.
 
 ## Daily Digest (morning recap email)
 A configurable per-user **daily digest** email that recaps **yesterday's** performance with charts. Built on top
-of the notifications infra (same Resend delivery + `CRON_SECRET`). **A "digest" = one config row per user**
+of the notifications infra (same `deliver.js` transport — SMTP or Resend — + `CRON_SECRET`). **A "digest" = one config row per user**
 (`notification_digests`, keyed `user_id,frequency='daily'`).
 
 **Architecture (mirrors the alerts split — pure core, impure shell):**

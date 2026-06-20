@@ -331,7 +331,7 @@ function LandingPage(){
   };
 
   const scrollToAuth=(target)=>{
-    if(target&&target!==mode){setMode(target);setErr(null);setMsg(null);if(target==="signin")setTc(false);}
+    if(target){setMode(target);setErr(null);setMsg(null);if(target!=="signup")setTc(false);}
     const el=document.getElementById("lp-auth");if(el)el.scrollIntoView({behavior:"smooth"});
   };
 
