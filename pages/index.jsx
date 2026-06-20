@@ -749,7 +749,7 @@ function SiteSelector({sites, onSelect, onLogout, onFleet}) {
 }
 
 // ── Fleet View — sortable status + metrics table for multi-site (installer/admin) accounts ──────────
-function FleetView({ sites, onPick, onBack, onLogout }){
+function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={} }){
   const [data, setData] = useState({});        // site.name -> { loading, results, error }
   const [sortKey, setSortKey] = useState("status");
   const [sortDir, setSortDir] = useState(1);   // 1 asc, -1 desc
@@ -757,6 +757,12 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   const [filter, setFilter] = useState("all"); // all | online | issues
   const [busy, setBusy] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [preview, setPreview] = useState(null); // {url,x,y} — hover-expanded site photo (desktop)
+  // Position the expanded preview next to the hovered thumb, clamped on-screen (escapes the table's overflow).
+  const showPreview = (e, url)=>{ const r=e.currentTarget.getBoundingClientRect(); const pw=210, ph=210;
+    let x=r.right+12; if(x+pw>window.innerWidth) x=r.left-pw-12; if(x<8) x=8;
+    let y=r.top-(ph-r.height)/2; y=Math.max(8,Math.min(y,window.innerHeight-ph-8));
+    setPreview({url,x,y}); };
 
   const load = useCallback(()=>{
     if(!sites.length) return;
@@ -846,6 +852,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   };
 
   const cols=[
+    {k:"photo",label:"",a:"left",nosort:true},
     {k:"name",label:"Site",a:"left"},{k:"status",label:"Status",a:"left"},
     {k:"pv",label:"PV Now",a:"right"},{k:"load",label:"Load",a:"right"},
     {k:"soc",label:"Battery",a:"right"},{k:"grid",label:"Grid",a:"right"},
@@ -903,7 +910,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
 
           <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
             <div style={{overflow:"auto",maxHeight:"min(70vh,680px)"}}>
-              <table style={{borderCollapse:"collapse",width:"100%",minWidth:820}}>
+              <table style={{borderCollapse:"collapse",width:"100%",minWidth:864}}>
                 <thead><tr>
                   {cols.map(c=>(
                     <th key={c.k} onClick={()=>!c.nosort&&setSort(c.k)} style={{...th,textAlign:c.a,cursor:c.nosort?"default":"pointer",color:sortKey===c.k?TEXT:FAINT}}>
@@ -918,6 +925,11 @@ function FleetView({ sites, onPick, onBack, onLogout }){
                     const chg=m.batNet>20, dis=m.batNet<-20;
                     return (
                       <tr key={m.site.name} onClick={()=>onPick(m.site)} className="fleet-row" style={{cursor:"pointer"}}>
+                        <td style={{...td,padding:"6px 8px 6px 12px",width:44}}>
+                          {sitePhotos[m.site.name]
+                            ? <img src={sitePhotos[m.site.name]} alt="" onMouseEnter={e=>showPreview(e,sitePhotos[m.site.name])} onMouseLeave={()=>setPreview(null)} style={{width:30,height:30,borderRadius:7,objectFit:"cover",border:`1px solid ${BORDER}`,display:"block",cursor:"pointer"}}/>
+                            : <div style={{width:30,height:30,borderRadius:7,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>}
+                        </td>
                         <td style={{...td,maxWidth:240}}>
                           <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
                           <div style={{fontSize:11,color:FAINT}}>{m.site.installer||`${m.total} inverter${m.total!==1?"s":""}`}</div>
@@ -943,6 +955,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
                   })}
                   {rows.length>1&&(()=>{ const t=rows.reduce((a,m)=>({pv:a.pv+(m.pv||0),load:a.load+(m.load||0),pvToday:a.pvToday+(m.pvToday||0),exp:a.exp+(m.expToday||0)}),{pv:0,load:0,pvToday:0,exp:0}); return (
                     <tr style={{background:"#FBF8F3",position:"sticky",bottom:0}}>
+                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
                       <td style={{...td,fontWeight:800,borderTop:`2px solid ${BORDER}`}}>{rows.length} sites</td>
                       <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
                       <td style={{...td,textAlign:"right",fontWeight:800,color:SOLAR,borderTop:`2px solid ${BORDER}`}}>{fmt(t.pv,1)}</td>
@@ -962,6 +975,11 @@ function FleetView({ sites, onPick, onBack, onLogout }){
           <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status is the live fleet fetch; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
         </div>
       </div>
+      {preview && (
+        <div style={{position:"fixed",left:preview.x,top:preview.y,zIndex:1000,pointerEvents:"none",animation:"fadeUp 0.12s ease"}}>
+          <img src={preview.url} alt="" style={{width:200,height:200,objectFit:"cover",borderRadius:12,border:`3px solid ${CARD}`,boxShadow:"0 16px 44px rgba(0,0,0,0.34)"}}/>
+        </div>
+      )}
     </>
   );
 }
@@ -3268,7 +3286,7 @@ export default function Dashboard() {
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <AppLogin/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
-  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout}/>;
+  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos}/>;
 
   return (
     <>

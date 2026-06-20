@@ -220,3 +220,11 @@ drop policy if exists "site shares read" on public.site_shares;
 create policy "site shares read" on public.site_shares for select
   using (auth.uid() = owner_user_id or auth.uid() = shared_with_user_id);
 
+-- ── Reload PostgREST's schema cache ─────────────────────────────────────────
+-- Supabase's REST layer (PostgREST, which supabase-js talks to) keeps an in-memory
+-- schema cache. After creating a table it can still report PGRST205 / "Could not
+-- find the table in the schema cache" until that cache reloads. This NOTIFY forces
+-- an immediate reload so the new tables/policies are visible right away. Harmless to
+-- re-run. (If you ever see "isn't set up yet" right after running the DDL, run this
+-- one line on its own.)
+notify pgrst, 'reload schema';
