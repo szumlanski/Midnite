@@ -231,12 +231,16 @@ const PageHead = () => (
       .inv-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1)!important}
       .fleet-row{transition:background 0.12s}
       .fleet-row:hover{background:#FAF7F2}
+      .fleet-table{display:block}
+      .fleet-cards{display:none}
       .inv-scroll::-webkit-scrollbar{display:none}
       .inv-scroll{-ms-overflow-style:none;scrollbar-width:none}
       @media(max-width:640px){
         .bottom-nav{display:flex!important}
         .top-tabs{display:none!important}
         .page-pad{padding-bottom:80px!important}
+        .fleet-table{display:none!important}
+        .fleet-cards{display:grid!important;grid-template-columns:1fr;gap:10px}
       }
       @media(min-width:641px){
         .bottom-nav{display:none!important}
@@ -736,8 +740,8 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   const Sk=()=> <span style={{display:"inline-block",width:46,height:11,borderRadius:4,background:"#ECE7E0",animation:"pulse 1.4s infinite"}}/>;
   const th={padding:"9px 12px",fontSize:10.5,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",userSelect:"none",position:"sticky",top:0,background:CARD,borderBottom:`1px solid ${BORDER}`,zIndex:1};
   const td={padding:"11px 12px",fontSize:13,color:TEXT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",borderBottom:`1px solid ${BORDER}`};
-  const kpi=(label,value,color)=>(
-    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"12px 14px",boxShadow:SHADOW_SM}}>
+  const kpi=(label,value,color,onClick,active)=>(
+    <div onClick={onClick} style={{background:active?"#FFFBEB":CARD,border:`1px solid ${active?SOLAR:BORDER}`,borderRadius:12,padding:"12px 14px",boxShadow:SHADOW_SM,cursor:onClick?"pointer":"default"}}>
       <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
       <div style={{fontSize:20,fontWeight:800,color:color||TEXT,marginTop:3,fontVariantNumeric:"tabular-nums"}}>{value}</div>
     </div>
@@ -766,9 +770,9 @@ function FleetView({ sites, onPick, onBack, onLogout }){
 
         <div style={{maxWidth:1180,margin:"0 auto",padding:"18px 16px 32px",animation:"fadeUp 0.35s ease"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:16}}>
-            {kpi("Sites",sites.length)}
-            {kpi("Online",onlineCount,BATTERY)}
-            {kpi("Need Attention",issueCount,issueCount>0?SOLAR:FAINT)}
+            {kpi("Sites",sites.length,TEXT,()=>setFilter("all"),filter==="all")}
+            {kpi("Online",onlineCount,BATTERY,()=>setFilter("online"),filter==="online")}
+            {kpi("Need Attention",issueCount,issueCount>0?SOLAR:FAINT,()=>setFilter("issues"),filter==="issues")}
             {kpi("Fleet PV Now",fmt(totalPv,1),SOLAR)}
             {kpi("Fleet PV Today",fmtE(totalPvToday),TEXT)}
           </div>
@@ -782,7 +786,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
             {lastRefresh&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>as of {lastRefresh.toLocaleTimeString()}</span>}
           </div>
 
-          <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
+          <div className="fleet-table" style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
             <div style={{overflow:"auto",maxHeight:"min(70vh,680px)"}}>
               <table style={{borderCollapse:"collapse",width:"100%",minWidth:820}}>
                 <thead><tr>
@@ -839,7 +843,36 @@ function FleetView({ sites, onPick, onBack, onLogout }){
               </table>
             </div>
           </div>
-          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status from the fleet feed; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
+
+          {/* Mobile card layout (replaces the table under 640px) */}
+          <div className="fleet-cards">
+            {rows.length===0&&<div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"24px 0"}}>No sites match.</div>}
+            {rows.map(m=>{
+              const imp=m.gridNet>50, exp=m.gridNet<-50, chg=m.batNet>20, dis=m.batNet<-20;
+              const mc=(label,node)=>(<div><div style={{fontSize:9.5,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</div><div style={{fontSize:14,fontWeight:700,color:TEXT,marginTop:1,fontVariantNumeric:"tabular-nums"}}>{node}</div></div>);
+              return (
+                <button key={m.site.name} onClick={()=>onPick(m.site)} style={{textAlign:"left",background:CARD,border:`1px solid ${BORDER}`,borderLeft:`4px solid ${m.status.color}`,borderRadius:12,padding:"13px 14px",cursor:"pointer",boxShadow:SHADOW_SM,display:"flex",flexDirection:"column",gap:11,width:"100%",fontFamily:SANS}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontWeight:700,color:TEXT,fontSize:15}}>{m.site.name}</div>
+                      <div style={{fontSize:11,color:FAINT,marginTop:1}}>{(m.invOnline??m.on)}/{m.total} online{m.site.installer?` · ${m.site.installer}`:""}</div>
+                    </div>
+                    <span style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:m.status.color,whiteSpace:"nowrap"}}><span style={{width:7,height:7,borderRadius:"50%",background:m.status.color}}/>{m.status.label}</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                    {mc("PV Now", m.loading?<Sk/>:<span style={{color:m.pv>0?SOLAR:TEXT}}>{fmt(m.pv,1)}</span>)}
+                    {mc("Load", m.loading?<Sk/>:fmt(m.load,1))}
+                    {mc("Battery", m.loading?<Sk/>:(m.soc==null?<span style={{color:FAINT}}>—</span>:<span style={{color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?" ↑":dis?" ↓":""}</span>))}
+                    {mc("Grid", m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:FAINT}}>—</span>))}
+                    {mc("PV Today", m.loading?<Sk/>:fmtE(m.pvToday))}
+                    {mc("Exported", m.loading?<Sk/>:(m.expToday>0?fmtE(m.expToday):<span style={{color:FAINT}}>—</span>))}
+                  </div>
+                  {!m.loading&&m.updated&&<UpdatedChip time={m.updated}/>}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a {""}site to open it. Status from the fleet feed; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
         </div>
       </div>
     </>
