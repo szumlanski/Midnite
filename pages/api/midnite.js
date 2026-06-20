@@ -449,6 +449,15 @@ export default async function handler(req, res) {
           const { data: ownerProfs } = await sb.from("profiles").select("id,display_name,email").in("id", ownerUserIds);
           const profById = Object.fromEntries((ownerProfs || []).map(p => [p.id, p]));
           sharedAccounts = (oaccts || []).map(a => { const op = profById[a.user_id]; return { id: a.id, label: a.label || a.midnite_username, account_type: a.account_type, shared: true, ownerName: op?.display_name || op?.email || "a Sentinel user", sites: shares.filter(s => s.owner_account_id === a.id).map(s => s.site_name) }; });
+          // Surface the OWNER's site photos for shared sites (view-only) so the viewer sees the same image.
+          const acctOwner = Object.fromEntries((oaccts || []).map(a => [a.id, a.user_id]));
+          const ownerKeys = shares.map(s => ({ uid: acctOwner[s.owner_account_id], site: s.site_name })).filter(k => k.uid);
+          if (ownerKeys.length) {
+            const { data: ownerPhotos } = await sb.from("site_photos").select("user_id,site_name,url")
+              .in("user_id", [...new Set(ownerKeys.map(k => k.uid))]).in("site_name", [...new Set(ownerKeys.map(k => k.site))]);
+            const wanted = new Set(ownerKeys.map(k => `${k.uid}|${k.site}`));
+            for (const p of (ownerPhotos || [])) if (wanted.has(`${p.user_id}|${p.site_name}`)) sitePhotos[p.site_name] = p.url;
+          }
         }
       } catch (e) { /* site_shares not set up yet → no shared accounts */ }
       return res.json({ role, email: user.email, accounts: data || [], sharedAccounts, profile: prof || {}, sitePhotos });
@@ -498,6 +507,11 @@ export default async function handler(req, res) {
       const { site, url } = req.body || {};
       if (!site) return res.status(400).json({ error: "site required" });
       const sb = supabaseAdmin();
+      // A site shared TO this user is view-only — only the owner may set its photo.
+      try {
+        const { data: sh } = await sb.from("site_shares").select("id").eq("shared_with_user_id", user.id).eq("status", "active").eq("site_name", site).limit(1);
+        if (sh && sh.length) return res.status(403).json({ error: "This site is shared with you view-only — only the owner can change its photo." });
+      } catch (e) { /* site_shares table missing → nothing to block */ }
       if (url) await sb.from("site_photos").upsert({ user_id: user.id, site_name: site, url, updated_at: new Date().toISOString() });
       else await sb.from("site_photos").delete().eq("user_id", user.id).eq("site_name", site);
       return res.json({ ok: true });

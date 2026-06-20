@@ -562,7 +562,7 @@ function SharingSettings({ activeId, sites=[] }){
   );
 }
 
-function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose,onLogout}){
+function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose,onLogout,readOnly=false}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
   const isAdmin=role==="admin"; const canAdd=isAdmin||accounts.length===0;
@@ -662,7 +662,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           </>}
 
           {sec==="sites" && <>
-            <div style={{fontSize:11,color:FAINT,marginBottom:12}}>Add a photo for each site. These show here and may be used elsewhere later.</div>
+            <div style={{fontSize:11,color:FAINT,marginBottom:12}}>{readOnly?"These sites are shared with you view-only — photos are set by the owner.":"Add a photo for each site. These show here and may be used elsewhere later."}</div>
             {sites.length===0 && <div style={{fontSize:13,color:FAINT}}>No sites yet — link a Midnite account first.</div>}
             {sites.map(s=>(
               <div key={s.name} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${BORDER}`}}>
@@ -670,8 +670,8 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
                   ? <img src={sitePhotos[s.name]} alt="" style={{width:56,height:56,borderRadius:10,objectFit:"cover",border:`1px solid ${BORDER}`}}/>
                   : <div style={{width:56,height:56,borderRadius:10,background:BG,border:`1px dashed ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🏠</div>}
                 <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
-                {fileBtn(sitePhotos[s.name]?"Replace":"Upload", e=>onSitePhoto(s.name,e))}
-                {sitePhotos[s.name] && <button onClick={()=>removeSitePhoto(s.name)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Remove</button>}
+                {!readOnly && fileBtn(sitePhotos[s.name]?"Replace":"Upload", e=>onSitePhoto(s.name,e))}
+                {!readOnly && sitePhotos[s.name] && <button onClick={()=>removeSitePhoto(s.name)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Remove</button>}
               </div>
             ))}
           </>}
@@ -754,7 +754,7 @@ function SiteSelector({sites, onSelect, onLogout, onFleet}) {
 }
 
 // ── Fleet View — sortable status + metrics table for multi-site (installer/admin) accounts ──────────
-function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChanged }){
+function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChanged, readOnly=false }){
   const [data, setData] = useState({});        // site.name -> { loading, results, error }
   const [sortKey, setSortKey] = useState("status");
   const [sortDir, setSortDir] = useState(1);   // 1 asc, -1 desc
@@ -773,7 +773,7 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
     let x=r.right+12; if(x+pw>window.innerWidth) x=r.left-pw-12; if(x<8) x=8;
     let y=r.top-(ph-r.height)/2; y=Math.max(8,Math.min(y,window.innerHeight-ph-8));
     setPreview({url,x,y}); };
-  const openPhoto = (e, siteName)=>{ e.stopPropagation(); setPreview(null); setUploadErr(null); setPhotoModal({ site: siteName, url: photoFor(siteName) }); };
+  const openPhoto = (e, siteName)=>{ e.stopPropagation(); const url=photoFor(siteName); if(readOnly && !url) return; setPreview(null); setUploadErr(null); setPhotoModal({ site: siteName, url }); };
   // Upload a site photo (camera or file) → Supabase Storage → save URL via the proxy. Mirrors AccountSettings.
   const uploadPhoto = async (siteName, file)=>{ if(!file) return; setUploading(true); setUploadErr(null);
     try {
@@ -953,7 +953,7 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
                         <td style={{...td,padding:"6px 8px 6px 12px",width:44}}>
                           {(()=>{ const ph=photoFor(m.site.name); return ph
                             ? <img src={ph} alt="" onClick={e=>openPhoto(e,m.site.name)} onMouseEnter={e=>showPreview(e,ph)} onMouseLeave={()=>setPreview(null)} style={{width:30,height:30,borderRadius:7,objectFit:"cover",border:`1px solid ${BORDER}`,display:"block",cursor:"pointer"}}/>
-                            : <div onClick={e=>openPhoto(e,m.site.name)} title="Add a photo" style={{width:30,height:30,borderRadius:7,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>; })()}
+                            : <div onClick={readOnly?undefined:e=>openPhoto(e,m.site.name)} title={readOnly?"":"Add a photo"} style={{width:30,height:30,borderRadius:7,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:readOnly?"default":"pointer"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>; })()}
                         </td>
                         <td style={{...td,maxWidth:240}}>
                           <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
@@ -1019,12 +1019,14 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
                 ? <img src={photoModal.url} alt="" style={{width:"100%",maxHeight:"60vh",objectFit:"contain",borderRadius:12,background:"#000",display:"block"}}/>
                 : <div style={{padding:"26px 12px",textAlign:"center"}}>
                     <div style={{fontSize:42,marginBottom:8}}>🏠</div>
-                    <div style={{fontSize:13,color:MUTED}}>No photo for this site yet — add one below.</div>
+                    <div style={{fontSize:13,color:MUTED}}>{readOnly?"No photo set by the site owner.":"No photo for this site yet — add one below."}</div>
                   </div>}
-              <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center",flexWrap:"wrap"}}>
-                <label style={upBtn}>{uploading?"Uploading…":"📷 Take photo"}<input type="file" accept="image/*" capture="environment" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
-                <label style={upBtn}>{uploading?"Uploading…":(photoModal.url?"🖼 Replace":"🖼 Choose file")}<input type="file" accept="image/*" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
-              </div>
+              {readOnly
+                ? <div style={{marginTop:14,textAlign:"center",fontSize:11,color:FAINT}}>Shared with you · view-only</div>
+                : <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center",flexWrap:"wrap"}}>
+                    <label style={upBtn}>{uploading?"Uploading…":"📷 Take photo"}<input type="file" accept="image/*" capture="environment" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
+                    <label style={upBtn}>{uploading?"Uploading…":(photoModal.url?"🖼 Replace":"🖼 Choose file")}<input type="file" accept="image/*" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
+                  </div>}
             </div>
           </div>
         </div>
@@ -3335,7 +3337,7 @@ export default function Dashboard() {
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <AppLogin/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
-  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos} onPhotoChanged={reloadAccounts}/>;
+  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos} onPhotoChanged={reloadAccounts} readOnly={sharedAccounts.some(a=>a.id===activeAccountId)}/>;
 
   return (
     <>
@@ -3439,7 +3441,7 @@ export default function Dashboard() {
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
         </div>
 
-        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout}/>}
+        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout} readOnly={activeIsShared}/>}
         {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
         {/* Mobile bottom nav */}
