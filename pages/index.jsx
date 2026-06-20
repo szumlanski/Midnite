@@ -754,7 +754,7 @@ function SiteSelector({sites, onSelect, onLogout, onFleet}) {
 }
 
 // ── Fleet View — sortable status + metrics table for multi-site (installer/admin) accounts ──────────
-function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={} }){
+function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChanged }){
   const [data, setData] = useState({});        // site.name -> { loading, results, error }
   const [sortKey, setSortKey] = useState("status");
   const [sortDir, setSortDir] = useState(1);   // 1 asc, -1 desc
@@ -763,11 +763,31 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={} }){
   const [busy, setBusy] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [preview, setPreview] = useState(null); // {url,x,y} — hover-expanded site photo (desktop)
+  const [photoModal, setPhotoModal] = useState(null); // {site,url} — tap-to-view / upload popup (mobile-friendly)
+  const [localPhotos, setLocalPhotos] = useState({}); // optimistic overrides after an upload
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState(null);
+  const photoFor = (name)=> (name in localPhotos ? localPhotos[name] : sitePhotos[name]) || null;
   // Position the expanded preview next to the hovered thumb, clamped on-screen (escapes the table's overflow).
   const showPreview = (e, url)=>{ const r=e.currentTarget.getBoundingClientRect(); const pw=210, ph=210;
     let x=r.right+12; if(x+pw>window.innerWidth) x=r.left-pw-12; if(x<8) x=8;
     let y=r.top-(ph-r.height)/2; y=Math.max(8,Math.min(y,window.innerHeight-ph-8));
     setPreview({url,x,y}); };
+  const openPhoto = (e, siteName)=>{ e.stopPropagation(); setPreview(null); setUploadErr(null); setPhotoModal({ site: siteName, url: photoFor(siteName) }); };
+  // Upload a site photo (camera or file) → Supabase Storage → save URL via the proxy. Mirrors AccountSettings.
+  const uploadPhoto = async (siteName, file)=>{ if(!file) return; setUploading(true); setUploadErr(null);
+    try {
+      const { data:{ user } } = await supabase.auth.getUser();
+      const e = (file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
+      const safe = encodeURIComponent(siteName).replace(/[^A-Za-z0-9]/g,"_").slice(0,60);
+      const url = await uploadMedia("sites", `${user.id}/${safe}.${e}`, file);
+      const finalUrl = `${url}?t=${Date.now()}`;
+      await api("setsitephoto", { site: siteName, url: finalUrl });
+      setLocalPhotos(p=>({ ...p, [siteName]: finalUrl }));
+      setPhotoModal(m=> m && m.site===siteName ? { ...m, url: finalUrl } : m);
+      onPhotoChanged && onPhotoChanged();
+    } catch(err){ setUploadErr(err.message); } finally { setUploading(false); }
+  };
 
   const load = useCallback(()=>{
     if(!sites.length) return;
@@ -931,9 +951,9 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={} }){
                     return (
                       <tr key={m.site.name} onClick={()=>onPick(m.site)} className="fleet-row" style={{cursor:"pointer"}}>
                         <td style={{...td,padding:"6px 8px 6px 12px",width:44}}>
-                          {sitePhotos[m.site.name]
-                            ? <img src={sitePhotos[m.site.name]} alt="" onMouseEnter={e=>showPreview(e,sitePhotos[m.site.name])} onMouseLeave={()=>setPreview(null)} style={{width:30,height:30,borderRadius:7,objectFit:"cover",border:`1px solid ${BORDER}`,display:"block",cursor:"pointer"}}/>
-                            : <div style={{width:30,height:30,borderRadius:7,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>}
+                          {(()=>{ const ph=photoFor(m.site.name); return ph
+                            ? <img src={ph} alt="" onClick={e=>openPhoto(e,m.site.name)} onMouseEnter={e=>showPreview(e,ph)} onMouseLeave={()=>setPreview(null)} style={{width:30,height:30,borderRadius:7,objectFit:"cover",border:`1px solid ${BORDER}`,display:"block",cursor:"pointer"}}/>
+                            : <div onClick={e=>openPhoto(e,m.site.name)} title="Add a photo" style={{width:30,height:30,borderRadius:7,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>; })()}
                         </td>
                         <td style={{...td,maxWidth:240}}>
                           <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
@@ -981,10 +1001,34 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={} }){
         </div>
       </div>
       {preview && (
-        <div style={{position:"fixed",left:preview.x,top:preview.y,zIndex:1000,pointerEvents:"none",animation:"fadeUp 0.12s ease"}}>
+        <div style={{position:"fixed",left:preview.x,top:preview.y,zIndex:150,pointerEvents:"none",animation:"fadeUp 0.12s ease"}}>
           <img src={preview.url} alt="" style={{width:200,height:200,objectFit:"cover",borderRadius:12,border:`3px solid ${CARD}`,boxShadow:"0 16px 44px rgba(0,0,0,0.34)"}}/>
         </div>
       )}
+      {photoModal && (()=>{ const upBtn={display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:uploading?"default":"pointer",opacity:uploading?0.6:1};
+        return (
+        <div onClick={()=>!uploading&&setPhotoModal(null)} style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:440,width:"100%",boxShadow:"0 16px 56px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:SANS,animation:"fadeUp 0.2s ease"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px 16px",borderBottom:`1px solid ${BORDER}`}}>
+              <div style={{fontSize:14,fontWeight:700,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{photoModal.site}</div>
+              <button onClick={()=>!uploading&&setPhotoModal(null)} style={{border:"none",background:"transparent",fontSize:22,lineHeight:1,color:MUTED,cursor:"pointer",flexShrink:0}}>×</button>
+            </div>
+            <div style={{padding:16}}>
+              {uploadErr&&<div style={errBox}>{uploadErr}</div>}
+              {photoModal.url
+                ? <img src={photoModal.url} alt="" style={{width:"100%",maxHeight:"60vh",objectFit:"contain",borderRadius:12,background:"#000",display:"block"}}/>
+                : <div style={{padding:"26px 12px",textAlign:"center"}}>
+                    <div style={{fontSize:42,marginBottom:8}}>🏠</div>
+                    <div style={{fontSize:13,color:MUTED}}>No photo for this site yet — add one below.</div>
+                  </div>}
+              <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center",flexWrap:"wrap"}}>
+                <label style={upBtn}>{uploading?"Uploading…":"📷 Take photo"}<input type="file" accept="image/*" capture="environment" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
+                <label style={upBtn}>{uploading?"Uploading…":(photoModal.url?"🖼 Replace":"🖼 Choose file")}<input type="file" accept="image/*" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
+              </div>
+            </div>
+          </div>
+        </div>
+      ); })()}
     </>
   );
 }
@@ -3291,7 +3335,7 @@ export default function Dashboard() {
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <AppLogin/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
-  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos}/>;
+  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos} onPhotoChanged={reloadAccounts}/>;
 
   return (
     <>
