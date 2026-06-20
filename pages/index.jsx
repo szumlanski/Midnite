@@ -672,12 +672,12 @@ function FleetView({ sites, onPick, onBack, onLogout }){
     const row = data[site.name];
     const [on=0, al=0, off=0, disc=0] = site.statusCounts || [];
     const total = site.inverters.length, offline = off + disc;
-    let status;
-    if(al>0) status={label:"Alarm",color:SOLAR,rank:1};
+    let status; // rank ascending = most urgent first, so the default sort surfaces problems
+    if(total>0 && on===0) status={label:"Offline",color:GRID_IN,rank:0};
+    else if(al>0) status={label:"Alarm",color:SOLAR,rank:1};
     else if(on>0 && offline>0) status={label:"Partial",color:SOLAR,rank:2};
-    else if(on>0) status={label:"Online",color:BATTERY,rank:0};
-    else if(total>0) status={label:"Offline",color:GRID_IN,rank:3};
-    else status={label:"—",color:FAINT,rank:5};
+    else if(on>0) status={label:"Online",color:BATTERY,rank:3};
+    else status={label:"—",color:FAINT,rank:4};
     // skeleton only on first load (no results yet, no error); keep showing data during background refresh
     const m={ site, status, total, on, offline, error: row?.error, loading: !row?.results && !row?.error };
     if(row?.results){
@@ -699,14 +699,14 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   const baseM = sites.map(metricsOf);
   const totalPv = baseM.reduce((s,m)=>s+(m.pv||0),0);
   const totalPvToday = baseM.reduce((s,m)=>s+(m.pvToday||0),0);
-  const onlineCount = baseM.filter(m=>m.status.rank===0).length;
-  const issueCount = baseM.filter(m=>m.status.rank>=1&&m.status.rank<=3).length;
+  const onlineCount = baseM.filter(m=>m.status.rank===3).length;
+  const issueCount = baseM.filter(m=>m.status.rank<=2).length;
 
   let rows = baseM;
   const q=query.trim().toLowerCase();
   if(q) rows=rows.filter(m=>m.site.name.toLowerCase().includes(q)||(m.site.installer||"").toLowerCase().includes(q));
-  if(filter==="online") rows=rows.filter(m=>m.status.rank===0);
-  else if(filter==="issues") rows=rows.filter(m=>m.status.rank>=1&&m.status.rank<=3);
+  if(filter==="online") rows=rows.filter(m=>m.status.rank===3);
+  else if(filter==="issues") rows=rows.filter(m=>m.status.rank<=2);
   const sortVal=(m)=>{ switch(sortKey){
     case "name": return m.site.name.toLowerCase();
     case "status": return m.status.rank;
@@ -714,7 +714,17 @@ function FleetView({ sites, onPick, onBack, onLogout }){
     case "grid": return m.gridNet??0; case "pvToday": return m.pvToday??-1; case "expToday": return m.expToday??-1;
     default: return m.site.name.toLowerCase(); } };
   rows=[...rows].sort((a,b)=>{ const av=sortVal(a),bv=sortVal(b); if(av<bv)return -sortDir; if(av>bv)return sortDir; return a.site.name.localeCompare(b.site.name); });
-  const setSort=(k)=>{ if(sortKey===k) setSortDir(d=>-d); else { setSortKey(k); setSortDir(k==="name"?1:-1); } };
+  const setSort=(k)=>{ if(sortKey===k) setSortDir(d=>-d); else { setSortKey(k); setSortDir((k==="name"||k==="status")?1:-1); } };
+  const exportCsv=()=>{
+    const esc=(v)=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;
+    const head=["Site","Installer","Status","Inverters Online","Inverters Total","PV Now (W)","Load (W)","Battery SOC (%)","Grid Net W (+import/-export)","PV Today (Wh)","Exported Today (Wh)","Last Report"];
+    const lines=[head.map(esc).join(",")];
+    for(const m of rows) lines.push([m.site.name,m.site.installer||"",m.status.label,m.invOnline??m.on,m.total,Math.round(m.pv||0),Math.round(m.load||0),m.soc!=null?Math.round(m.soc):"",Math.round(m.gridNet||0),Math.round(m.pvToday||0),Math.round(m.expToday||0),m.updated||""].map(esc).join(","));
+    const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob); const a=document.createElement("a");
+    a.href=url; a.download=`fleet-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
 
   const cols=[
     {k:"name",label:"Site",a:"left"},{k:"status",label:"Status",a:"left"},
@@ -748,6 +758,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={exportCsv} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⬇ CSV</button>
             <button onClick={load} disabled={busy} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:busy?"default":"pointer"}}>{busy?"Refreshing…":"↻ Refresh"}</button>
             <button onClick={onLogout} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
           </div>
@@ -772,7 +783,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
           </div>
 
           <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
-            <div style={{overflowX:"auto"}}>
+            <div style={{overflow:"auto",maxHeight:"min(70vh,680px)"}}>
               <table style={{borderCollapse:"collapse",width:"100%",minWidth:820}}>
                 <thead><tr>
                   {cols.map(c=>(
@@ -801,7 +812,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
                             </div>
                           </div>
                         </td>
-                        <td style={{...td,textAlign:"right",fontWeight:600}}>{m.loading?<Sk/>:fmt(m.pv,1)}</td>
+                        <td style={{...td,textAlign:"right",fontWeight:600,color:m.pv>0?SOLAR:TEXT}}>{m.loading?<Sk/>:fmt(m.pv,1)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmt(m.load,1)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.soc==null?<span style={{color:FAINT}}>—</span>:<span style={{fontWeight:600,color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?<span style={{color:BATTERY}}> ↑</span>:dis?<span style={{color:SOLAR}}> ↓</span>:""}</span>)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT,fontWeight:600}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN,fontWeight:600}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:FAINT}}>—</span>)}</td>
@@ -811,11 +822,24 @@ function FleetView({ sites, onPick, onBack, onLogout }){
                       </tr>
                     );
                   })}
+                  {rows.length>1&&(()=>{ const t=rows.reduce((a,m)=>({pv:a.pv+(m.pv||0),load:a.load+(m.load||0),pvToday:a.pvToday+(m.pvToday||0),exp:a.exp+(m.expToday||0)}),{pv:0,load:0,pvToday:0,exp:0}); return (
+                    <tr style={{background:"#FBF8F3",position:"sticky",bottom:0}}>
+                      <td style={{...td,fontWeight:800,borderTop:`2px solid ${BORDER}`}}>{rows.length} sites</td>
+                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
+                      <td style={{...td,textAlign:"right",fontWeight:800,color:SOLAR,borderTop:`2px solid ${BORDER}`}}>{fmt(t.pv,1)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,borderTop:`2px solid ${BORDER}`}}>{fmt(t.load,1)}</td>
+                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
+                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
+                      <td style={{...td,textAlign:"right",fontWeight:700,borderTop:`2px solid ${BORDER}`}}>{fmtE(t.pvToday)}</td>
+                      <td style={{...td,textAlign:"right",fontWeight:700,borderTop:`2px solid ${BORDER}`}}>{t.exp>0?fmtE(t.exp):"—"}</td>
+                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
+                    </tr>
+                  ); })()}
                 </tbody>
               </table>
             </div>
           </div>
-          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status from the fleet feed; metrics are the latest 5-min report, auto-refreshing each minute.</div>
+          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status from the fleet feed; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
         </div>
       </div>
     </>
