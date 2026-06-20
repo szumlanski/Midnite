@@ -3293,7 +3293,7 @@ export default function Dashboard() {
       <PageHead/>
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
         {/* Header */}
-        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",background:CARD,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.04)"}}>
+        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",rowGap:8,background:CARD,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.04)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <Logo size={30}/>
             <div>
@@ -3303,7 +3303,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end",rowGap:8,flex:"1 1 auto",minWidth:0}}>
             {/* Desktop tabs */}
             <div className="top-tabs" style={{gap:2,background:"#F1F5F9",borderRadius:10,padding:3}}>
               {(isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS).map(t=>(
