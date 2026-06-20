@@ -562,7 +562,7 @@ function SharingSettings({ activeId, sites=[] }){
   );
 }
 
-function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose}){
+function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose,onLogout}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
   const isAdmin=role==="admin"; const canAdd=isAdmin||accounts.length===0;
@@ -679,6 +679,11 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
+        {onLogout && (
+          <div style={{display:"flex",justifyContent:"flex-end",padding:"14px 18px",borderTop:`1px solid ${BORDER}`}}>
+            <button onClick={onLogout} style={{padding:"9px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3293,8 +3298,8 @@ export default function Dashboard() {
       <PageHead/>
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
         {/* Header */}
-        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",rowGap:8,background:CARD,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.04)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:CARD,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.04)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
             <Logo size={30}/>
             <div>
               <div style={{fontSize:14,fontWeight:700,color:TEXT,lineHeight:1.2}}>{site.name}</div>
@@ -3303,9 +3308,9 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end",rowGap:8,flex:"1 1 auto",minWidth:0}}>
+          <div className="inv-scroll" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"nowrap",flex:"0 1 auto",minWidth:0,overflowX:"auto"}}>
             {/* Desktop tabs */}
-            <div className="top-tabs" style={{gap:2,background:"#F1F5F9",borderRadius:10,padding:3}}>
+            <div className="top-tabs" style={{gap:2,background:"#F1F5F9",borderRadius:10,padding:3,flexShrink:0}}>
               {(isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS).map(t=>(
                 <button key={t.id} onClick={()=>setTab(t.id)} className="tab-btn" style={{
                   padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:SANS,
@@ -3317,15 +3322,14 @@ export default function Dashboard() {
               ))}
             </div>
             {switchAccts.length>1 && (
-              <select value={activeAccountId||""} onChange={e=>switchAccount(e.target.value)} title="Active account" style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",maxWidth:170}}>
+              <select value={activeAccountId||""} onChange={e=>switchAccount(e.target.value)} title="Active account" style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",maxWidth:170,flexShrink:0}}>
                 {switchAccts.map(a=><option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             )}
-            {activeIsShared&&<span style={{fontSize:10,fontWeight:700,color:SOLAR,background:"#FFFBEB",border:"1px solid #FDE68A",padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>SHARED · view-only</span>}
-            {site&&!activeIsShared&&<button onClick={()=>setShowShare(true)} title="Share this site" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>↗ Share</button>}
-            {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⊞ Fleet</button>}
-            <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings</button>
-            <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+            {activeIsShared&&<span style={{fontSize:10,fontWeight:700,color:SOLAR,background:"#FFFBEB",border:"1px solid #FDE68A",padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap",flexShrink:0}}>SHARED · view-only</span>}
+            {site&&!activeIsShared&&<button onClick={()=>setShowShare(true)} title="Share this site" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>↗ Share</button>}
+            {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>⊞ Fleet</button>}
+            <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>Settings</button>
           </div>
         </div>
 
@@ -3391,7 +3395,7 @@ export default function Dashboard() {
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
         </div>
 
-        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
+        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout}/>}
         {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
         {/* Mobile bottom nav */}
