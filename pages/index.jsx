@@ -677,23 +677,26 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   const metricsOf = (site)=>{
     const row = data[site.name];
     const total = site.inverters.length;
-    const v = row?.results ? row.results.filter(r=>r?.ok && r?.data) : null;  // 5-min status
-    const fl = row?.flow ? row.flow.filter(f=>f && f.ok!==false) : null;      // live flow (EPS-aware power)
-    const onlineN = Math.max(v?v.length:0, fl?fl.length:0);
-    // Status from the LIVE fetch (did inverters report?), NOT the stale installer statusCounts feed
-    // (which wrongly flagged producing sites as offline). Rank ascending = problems first.
+    const v = row?.results ? row.results.filter(r=>r?.ok && r?.data) : null;  // 5-min status (may be STALE/cached)
+    const fl = row?.flow ? row.flow.filter(f=>f && f.ok!==false) : null;      // live flow
+    const flUp = fl ? fl.filter(f=>f.online) : null;                          // inverters the dongle reports ONLINE
+    // Online from the live dongle flag (the API returns stale cached data for offline sites, so
+    // "returned data" isn't enough). No flow → fall back to status-returned. Rank asc = problems first.
+    const onlineN = fl ? flUp.length : (v ? v.length : 0);
     let status;
     if(v||fl) status = onlineN===0 ? {label:"Offline",color:GRID_IN,rank:0} : onlineN<total ? {label:"Partial",color:SOLAR,rank:2} : {label:"Online",color:BATTERY,rank:3};
     else if(row?.error) status={label:"Offline",color:GRID_IN,rank:0};
     else status={label:"Checking…",color:FAINT,rank:5};
     const m={ site, status, total, invOnline: onlineN, error: row?.error, loading: !v && !fl && !row?.error };
-    if(fl && fl.length){           // live power flow — captures EPS / generator pass-through house load
-      m.pv=fl.reduce((s,f)=>s+(f.pv||0),0);
-      m.load=fl.reduce((s,f)=>s+(f.load>0?f.load:(f.eps||0)),0);   // EPS-aware home (load port, else EPS)
-      m.gridNet=fl.reduce((s,f)=>s+(f.grid||0),0);
-      const gen=fl.reduce((s,f)=>s+(f.gen||0),0);
-      m.batNet=m.pv+m.gridNet+gen-m.load;                          // balance-derived (live Pbat sign unreliable)
-    } else if(v){                  // fallback: 5-min status power
+    if(fl){                        // flow feed present → trust it; power only from ONLINE inverters (offline → blank)
+      if(flUp.length){
+        m.pv=flUp.reduce((s,f)=>s+(f.pv||0),0);
+        m.load=flUp.reduce((s,f)=>s+(f.load>0?f.load:(f.eps||0)),0);  // EPS-aware home (captures gen pass-through)
+        m.gridNet=flUp.reduce((s,f)=>s+(f.grid||0),0);
+        const gen=flUp.reduce((s,f)=>s+(f.gen||0),0);
+        m.batNet=m.pv+m.gridNet+gen-m.load;                          // balance-derived (live Pbat sign unreliable)
+      }
+    } else if(v){                  // no flow → fall back to 5-min status power
       m.pv=v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
       m.load=v.reduce((s,i)=>s+loadOf(i.data),0);
       m.gridNet=v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
