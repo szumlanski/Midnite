@@ -231,16 +231,12 @@ const PageHead = () => (
       .inv-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1)!important}
       .fleet-row{transition:background 0.12s}
       .fleet-row:hover{background:#FAF7F2}
-      .fleet-table{display:block}
-      .fleet-cards{display:none}
       .inv-scroll::-webkit-scrollbar{display:none}
       .inv-scroll{-ms-overflow-style:none;scrollbar-width:none}
       @media(max-width:640px){
         .bottom-nav{display:flex!important}
         .top-tabs{display:none!important}
         .page-pad{padding-bottom:80px!important}
-        .fleet-table{display:none!important}
-        .fleet-cards{display:grid!important;grid-template-columns:1fr;gap:10px}
       }
       @media(min-width:641px){
         .bottom-nav{display:none!important}
@@ -663,10 +659,13 @@ function FleetView({ sites, onPick, onBack, onLogout }){
     if(!sites.length) return;
     setBusy(true); let done=0;
     sites.forEach(site=>{
-      setData(d=>({ ...d, [site.name]: { ...(d[site.name]||{}), loading:true } }));
-      api("status", { serials: site.inverters.map(i=>i.sn), autoIds: site.inverters.map(i=>i.autoId), memberAutoId: site.memberAutoId })
-        .then(({results})=> setData(d=>({ ...d, [site.name]: { loading:false, results } })))
-        .catch(e=> setData(d=>({ ...d, [site.name]: { loading:false, error:e.message } })))
+      const serials=site.inverters.map(i=>i.sn);
+      // status = 5-min (SOC, energy-today, freshness, online); flow = live 5s power (EPS-aware load —
+      // the only source that captures generator pass-through / EPS house load).
+      Promise.all([
+        api("status", { serials, autoIds: site.inverters.map(i=>i.autoId), memberAutoId: site.memberAutoId }).then(r=>r.results).catch(()=>null),
+        api("flow", { serials }).then(r=>r.results).catch(()=>null),
+      ]).then(([results,flow])=> setData(d=>({ ...d, [site.name]: { loading:false, results, flow, error:(!results&&!flow)?"fetch failed":null } })))
         .finally(()=>{ done++; if(done===sites.length){ setBusy(false); setLastRefresh(new Date()); } });
     });
   }, [sites]);
@@ -678,22 +677,29 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   const metricsOf = (site)=>{
     const row = data[site.name];
     const total = site.inverters.length;
-    // Status is derived from the LIVE fetch (did inverters return data?), NOT the stale installer
-    // statusCounts feed — that count was wrongly reporting producing sites as offline.
-    const v = row?.results ? row.results.filter(r=>r?.ok && r?.data) : null;
-    let status; // rank ascending = most urgent first, so the default sort surfaces problems
-    if(v){
-      if(v.length===0) status={label:"Offline",color:GRID_IN,rank:0};
-      else if(v.length<total) status={label:"Partial",color:SOLAR,rank:2};
-      else status={label:"Online",color:BATTERY,rank:3};
-    } else if(row?.error) status={label:"Offline",color:GRID_IN,rank:0};
-    else status={label:"Checking…",color:FAINT,rank:5}; // first load
-    const m={ site, status, total, invOnline: v?v.length:0, error: row?.error, loading: !v && !row?.error };
-    if(v){
+    const v = row?.results ? row.results.filter(r=>r?.ok && r?.data) : null;  // 5-min status
+    const fl = row?.flow ? row.flow.filter(f=>f && f.ok!==false) : null;      // live flow (EPS-aware power)
+    const onlineN = Math.max(v?v.length:0, fl?fl.length:0);
+    // Status from the LIVE fetch (did inverters report?), NOT the stale installer statusCounts feed
+    // (which wrongly flagged producing sites as offline). Rank ascending = problems first.
+    let status;
+    if(v||fl) status = onlineN===0 ? {label:"Offline",color:GRID_IN,rank:0} : onlineN<total ? {label:"Partial",color:SOLAR,rank:2} : {label:"Online",color:BATTERY,rank:3};
+    else if(row?.error) status={label:"Offline",color:GRID_IN,rank:0};
+    else status={label:"Checking…",color:FAINT,rank:5};
+    const m={ site, status, total, invOnline: onlineN, error: row?.error, loading: !v && !fl && !row?.error };
+    if(fl && fl.length){           // live power flow — captures EPS / generator pass-through house load
+      m.pv=fl.reduce((s,f)=>s+(f.pv||0),0);
+      m.load=fl.reduce((s,f)=>s+(f.load>0?f.load:(f.eps||0)),0);   // EPS-aware home (load port, else EPS)
+      m.gridNet=fl.reduce((s,f)=>s+(f.grid||0),0);
+      const gen=fl.reduce((s,f)=>s+(f.gen||0),0);
+      m.batNet=m.pv+m.gridNet+gen-m.load;                          // balance-derived (live Pbat sign unreliable)
+    } else if(v){                  // fallback: 5-min status power
       m.pv=v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
       m.load=v.reduce((s,i)=>s+loadOf(i.data),0);
       m.gridNet=v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
       m.batNet=v.reduce((s,i)=>s+((i.data.battery?.charge||0)-(i.data.battery?.discharge||0)),0);
+    }
+    if(v){                         // SOC / energy-today / freshness from the reliable 5-min status
       const socA=v.filter(i=>(i.data.battery?.soc||0)>0);
       m.soc=socA.length? socA.reduce((s,i)=>s+i.data.battery.soc,0)/socA.length : null;
       m.pvToday=v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.today||0),0);
@@ -757,7 +763,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
         <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:CARD,position:"sticky",top:0,zIndex:100,flexWrap:"wrap"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={onBack} title="Back" style={{border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16,lineHeight:1}}>‹</button>
+            {onBack&&<button onClick={onBack} title="Back" style={{border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16,lineHeight:1}}>‹</button>}
             <Logo size={30}/>
             <div>
               <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Fleet View</div>
@@ -789,7 +795,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
             {lastRefresh&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>as of {lastRefresh.toLocaleTimeString()}</span>}
           </div>
 
-          <div className="fleet-table" style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
+          <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
             <div style={{overflow:"auto",maxHeight:"min(70vh,680px)"}}>
               <table style={{borderCollapse:"collapse",width:"100%",minWidth:820}}>
                 <thead><tr>
@@ -847,35 +853,7 @@ function FleetView({ sites, onPick, onBack, onLogout }){
             </div>
           </div>
 
-          {/* Mobile card layout (replaces the table under 640px) */}
-          <div className="fleet-cards">
-            {rows.length===0&&<div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"24px 0"}}>No sites match.</div>}
-            {rows.map(m=>{
-              const imp=m.gridNet>50, exp=m.gridNet<-50, chg=m.batNet>20, dis=m.batNet<-20;
-              const mc=(label,node)=>(<div><div style={{fontSize:9.5,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</div><div style={{fontSize:14,fontWeight:700,color:TEXT,marginTop:1,fontVariantNumeric:"tabular-nums"}}>{node}</div></div>);
-              return (
-                <button key={m.site.name} onClick={()=>onPick(m.site)} style={{textAlign:"left",background:CARD,border:`1px solid ${BORDER}`,borderLeft:`4px solid ${m.status.color}`,borderRadius:12,padding:"13px 14px",cursor:"pointer",boxShadow:SHADOW_SM,display:"flex",flexDirection:"column",gap:11,width:"100%",fontFamily:SANS}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontWeight:700,color:TEXT,fontSize:15}}>{m.site.name}</div>
-                      <div style={{fontSize:11,color:FAINT,marginTop:1}}>{(m.invOnline??m.on)}/{m.total} online{m.site.installer?` · ${m.site.installer}`:""}</div>
-                    </div>
-                    <span style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:m.status.color,whiteSpace:"nowrap"}}><span style={{width:7,height:7,borderRadius:"50%",background:m.status.color}}/>{m.status.label}</span>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-                    {mc("PV Now", m.loading?<Sk/>:<span style={{color:m.pv>0?SOLAR:TEXT}}>{fmt(m.pv,1)}</span>)}
-                    {mc("Load", m.loading?<Sk/>:fmt(m.load,1))}
-                    {mc("Battery", m.loading?<Sk/>:(m.soc==null?<span style={{color:FAINT}}>—</span>:<span style={{color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?" ↑":dis?" ↓":""}</span>))}
-                    {mc("Grid", m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:FAINT}}>—</span>))}
-                    {mc("PV Today", m.loading?<Sk/>:fmtE(m.pvToday))}
-                    {mc("Exported", m.loading?<Sk/>:(m.expToday>0?fmtE(m.expToday):<span style={{color:FAINT}}>—</span>))}
-                  </div>
-                  {!m.loading&&m.updated&&<UpdatedChip time={m.updated}/>}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a {""}site to open it. Status from the fleet feed; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
+          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status is the live fleet fetch; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
         </div>
       </div>
     </>
@@ -2899,7 +2877,7 @@ export default function Dashboard() {
       const savedName = localStorage.getItem("midnite_selected_site");
       const saved = savedName && normalized.find(s=>s.name===savedName);
       if(saved) { setSite(saved); setAuthState("dashboard"); }
-      else setAuthState("sites");
+      else setAuthState("fleet"); // multi-site accounts land on the Fleet view (replaces the Sites picker)
     }
   }
 
@@ -2950,9 +2928,8 @@ export default function Dashboard() {
     localStorage.setItem("midnite_selected_site", s.name);
     setAuthState("dashboard");
   }
-  // Fleet view (multi-site only) — remember where to return to (sites picker or dashboard).
-  const [fleetReturn, setFleetReturn] = useState("sites");
-  const openFleet = () => { setFleetReturn(authState==="dashboard"?"dashboard":"sites"); setAuthState("fleet"); };
+  // Fleet view (multi-site only) is the all-sites landing — replaces the old Sites picker.
+  const openFleet = () => setAuthState("fleet");
 
   useEffect(() => {
     if(!supabaseReady){ setAuthState("appauth"); return; }
@@ -3177,8 +3154,7 @@ export default function Dashboard() {
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <AppLogin/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
-  if(authState==="fleet") return <FleetView sites={sites} onPick={handleSelectSite} onBack={()=>setAuthState(fleetReturn)} onLogout={handleLogout}/>;
-  if(authState==="sites") return <SiteSelector sites={sites} onSelect={handleSelectSite} onLogout={handleLogout} onFleet={sites.length>1?openFleet:null}/>;
+  if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout}/>;
 
   return (
     <>
@@ -3213,8 +3189,7 @@ export default function Dashboard() {
                 {accounts.map(a=><option key={a.id} value={a.id}>{a.label||a.midnite_username}</option>)}
               </select>
             )}
-            {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Fleet</button>}
-            {sites.length>1&&<button onClick={()=>{setAuthState("sites");setSite(null);setStatuses([]);}} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sites</button>}
+            {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⊞ Fleet</button>}
             <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings</button>
             <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
           </div>
