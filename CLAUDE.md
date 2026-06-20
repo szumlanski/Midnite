@@ -79,7 +79,11 @@ registers (`SETTINGS_MAP`, certain mappings only); **SaaS auth** (see Authentica
 - **Notifications & alerts system** — ✅ **BUILT** (see the **Notifications / Alerts** section below). Per-device
   email threshold alerts + a 15-min heartbeat cron, portable `DeviceSnapshot` + pure engine, RLS tables, daily
   cap, Settings → Notifications UI with CRUD + test-send. Delivery via **Resend** (`RESEND_API_KEY`); cron secured
-  by `CRON_SECRET`. Scheduled **digests** are scaffolded (table only) — not yet sending.
+  by `CRON_SECRET`.
+- **Daily digest email** — ✅ **BUILT** (see the **Daily Digest** section below). A morning recap of yesterday's
+  performance (KPIs + hourly production/consumption chart + 7-day comparative trend + battery/self-sufficiency),
+  rendered as **email-safe HTML** (no SVG — Gmail strips it). Per-user configurable send time + timezone; hourly
+  cron (`/api/notifications/digest`). Settings → Notifications has the toggle + Send-test.
 - **Recommended before paying customers:** security pass on the auth + `CREDS_ENC_KEY` encryption + RLS path.
 - **Nice-to-have:** surface site photos beyond Settings (site header / Sites picker).
 
@@ -556,8 +560,9 @@ list with enable/disable/delete, an add-form generated from the trigger metadata
 
 **Schema** (idempotent, appended to `supabase/schema.sql` — **re-run after pulling**): `notification_rules`,
 `notification_log`, `device_snapshots` (time-series for offline detection), `notification_quota` + the atomic
-`notif_quota_increment()` RPC (daily cap), and a `notification_digests` scaffold (no digest job yet). All RLS-gated
-to the owning user; all writes go through the service-role proxy + heartbeat.
+`notif_quota_increment()` RPC (daily cap), and `notification_digests` (now the live daily-digest config —
+`send_hour`/`timezone`/`site_name`/`last_sent_date` columns added idempotently). All RLS-gated to the owning
+user; all writes go through the service-role proxy + heartbeat/digest crons.
 
 **Env vars (Vercel):** `RESEND_API_KEY` (enables email — without it alerts evaluate but don't send),
 `ALERTS_FROM_EMAIL` (e.g. `Midnite Sentinel <alerts@yourdomain>`; defaults to Resend's onboarding sender),
@@ -566,6 +571,49 @@ to the owning user; all writes go through the service-role proxy + heartbeat.
 (centralized `isEntitled()` — flip to paid later without touching the engine). **Note:** sub-daily Vercel Cron
 (e.g. `*/5`) needs a **Pro** plan (Hobby = daily only); on Hobby, point any external cron at
 `/api/notifications/heartbeat` with the secret instead.
+
+---
+
+## Daily Digest (morning recap email)
+A configurable per-user **daily digest** email that recaps **yesterday's** performance with charts. Built on top
+of the notifications infra (same Resend delivery + `CRON_SECRET`). **A "digest" = one config row per user**
+(`notification_digests`, keyed `user_id,frequency='daily'`).
+
+**Architecture (mirrors the alerts split — pure core, impure shell):**
+- `lib/notifications/digest.js` — **pure** compute + render. `computeSiteDigest({siteName,dateStr,dayResponses,
+  monthResponses,prevMonthResponses})` → a per-site model (KPIs, hourly profile, 7-day trend, comparisons);
+  `renderDigestEmail({dateLabel,sites,totals,appUrl})` → `{subject,html,text}`; `sumTotals()`. **Charts are
+  email-safe HTML tables + fixed-pixel-height `<div>` bars — NEVER inline SVG (Gmail strips SVG).** Reuses the
+  `rollupProduction` identity (never trusts the broken `Production` field) and matches the app's chart palette.
+- `lib/notifications/digestServer.js` — **impure** orchestration shared by the cron + the test action.
+  `buildDigest({auth,dateStr,tz,siteFilter})` fetches per inverter and computes; `buildAndSendDigest({acct,to,tz,
+  siteFilter,force})` does login→build→send. Timezone helpers (`yesterdayInTz`/`ymdInTz`/`hourInTz`). Caps a
+  fleet digest at `MAX_SITES=12`; skips dead sites (no production/consumption/intraday). `force:true` (test)
+  with no data still sends a friendly "delivery works, no data yet" note.
+- `lib/midniteServer.js` — added `fetchSites` (installer terminaluserinfo / enduser GroupList→InverterList →
+  `[{name,memberAutoId,serials}]`), `fetchDay` (`dayProductionAndConsumptionAreaTime`, WATTS), `fetchMonth`
+  (`monthProductionAndConsumptionArea`, kWh) — frozen copies of the proxy logic.
+- `pages/api/notifications/digest.js` — **hourly** cron (`vercel.json` → `0 * * * *`), `CRON_SECRET`-gated like
+  the heartbeat. Sends to each enabled config whose `send_hour` == current hour **in its `timezone`** and whose
+  `last_sent_date` ≠ today (idempotent). `?dry=1` previews which configs are due without sending.
+
+**KPIs per site (yesterday):** Produced / Consumed / Exported / Imported (from the **month rollup** → matches the
+app's Day==Month invariant), Peak PV (kW, from intraday), Self-sufficiency %, battery charged/discharged + SOC
+range, plus **▲/▼ deltas vs the previous day and vs the 7-day average**. **Charts:** an hourly produced-vs-consumed
+bar chart (intraday energy, kWh/hr) and a 7-day produced-vs-consumed trend; horizontal bars for SOC + self-suff.
+
+**Proxy actions** (DB/login as noted, before the data-action login block): `digest_get` (config + `emailConfigured`),
+`digest_save` (upsert config — enabled/send_hour/timezone/site_name; verifies account ownership), `digest_test`
+(builds + sends a **real** digest to your account email **now**, `force:true`).
+
+**UI:** Settings → **Notifications** → a **☀ Daily digest** card at the top (`DigestSettings` in `index.jsx`):
+enable toggle, send-time (`hourLabel12`), timezone (`DIGEST_TZS`, preselects the browser tz if recognized),
+coverage (All sites / current site), **Save** + **Send test digest**. Threshold alerts now sit below under a
+"Threshold alerts" heading.
+
+**Env vars:** reuses `RESEND_API_KEY` / `ALERTS_FROM_EMAIL` / `CRON_SECRET` / `NEXT_PUBLIC_APP_URL`. Same Pro-plan
+caveat for sub-daily cron — the hourly digest cron is fine on Pro; on Hobby point an external hourly cron at
+`/api/notifications/digest` with the secret.
 
 ---
 

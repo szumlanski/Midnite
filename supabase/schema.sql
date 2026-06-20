@@ -175,7 +175,10 @@ begin
   return new_count;  -- p_cap kept for signature/forward-compat; the app compares.
 end; $$;
 
--- ── notification_digests: scaffold for periodic summary emails (not yet sent) ─
+-- ── notification_digests: daily recap email config (sent by the hourly cron) ──
+-- One row per (user, frequency). The digest cron (pages/api/notifications/digest.js)
+-- runs hourly and emails each user whose send_hour matches the current hour in
+-- their timezone and who hasn't been sent today (last_sent_date guard).
 create table if not exists public.notification_digests (
   user_id    uuid not null references auth.users on delete cascade,
   account_id uuid references public.midnite_accounts on delete cascade,
@@ -186,6 +189,11 @@ create table if not exists public.notification_digests (
   created_at timestamptz not null default now(),
   primary key (user_id, frequency)
 );
+-- Config columns (idempotent — added after the original scaffold shipped).
+alter table public.notification_digests add column if not exists send_hour      integer not null default 7;   -- 0–23, local to `timezone`
+alter table public.notification_digests add column if not exists timezone       text    not null default 'America/New_York';
+alter table public.notification_digests add column if not exists site_name      text;        -- null = all sites in the account
+alter table public.notification_digests add column if not exists last_sent_date date;        -- idempotency (in `timezone`)
 alter table public.notification_digests enable row level security;
 drop policy if exists "own digests read" on public.notification_digests;
 create policy "own digests read" on public.notification_digests for select using (auth.uid() = user_id);

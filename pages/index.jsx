@@ -760,6 +760,108 @@ async function uploadMedia(bucket, path, file){
 // entirely from the shared trigger metadata (lib/notifications/triggers.js), so
 // the UI and the DB CHECK can't drift. Rules save + evaluate even before an email
 // provider is configured; a banner flags that until RESEND_API_KEY is set.
+// Daily-digest config card (Settings → Notifications). A morning recap email of
+// yesterday's performance with charts; sent by the hourly cron at the chosen time.
+const DIGEST_TZS = [
+  ["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],
+  ["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"],
+];
+function hourLabel12(h){ const ap=h<12?"AM":"PM"; const hr=h%12===0?12:h%12; return `${hr}:00 ${ap}`; }
+function DigestSettings({activeId, site=null}){
+  const [cfg,setCfg]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [enabled,setEnabled]=useState(false);
+  const [hour,setHour]=useState(7);
+  const [tz,setTz]=useState("America/New_York");
+  const [scope,setScope]=useState("all");          // "all" | "site"
+  const [emailOk,setEmailOk]=useState(true);
+  const [busy,setBusy]=useState(false); const [testing,setTesting]=useState(false);
+  const [err,setErr]=useState(null); const [msg,setMsg]=useState(null);
+
+  useEffect(()=>{(async()=>{
+    setLoading(true);
+    try{
+      const d=await api("digest_get");
+      setEmailOk(d.emailConfigured!==false);
+      if(d.digest){
+        setCfg(d.digest); setEnabled(!!d.digest.enabled);
+        setHour(Number.isFinite(d.digest.send_hour)?d.digest.send_hour:7);
+        setTz(d.digest.timezone||"America/New_York");
+        setScope(d.digest.site_name?"site":"all");
+      }else{
+        // First run — preselect the browser's timezone if we recognize it.
+        try{ const bz=Intl.DateTimeFormat().resolvedOptions().timeZone; if(DIGEST_TZS.some(([z])=>z===bz)) setTz(bz); }catch{}
+      }
+    }catch(e){ setErr(e.message); } finally{ setLoading(false); }
+  })();},[]);
+
+  const save=async(nextEnabled)=>{
+    setErr(null); setMsg(null); setBusy(true);
+    const willEnable = nextEnabled===undefined ? enabled : nextEnabled;
+    try{
+      await api("digest_save",{ account_id:activeId, enabled:willEnable, send_hour:hour, timezone:tz,
+        site_name: scope==="site" ? (site?.name||null) : null });
+      setEnabled(willEnable);
+      setMsg(willEnable?"Daily digest saved.":"Daily digest turned off.");
+    }catch(e){ setErr(e.message); } finally{ setBusy(false); }
+  };
+  const sendTest=async()=>{
+    setErr(null); setMsg(null); setTesting(true);
+    try{ const r=await api("digest_test",{ account_id:activeId, timezone:tz, site_name: scope==="site"?(site?.name||null):null });
+      setMsg(r.empty?`Test sent to ${r.to} — no data for yesterday yet, but delivery works.`:`Test digest sent to ${r.to}.`);
+    }catch(e){ setErr(e.message); } finally{ setTesting(false); }
+  };
+
+  const selS={...authInput,padding:"9px 12px",fontSize:13,cursor:"pointer",width:"auto"};
+  if(loading) return <div style={{fontSize:13,color:FAINT,padding:"4px 0 14px"}}>Loading digest…</div>;
+  return (
+    <div style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"14px 16px",marginBottom:18,background:"#FFFDF8"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:800,color:TEXT,display:"flex",alignItems:"center",gap:7}}>☀ Daily digest</div>
+          <div style={{fontSize:12,color:MUTED,marginTop:3,lineHeight:1.5,maxWidth:380}}>A morning recap email of yesterday’s production, consumption, battery, and a 7-day trend — with charts.</div>
+        </div>
+        <button onClick={()=>save(!enabled)} disabled={busy} title={enabled?"On — click to turn off":"Off — click to turn on"} style={{width:42,height:24,borderRadius:12,border:"none",background:enabled?BATTERY:"#D6D3D1",position:"relative",cursor:"pointer",flexShrink:0}}>
+          <span style={{position:"absolute",top:2,left:enabled?20:2,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
+        </button>
+      </div>
+      {err&&<div style={errBox}>{err}</div>}
+      {msg&&<div style={okBox}>{msg}</div>}
+      {!emailOk &&
+        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11.5,color:"#92400E"}}>
+          Email delivery isn’t configured yet (<code style={{fontFamily:"monospace"}}>RESEND_API_KEY</code>). You can still save settings — they’ll send once it’s set.
+        </div>}
+      <div style={{display:"flex",flexWrap:"wrap",gap:14,alignItems:"flex-end"}}>
+        <div>
+          <label style={lblS}>Send at</label>
+          <select value={hour} onChange={e=>setHour(Number(e.target.value))} style={selS}>
+            {Array.from({length:24},(_,h)=><option key={h} value={h}>{hourLabel12(h)}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lblS}>Timezone</label>
+          <select value={tz} onChange={e=>setTz(e.target.value)} style={selS}>
+            {DIGEST_TZS.map(([z,lbl])=><option key={z} value={z}>{lbl}</option>)}
+          </select>
+        </div>
+        {site && (
+          <div>
+            <label style={lblS}>Coverage</label>
+            <select value={scope} onChange={e=>setScope(e.target.value)} style={selS}>
+              <option value="all">All sites</option>
+              <option value="site">{site.name}</option>
+            </select>
+          </div>
+        )}
+      </div>
+      <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+        <button onClick={()=>save()} disabled={busy} style={{padding:"8px 16px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#FCD34D,#D97706)",color:"#7C2D12",fontSize:13,fontWeight:700,fontFamily:SANS,cursor:busy?"wait":"pointer"}}>{busy?"Saving…":"Save"}</button>
+        <button onClick={sendTest} disabled={testing||!emailOk} style={{padding:"8px 16px",borderRadius:9,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:testing?"wait":"pointer"}}>{testing?"Sending…":"Send test digest"}</button>
+      </div>
+      {enabled && <div style={{fontSize:11,color:FAINT,marginTop:10}}>Next digest ~{hourLabel12(hour)} {DIGEST_TZS.find(([z])=>z===tz)?.[1]||tz}{cfg?.last_sent_at?` · last sent ${new Date(cfg.last_sent_at).toLocaleDateString()}`:""}</div>}
+    </div>
+  );
+}
 function NotificationsSettings({activeId, site=null}){
   const [data,setData]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -789,6 +891,8 @@ function NotificationsSettings({activeId, site=null}){
   if(loading) return <div style={{fontSize:13,color:FAINT,padding:"8px 0"}}>Loading alerts…</div>;
   return (
     <>
+      <DigestSettings activeId={activeId} site={site}/>
+      <div style={{fontSize:13,fontWeight:800,color:TEXT,margin:"4px 0 10px"}}>Threshold alerts</div>
       {err&&<div style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {data && !data.emailConfigured &&

@@ -1,6 +1,7 @@
 import { getTrigger } from "@/lib/notifications/triggers";
 import { send, buildTestMessage, buildShareMessage, buildShareInviteMessage, channelConfigured } from "@/lib/notifications/deliver";
 import { DAILY_CAP } from "@/lib/notifications/server";
+import { buildAndSendDigest } from "@/lib/notifications/digestServer";
 
 const CryptoJS = require("crypto-js");
 const crypto = require("crypto");
@@ -629,6 +630,65 @@ export default async function handler(req, res) {
       } catch {}
       if (!r.ok) return res.status(502).json({ error: r.reason || "send failed", to });
       return res.json({ ok: true, to });
+    }
+
+    // ── Daily digest config (DB only) + test-send (does its own Midnite login) ──
+    if (action === "digest_get") {
+      const sb = supabaseAdmin();
+      const { data, error } = await sb.from("notification_digests")
+        .select("*").eq("user_id", user.id).eq("frequency", "daily").maybeSingle();
+      if (error && !schemaMissing(error)) return res.status(500).json({ error: error.message });
+      return res.json({
+        digest: data || null,
+        emailConfigured: channelConfigured("email"),
+        schemaReady: !schemaMissing(error || {}),
+      });
+    }
+    if (action === "digest_save") {
+      const b = req.body || {};
+      const sb = supabaseAdmin();
+      let accountId = b.account_id || null;
+      if (accountId) {
+        const { data: own } = await sb.from("midnite_accounts").select("id").eq("id", accountId).eq("user_id", user.id).maybeSingle();
+        if (!own) return res.status(403).json({ error: "That account isn't yours" });
+      }
+      const hour = Number(b.send_hour);
+      const row = {
+        user_id: user.id,
+        account_id: accountId,
+        frequency: "daily",
+        channel: "email",
+        enabled: b.enabled === undefined ? true : !!b.enabled,
+        send_hour: Number.isFinite(hour) ? Math.max(0, Math.min(23, Math.round(hour))) : 7,
+        timezone: (b.timezone || "America/New_York").slice(0, 64),
+        site_name: b.site_name || null,
+      };
+      const { data, error } = await sb.from("notification_digests")
+        .upsert(row, { onConflict: "user_id,frequency" }).select("*").single();
+      if (error) return res.status(500).json({ error: schemaMissing(error) ? SCHEMA_HINT : error.message });
+      return res.json({ digest: data });
+    }
+    if (action === "digest_test") {
+      const b = req.body || {};
+      if (!channelConfigured("email"))
+        return res.status(400).json({ error: "Email isn't configured yet — set RESEND_API_KEY in the environment to enable delivery." });
+      const to = user.email;
+      if (!to) return res.status(400).json({ error: "No email is set on your account" });
+      // Use the requested account (verified to be the user's) or their first one.
+      const sb = supabaseAdmin();
+      let acct = null;
+      if (b.account_id) {
+        const { data } = await sb.from("midnite_accounts").select("id,midnite_username,enc_password").eq("id", b.account_id).eq("user_id", user.id).maybeSingle();
+        acct = data || null;
+      }
+      if (!acct) {
+        const { data } = await sb.from("midnite_accounts").select("id,midnite_username,enc_password").eq("user_id", user.id).order("created_at").limit(1);
+        acct = data?.[0] || null;
+      }
+      if (!acct) return res.status(400).json({ error: "Link a Midnite account first." });
+      const r = await buildAndSendDigest({ acct, to, tz: b.timezone || "America/New_York", siteFilter: b.site_name || null, force: true });
+      if (!r.ok && !r.empty) return res.status(502).json({ error: r.reason || "send failed", to });
+      return res.json({ ok: true, to, empty: !!r.empty, sites: r.sites || 0 });
     }
 
     // ── Data actions: resolve the account (own OR shared-to-me), authenticate to Midnite ──
