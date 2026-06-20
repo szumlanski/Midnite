@@ -672,23 +672,26 @@ function FleetView({ sites, onPick, onBack, onLogout }){
   }, [sites]);
   useEffect(()=>{ load(); const t=setInterval(load,120000); return ()=>clearInterval(t); }, [load]); // 2-min (data is 5-min)
 
+  // House load per inverter: the direct (EPS-detected) load reading OR the balance, whichever is larger —
+  // balanceLoad alone nets to ~0 on some AIO/EPS units even when the house is clearly drawing.
+  const loadOf = (d)=> Math.max((d?.load?.lines||[]).reduce((s,l)=>s+(l.power>0?l.power:0),0), balanceLoad(d)||0);
   const metricsOf = (site)=>{
     const row = data[site.name];
-    const [on=0, al=0, off=0, disc=0] = site.statusCounts || [];
-    const total = site.inverters.length, offline = off + disc;
+    const total = site.inverters.length;
+    // Status is derived from the LIVE fetch (did inverters return data?), NOT the stale installer
+    // statusCounts feed — that count was wrongly reporting producing sites as offline.
+    const v = row?.results ? row.results.filter(r=>r?.ok && r?.data) : null;
     let status; // rank ascending = most urgent first, so the default sort surfaces problems
-    if(total>0 && on===0) status={label:"Offline",color:GRID_IN,rank:0};
-    else if(al>0) status={label:"Alarm",color:SOLAR,rank:1};
-    else if(on>0 && offline>0) status={label:"Partial",color:SOLAR,rank:2};
-    else if(on>0) status={label:"Online",color:BATTERY,rank:3};
-    else status={label:"—",color:FAINT,rank:4};
-    // skeleton only on first load (no results yet, no error); keep showing data during background refresh
-    const m={ site, status, total, on, offline, error: row?.error, loading: !row?.results && !row?.error };
-    if(row?.results){
-      const v=row.results.filter(r=>r?.ok&&r?.data);
-      m.invOnline=v.length;
+    if(v){
+      if(v.length===0) status={label:"Offline",color:GRID_IN,rank:0};
+      else if(v.length<total) status={label:"Partial",color:SOLAR,rank:2};
+      else status={label:"Online",color:BATTERY,rank:3};
+    } else if(row?.error) status={label:"Offline",color:GRID_IN,rank:0};
+    else status={label:"Checking…",color:FAINT,rank:5}; // first load
+    const m={ site, status, total, invOnline: v?v.length:0, error: row?.error, loading: !v && !row?.error };
+    if(v){
       m.pv=v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
-      m.load=v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
+      m.load=v.reduce((s,i)=>s+loadOf(i.data),0);
       m.gridNet=v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
       m.batNet=v.reduce((s,i)=>s+((i.data.battery?.charge||0)-(i.data.battery?.discharge||0)),0);
       const socA=v.filter(i=>(i.data.battery?.soc||0)>0);
