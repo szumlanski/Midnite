@@ -446,6 +446,19 @@ a custom set (can't remove the last). **All** reselects everything. Applies to D
 = inverters whose sn ∈ `selectedSns`; `allSelected` gates the aggregate Live panels. Effects key on `snKey` (the
 joined sns). (Explorer uses `InverterSelector single` → `onPick`, unaffected.)
 
+## Fleet View (`FleetView`, multi-site accounts only)
+A dedicated fleet-management page, **gated to `sites.length>1`**. Reached via a **⊞ Fleet View** button on the
+Sites picker (`SiteSelector`, `onFleet`) and a **Fleet** header button on the dashboard; both call `openFleet()`
+which stamps `fleetReturn` (sites/dashboard) so the back arrow returns correctly. Routed as `authState==="fleet"`.
+**Does NOT replace the Sites picker** (kept for now). Fetches each site's live `status` in parallel (per-row
+skeletons on first load only; background refresh keeps showing data), aggregates per-site metrics, and renders a
+**sortable table** (desktop) / **stacked cards** (`.fleet-cards`, <640px). Columns: Site, **Status** (from the
+fleet `statusCounts` feed — Offline/Alarm/Partial/Online, ranked so **problems sort first** by default), PV Now,
+Load, Battery SOC (+charge/discharge arrow), Grid (import/export), PV Today, Exported, **Updated** (report-time
+`UpdatedChip`). KPI summary (Sites/Online/Need-Attention/Fleet-PV-Now/Fleet-PV-Today; the first three are clickable
+filters), search, All/Online/Issues chips, **sticky totals footer**, **CSV export**, manual ↻ refresh + 2-min
+auto-refresh (data is 5-min), and **click a row/card → opens that site**.
+
 ## Battery Panel
 - Capacity kWh uses **nominal 51.2 V** (`capacityAh * 51.2 / 1000`), not live voltage.
 - Shows live **rate** (`±%/hr` of rated capacity) and **ETA** (`fmtHrs` → time to full / time remaining), or `Idle`.
