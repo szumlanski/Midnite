@@ -447,17 +447,36 @@ a custom set (can't remove the last). **All** reselects everything. Applies to D
 joined sns). (Explorer uses `InverterSelector single` → `onPick`, unaffected.)
 
 ## Fleet View (`FleetView`, multi-site accounts only)
-A dedicated fleet-management page, **gated to `sites.length>1`**. Reached via a **⊞ Fleet View** button on the
-Sites picker (`SiteSelector`, `onFleet`) and a **Fleet** header button on the dashboard; both call `openFleet()`
-which stamps `fleetReturn` (sites/dashboard) so the back arrow returns correctly. Routed as `authState==="fleet"`.
-**Does NOT replace the Sites picker** (kept for now). Fetches each site's live `status` in parallel (per-row
-skeletons on first load only; background refresh keeps showing data), aggregates per-site metrics, and renders a
-**sortable table** (desktop) / **stacked cards** (`.fleet-cards`, <640px). Columns: Site, **Status** (from the
-fleet `statusCounts` feed — Offline/Alarm/Partial/Online, ranked so **problems sort first** by default), PV Now,
-Load, Battery SOC (+charge/discharge arrow), Grid (import/export), PV Today, Exported, **Updated** (report-time
-`UpdatedChip`). KPI summary (Sites/Online/Need-Attention/Fleet-PV-Now/Fleet-PV-Today; the first three are clickable
-filters), search, All/Online/Issues chips, **sticky totals footer**, **CSV export**, manual ↻ refresh + 2-min
-auto-refresh (data is 5-min), and **click a row/card → opens that site**.
+A fleet-management page that **replaces the Sites picker** for multi-site accounts (`authState==="fleet"`; the
+`"sites"` route also aliases to it; `SiteSelector` is retained but unused). Routing lands multi-site accounts here;
+a **⊞ Fleet** header button (and `openFleet()`) returns to it; the back arrow shows only when a site is selected.
+Per site it fetches **both** `status` (5-min: SOC, energy-today, freshness, online-detection) **and** `flow` (live
+5s power — the only feed that captures EPS/generator pass-through load) in parallel; first-load skeletons only,
+background refresh keeps data. **Online = the live `flow` per-inverter `online` flag** (the API returns stale cached
+data for offline sites, so "returned data" wrongly showed offline sites online — Daggett); power is summed from
+ONLINE flow readings (offline → blank); load is EPS-aware (`load>0?load:eps`). **Sortable table on all widths**
+(horizontal scroll on mobile — the card layout was reverted by preference). Columns: Site, **Status**
+(Offline/Partial/Online from the flow flag, ranked so problems sort first), PV Now, Load, Battery SOC (+arrow),
+Grid, PV Today, Exported, **Updated**. KPI summary (Sites/Online/Need-Attention/Fleet-PV-Now/Today; first three are
+clickable filters), search, All/Online/Issues, sticky totals footer, CSV export, ↻ refresh + 2-min auto-refresh,
+click-through to a site.
+
+## Site Sharing (per-site, view-only) — `site_shares`
+An owner shares ONE of their sites with someone by email; **credentials never move** — the proxy fetches the shared
+site using the OWNER's stored creds (service role), scoped to the shared site only. **Schema:** `site_shares`
+(owner_user_id, owner_account_id, site_name, shared_with_email, shared_with_user_id (null until signup), status
+pending|active|revoked) in `supabase/schema.sql` — RLS lets the owner + recipient read. **Proxy:** `resolveAccount()`
+accepts an accountId that's the user's OWN account or one **shared to them** (returns `sharedSites`); `loadSites`
+extracted + `loadSitesCached` (3-min) reused by the `sites` action and scoping; `SHARED_ALLOWED` gates which actions
+a viewer may call and `assertSharedScope` rejects serials/sites outside the share; write/admin actions blocked.
+Actions: **`share_create`** (looks up recipient by email → active share + `buildShareMessage` email, or pending
+invite + `buildShareInviteMessage` via Resend), **`share_list`** (outgoing+incoming), **`share_revoke`**; the
+`accounts` action **claims pending invites** for this email on load and returns `sharedAccounts`. **UI:** a per-site
+**↗ Share** header button (`ShareModal`) + a central **Settings → Sharing** tab (`SharingSettings`: share any site,
+manage/revoke, see incoming). Shared accounts appear in the **account switcher** (shown when own+shared > 1);
+selecting one loads its shared sites; a **SHARED · view-only** badge shows and the Admin tab + Share button hide.
+`loadContext`/`reloadAccounts` consider shared accounts so a recipient with no linked account of their own lands on
+their shared sites. Degrades gracefully (no shared accounts, "run schema.sql" hints) until the table exists.
 
 ## Battery Panel
 - Capacity kWh uses **nominal 51.2 V** (`capacityAh * 51.2 / 1000`), not live voltage.
