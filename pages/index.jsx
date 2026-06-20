@@ -460,6 +460,51 @@ function RuleForm({onSave,onCancel}){
   );
 }
 
+// Share a site (view-only) with someone by email. Existing users see it immediately; others get an
+// invite to sign up with that address. Owner-only; recipients never get credentials or equipment control.
+function ShareModal({ site, accountId, onClose }){
+  const [email,setEmail]=useState("");
+  const [shares,setShares]=useState(null);
+  const [busy,setBusy]=useState(false); const [err,setErr]=useState(null); const [msg,setMsg]=useState(null);
+  const load=useCallback(()=>{ api("share_list",{accountId}).then(r=>setShares((r.outgoing||[]).filter(s=>s.site_name===site.name))).catch(()=>setShares([])); },[accountId,site.name]);
+  useEffect(()=>{ load(); },[load]);
+  const submit=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null);
+    try{ const r=await api("share_create",{accountId,site:site.name,email}); setMsg(r.pending?`Invite emailed to ${email} — they'll see it after signing up with that address.`:`Shared with ${email}.${r.emailed?"":" (Email isn't configured, so no notification was sent.)"}`); setEmail(""); load(); }
+    catch(e){ setErr(e.message); } finally{ setBusy(false); } };
+  const revoke=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Stop sharing this site with them?")) return; try{ await api("share_revoke",{id}); load(); }catch(e){ setErr(e.message); } };
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:460,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`}}>
+          <div><div style={{fontSize:15,fontWeight:700,color:TEXT}}>Share site</div><div style={{fontSize:11,color:FAINT}}>{site.name}</div></div>
+          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{padding:"14px 18px"}}>
+          {err&&<div style={errBox}>{err}</div>}
+          {msg&&<div style={okBox}>{msg}</div>}
+          <div style={{fontSize:12,color:MUTED,marginBottom:12,lineHeight:1.5}}>Give someone <strong>view-only</strong> access to this site. They'll get an email; if they don't have an account yet, they'll be invited to create one with that address and the site appears automatically. No equipment control — viewing only. Revoke anytime.</div>
+          <form onSubmit={submit} style={{display:"flex",gap:8,marginBottom:18}}>
+            <input type="email" required placeholder="person@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={{...authInput,flex:1}}/>
+            <button type="submit" disabled={busy||!email} style={{...authBtn(busy||!email),width:"auto",padding:"0 18px"}}>{busy?"…":"Share"}</button>
+          </form>
+          <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Shared with</div>
+          {shares===null&&<div style={{fontSize:13,color:FAINT}}>Loading…</div>}
+          {shares&&shares.length===0&&<div style={{fontSize:13,color:FAINT}}>Not shared with anyone yet.</div>}
+          {shares&&shares.map(s=>(
+            <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.shared_with_email}</div>
+                <div style={{fontSize:11,color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending — awaiting signup"}</div>
+              </div>
+              <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
@@ -2823,6 +2868,8 @@ export default function Dashboard() {
   const [role, setRole] = useState("user");
   const [userEmail, setUserEmail] = useState("");
   const [accounts, setAccounts] = useState([]);
+  const [sharedAccounts, setSharedAccounts] = useState([]); // accounts shared TO me (view-only)
+  const [showShare, setShowShare] = useState(false);
   const [profile, setProfile] = useState({});
   const [sitePhotos, setSitePhotos] = useState({});
   const [activeAccountId, setActiveAccountId] = useState(typeof localStorage!=="undefined" ? localStorage.getItem("midnite_account_id")||null : null);
@@ -2889,11 +2936,12 @@ export default function Dashboard() {
   // Load app-account context (role, email, linked Midnite accounts) and route into the app.
   async function loadContext() {
     const acc = await api("accounts"); // { role, email, accounts, profile, sitePhotos }
-    setRole(acc.role); setIsAdmin(acc.role==="admin"); setUserEmail(acc.email||""); setAccounts(acc.accounts||[]);
+    setRole(acc.role); setIsAdmin(acc.role==="admin"); setUserEmail(acc.email||""); setAccounts(acc.accounts||[]); setSharedAccounts(acc.sharedAccounts||[]);
     setProfile(acc.profile||{}); setSitePhotos(acc.sitePhotos||{});
-    if(!acc.accounts || acc.accounts.length===0){ setActive(null); setAuthState("link"); return; }
+    const all = [...(acc.accounts||[]), ...(acc.sharedAccounts||[])]; // own + shared-to-me (view-only)
+    if(all.length===0){ setActive(null); setAuthState("link"); return; } // nothing linked or shared → link screen
     let aid = localStorage.getItem("midnite_account_id");
-    if(!aid || !acc.accounts.find(a=>a.id===aid)) aid = acc.accounts[0].id;
+    if(!aid || !all.find(a=>a.id===aid)) aid = all[0].id;
     setActive(aid);
     const sitesData = await api("sites");
     handleSitesResponse(sitesData);
@@ -2920,9 +2968,10 @@ export default function Dashboard() {
     api("sites").then(handleSitesResponse).catch(e=>{ setLoginError(e.message); });
   }
   async function reloadAccounts(){ // after link/unlink/profile/site-photo changes from settings
-    const acc = await api("accounts"); setRole(acc.role); setIsAdmin(acc.role==="admin"); setAccounts(acc.accounts||[]);
+    const acc = await api("accounts"); setRole(acc.role); setIsAdmin(acc.role==="admin"); setAccounts(acc.accounts||[]); setSharedAccounts(acc.sharedAccounts||[]);
     setProfile(acc.profile||{}); setSitePhotos(acc.sitePhotos||{});
-    if(acc.accounts?.length){ if(!acc.accounts.find(a=>a.id===activeAccountId)) switchAccount(acc.accounts[0].id); }
+    const all = [...(acc.accounts||[]), ...(acc.sharedAccounts||[])];
+    if(all.length){ if(!all.find(a=>a.id===activeAccountId)) switchAccount(all[0].id); }
     else { setActive(null); setShowAccountSettings(false); setSite(null); setSites([]); setAuthState("link"); }
   }
 
@@ -3154,6 +3203,10 @@ export default function Dashboard() {
       rateSign: effLive.battery>0?"+":"−" };
   }
 
+  // Own + shared-to-me accounts for the switcher; whether the active one is a shared (view-only) account.
+  const switchAccts = [...accounts.map(a=>({id:a.id,label:a.label||a.midnite_username})), ...sharedAccounts.map(a=>({id:a.id,label:`${a.label} · shared`}))];
+  const activeIsShared = sharedAccounts.some(a=>a.id===activeAccountId);
+
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <AppLogin/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
@@ -3177,7 +3230,7 @@ export default function Dashboard() {
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {/* Desktop tabs */}
             <div className="top-tabs" style={{gap:2,background:"#F1F5F9",borderRadius:10,padding:3}}>
-              {(isAdmin?[...TABS,ADMIN_TAB]:TABS).map(t=>(
+              {(isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS).map(t=>(
                 <button key={t.id} onClick={()=>setTab(t.id)} className="tab-btn" style={{
                   padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:SANS,
                   background:tab===t.id?CARD:"transparent",
@@ -3187,11 +3240,13 @@ export default function Dashboard() {
                 }}>{t.label}</button>
               ))}
             </div>
-            {isAdmin && accounts.length>1 && (
-              <select value={activeAccountId||""} onChange={e=>switchAccount(e.target.value)} title="Active Midnite account" style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",maxWidth:160}}>
-                {accounts.map(a=><option key={a.id} value={a.id}>{a.label||a.midnite_username}</option>)}
+            {switchAccts.length>1 && (
+              <select value={activeAccountId||""} onChange={e=>switchAccount(e.target.value)} title="Active account" style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",maxWidth:170}}>
+                {switchAccts.map(a=><option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             )}
+            {activeIsShared&&<span style={{fontSize:10,fontWeight:700,color:SOLAR,background:"#FFFBEB",border:"1px solid #FDE68A",padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>SHARED · view-only</span>}
+            {site&&!activeIsShared&&<button onClick={()=>setShowShare(true)} title="Share this site" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>↗ Share</button>}
             {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⊞ Fleet</button>}
             <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings</button>
             <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
@@ -3261,10 +3316,11 @@ export default function Dashboard() {
         </div>
 
         {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)}/>}
+        {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
         {/* Mobile bottom nav */}
         <div className="bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:CARD,borderTop:`1px solid ${BORDER}`,padding:"8px 0 max(8px, env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>
-          {(isAdmin?[...TABS,ADMIN_TAB]:TABS).map(t=>(
+          {(isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS).map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
               display:"flex",flexDirection:"column",alignItems:"center",gap:3,
               padding:"4px 16px",border:"none",background:"transparent",cursor:"pointer",fontFamily:SANS,
