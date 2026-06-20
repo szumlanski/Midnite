@@ -330,7 +330,10 @@ function LandingPage(){
     if(error)setErr(error.message);
   };
 
-  const scrollToAuth=()=>{const el=document.getElementById("lp-auth");if(el)el.scrollIntoView({behavior:"smooth"});};
+  const scrollToAuth=(target)=>{
+    if(target&&target!==mode){setMode(target);setErr(null);setMsg(null);if(target==="signin")setTc(false);}
+    const el=document.getElementById("lp-auth");if(el)el.scrollIntoView({behavior:"smooth"});
+  };
 
   const features=[
     {
@@ -405,7 +408,7 @@ function LandingPage(){
           <text x="342" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">LOAD</text>
           <text x="410" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">UPDATED</text>
           <rect x="12" y="122" width="436" height="30" rx="4" fill={CARD}/>
-          <text x="52" y="141" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Wise Naples</text>
+          <text x="52" y="141" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Maple Street Home</text>
           <rect x="148" y="130" width="42" height="14" rx="7" fill="#DCFCE7"/>
           <text x="169" y="141" textAnchor="middle" fill={BATTERY} fontSize="7" fontFamily="system-ui" fontWeight="700">Online</text>
           <text x="210" y="141" fill={SOLAR} fontSize="9" fontFamily="system-ui" fontWeight="600">8.3 kW</text>
@@ -413,7 +416,7 @@ function LandingPage(){
           <text x="342" y="141" fill={LOAD_C} fontSize="9" fontFamily="system-ui">5.2 kW</text>
           <text x="410" y="141" fill={MUTED} fontSize="8" fontFamily="system-ui">2m ago</text>
           <rect x="12" y="154" width="436" height="30" rx="4" fill={BG}/>
-          <text x="52" y="173" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Daggett Cayo Costa</text>
+          <text x="52" y="173" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Coastal Retreat</text>
           <rect x="148" y="162" width="42" height="14" rx="7" fill="#DCFCE7"/>
           <text x="169" y="173" textAnchor="middle" fill={BATTERY} fontSize="7" fontFamily="system-ui" fontWeight="700">Online</text>
           <text x="210" y="173" fill={SOLAR} fontSize="9" fontFamily="system-ui" fontWeight="600">6.8 kW</text>
@@ -421,7 +424,7 @@ function LandingPage(){
           <text x="342" y="173" fill={LOAD_C} fontSize="9" fontFamily="system-ui">4.1 kW</text>
           <text x="410" y="173" fill={MUTED} fontSize="8" fontFamily="system-ui">5m ago</text>
           <rect x="12" y="186" width="436" height="30" rx="4" fill="#FFF7F7"/>
-          <text x="52" y="205" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Bochan Residence</text>
+          <text x="52" y="205" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Riverside Cabin</text>
           <rect x="148" y="194" width="42" height="14" rx="7" fill="#FEE2E2"/>
           <text x="169" y="205" textAnchor="middle" fill={GRID_IN} fontSize="7" fontFamily="system-ui" fontWeight="700">Offline</text>
           <text x="210" y="205" fill={MUTED} fontSize="9" fontFamily="system-ui">—</text>
@@ -454,7 +457,7 @@ function LandingPage(){
           <rect x="22" y="116" width="26" height="26" rx="8" fill="#FEE2E2"/>
           <text x="35" y="134" textAnchor="middle" fill={GRID_IN} fontSize="14">⚡</text>
           <text x="58" y="126" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Grid import above 2 kW</text>
-          <text x="58" y="141" fill={MUTED} fontSize="8" fontFamily="system-ui">Wise Naples · Email · 30 min cooldown</text>
+          <text x="58" y="141" fill={MUTED} fontSize="8" fontFamily="system-ui">Maple Street Home · Email · 30 min cooldown</text>
           <rect x="376" y="120" width="34" height="16" rx="8" fill="#E5E7EB"/>
           <circle cx="388" cy="128" r="6" fill="#9CA3AF"/>
           <rect x="12" y="164" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
@@ -555,7 +558,8 @@ function LandingPage(){
         <div style={{display:"flex",alignItems:"center",gap:20}}>
           <a href="/faq" className="lp-nav-link">FAQ</a>
           <a href="/terms" className="lp-nav-link">Terms</a>
-          <button className="lp-pbtn" style={{padding:"9px 20px",fontSize:13}} onClick={scrollToAuth}>Sign in</button>
+          <button className="lp-obtn" style={{padding:"7px 18px",fontSize:13}} onClick={()=>scrollToAuth("signin")}>Sign in</button>
+          <button className="lp-pbtn" style={{padding:"9px 20px",fontSize:13}} onClick={()=>scrollToAuth("signup")}>Sign up</button>
         </div>
       </div>
     </nav>
@@ -677,7 +681,7 @@ function LandingPage(){
             <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
               {freeFt.map(f=><li key={f} className="lp-chk" style={{fontSize:13,color:TEXT}}>{f}</li>)}
             </ul>
-            <button className="lp-obtn" style={{width:"100%"}} onClick={scrollToAuth}>Get started free</button>
+            <button className="lp-obtn" style={{width:"100%"}} onClick={()=>scrollToAuth("signup")}>Get started free</button>
           </div>
           <div style={{background:"#0D1F33",borderRadius:20,padding:32,border:"2px solid #F59E0B",boxShadow:"0 8px 32px rgba(217,119,6,0.2)",position:"relative"}}>
             <div style={{position:"absolute",top:16,right:16,background:"#F59E0B",borderRadius:12,padding:"3px 10px",fontSize:11,fontWeight:700,color:"#7C2D12"}}>Pre-launch: FREE</div>
@@ -687,7 +691,7 @@ function LandingPage(){
             <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
               {proFt.map(f=><li key={f} style={{fontSize:13,color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:8}}><span style={{color:"#F59E0B",fontWeight:700}}>✓</span>{f}</li>)}
             </ul>
-            <button className="lp-pbtn" style={{width:"100%"}} onClick={scrollToAuth}>Start free during pre-launch</button>
+            <button className="lp-pbtn" style={{width:"100%"}} onClick={()=>scrollToAuth("signup")}>Start free during pre-launch</button>
           </div>
         </div>
       </div>
@@ -1100,11 +1104,14 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
-        {onLogout && (
-          <div style={{display:"flex",justifyContent:"flex-end",padding:"14px 18px",borderTop:`1px solid ${BORDER}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderTop:`1px solid ${BORDER}`}}>
+          <a href="/faq" target="_blank" rel="noopener" style={{fontSize:13,fontWeight:600,color:MUTED,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:15}}>❓</span> Help &amp; FAQ
+          </a>
+          {onLogout && (
             <button onClick={onLogout} style={{padding:"9px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
