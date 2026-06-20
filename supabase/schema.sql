@@ -190,3 +190,33 @@ alter table public.notification_digests enable row level security;
 drop policy if exists "own digests read" on public.notification_digests;
 create policy "own digests read" on public.notification_digests for select using (auth.uid() = user_id);
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Site sharing (per-site, VIEW-ONLY). An owner shares one of their sites with a
+-- recipient by email. Credentials never move: the proxy fetches the shared site
+-- using the OWNER's stored creds (service role), scoped to the shared site only.
+-- Idempotent — safe to re-run.
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.site_shares (
+  id                  uuid primary key default gen_random_uuid(),
+  owner_user_id       uuid not null references auth.users on delete cascade,
+  owner_account_id    uuid not null references public.midnite_accounts on delete cascade,
+  site_name           text not null,
+  shared_with_email   text not null,                                   -- lowercased
+  shared_with_user_id uuid references auth.users on delete cascade,    -- null until the recipient signs up
+  role                text not null default 'viewer',
+  status              text not null default 'pending',                 -- 'pending' | 'active' | 'revoked'
+  created_at          timestamptz not null default now(),
+  accepted_at         timestamptz,
+  revoked_at          timestamptz
+);
+-- One live share per (owner account, site, recipient email).
+create unique index if not exists site_shares_unique on public.site_shares (owner_account_id, site_name, shared_with_email);
+create index if not exists site_shares_recipient on public.site_shares (shared_with_user_id);
+create index if not exists site_shares_email on public.site_shares (shared_with_email);
+alter table public.site_shares enable row level security;
+-- Defense-in-depth (all writes go through the service-role proxy): the owner and the
+-- recipient may each read a share row.
+drop policy if exists "site shares read" on public.site_shares;
+create policy "site shares read" on public.site_shares for select
+  using (auth.uid() = owner_user_id or auth.uid() = shared_with_user_id);
+

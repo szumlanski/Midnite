@@ -1,5 +1,5 @@
 import { getTrigger } from "@/lib/notifications/triggers";
-import { send, buildTestMessage, channelConfigured } from "@/lib/notifications/deliver";
+import { send, buildTestMessage, buildShareMessage, buildShareInviteMessage, channelConfigured } from "@/lib/notifications/deliver";
 import { DAILY_CAP } from "@/lib/notifications/server";
 
 const CryptoJS = require("crypto-js");
@@ -331,6 +331,91 @@ function schemaMissing(err) {
 }
 const SCHEMA_HINT = "Notifications tables aren't set up yet — run supabase/schema.sql in the Supabase SQL editor, then reload.";
 
+// ── Site list loader (extracted so the `sites` action AND share-scoping can both use it) ─────────────
+async function loadSites(auth) {
+  if (auth.accountType === "installer") {
+    const now = new Date();
+    const baseBody = { MemberID: auth.username, EndUserName: "", OperationName: "", GoodsID: "", inDate: now.toISOString().split("T")[0], inTime: now.toTimeString().split(" ")[0], status: 0 };
+    const sites = [];
+    for (let page = 1; page <= 100; page++) {
+      const body = { ...baseBody, Page: page }; body.sign = makeSign(body);
+      const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
+      const pageSites = Array.isArray(data) ? data : []; sites.push(...pageSites);
+      if (pageSites.length === 0) break;
+    }
+    const autoIdMap = {};
+    for (const memberID of new Set(sites.map(s => s.MemberID).filter(Boolean))) {
+      try {
+        const ilb = { MemberID: memberID }; ilb.sign = makeSign(ilb);
+        const result = await midnitePost("/Eagle/v1/Inverterapi/InverterList", ilb, auth.token);
+        for (const inv of (result?.AllInverterList || [])) if (inv.GoodsID && inv.AutoID) autoIdMap[inv.GoodsID] = { autoId: String(inv.AutoID), memberAutoId: String(inv.MemberAutoID || "") };
+      } catch (e) { console.log("[Eagle InverterList err]", e.message); }
+    }
+    const enriched = sites.map(s => {
+      const firstSn = typeof s.GoodsID?.[0] === "string" ? s.GoodsID[0] : s.GoodsID?.[0]?.GoodsID;
+      const siteMemberAutoId = autoIdMap[firstSn]?.memberAutoId || s.MemberAutoID || "";
+      return { ...s, MemberAutoID: siteMemberAutoId, GoodsID: (s.GoodsID || []).map(g => { const sn = typeof g === "string" ? g : g.GoodsID; return { GoodsID: sn, AutoID: autoIdMap[sn]?.autoId || null }; }) };
+    });
+    return { accountType: "installer", sites: enriched };
+  }
+  const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" }; glBody.sign = makeSign(glBody);
+  const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, auth.token);
+  const sites = [];
+  for (const g of (groups?.AllGroupList || [])) {
+    const ilBody = { MemberAutoID: auth.memberAutoId, GroupAutoID: g.AutoID }; ilBody.sign = makeSign(ilBody);
+    const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, auth.token);
+    const list = result?.AllInverterList || []; const status = g.InverterStatus || {};
+    sites.push({ MemberID: auth.username, MemberAutoID: auth.memberAutoId, GoodsID: list.map(d => ({ GoodsID: d.GoodsID, AutoID: d.AutoID ?? d.InverterAutoID ?? d.auto_id ?? d.id ?? null })), MemberStateCount: [status.Green || 0, status.yellow || 0, status.red || 0, status.gray || 0] });
+  }
+  return { accountType: "enduser", sites };
+}
+const _sitesCache = new Map(); // accountId → { data, ts } (3-min TTL; shared between owner + shared viewers)
+async function loadSitesCached(auth, accountId) {
+  const k = accountId || auth.username;
+  const hit = _sitesCache.get(k);
+  if (hit && Date.now() - hit.ts < 3 * 60 * 1000) return hit.data;
+  const data = await loadSites(auth);
+  _sitesCache.set(k, { data, ts: Date.now() });
+  return data;
+}
+
+// ── Share resolution: a request's accountId is either the user's OWN account, or one shared TO them. ─
+// Returns { acct, owned, sharedSites:string[]|null }. Shared access is VIEW-ONLY and scoped to the
+// shared site_names; credentials stay server-side (we use the owner's stored creds).
+async function resolveAccount(userId, accountId) {
+  const sb = supabaseAdmin();
+  let q = sb.from("midnite_accounts").select("*").eq("user_id", userId);
+  if (accountId) q = q.eq("id", accountId);
+  const { data: owned } = await q.order("created_at").limit(1);
+  if (owned && owned[0]) return { acct: owned[0], owned: true, sharedSites: null };
+  if (accountId) {
+    try {
+      const { data: shares } = await sb.from("site_shares").select("site_name").eq("owner_account_id", accountId).eq("shared_with_user_id", userId).eq("status", "active");
+      if (shares && shares.length) {
+        const { data: oacct } = await sb.from("midnite_accounts").select("*").eq("id", accountId).maybeSingle();
+        if (oacct) return { acct: oacct, owned: false, sharedSites: shares.map(s => s.site_name) };
+      }
+    } catch (e) { /* site_shares table may not exist yet → fall through */ }
+  }
+  const e = new Error("No linked Midnite account"); e.code = 409; throw e;
+}
+// Data actions a shared (view-only) viewer may call.
+const SHARED_ALLOWED = new Set(["sites", "status", "flow", "flowrt", "day", "dayexcel", "month", "year", "logsearch", "logview"]);
+// Reject requests for serials/sites outside what's actually shared with the viewer.
+async function assertSharedScope(auth, accountId, sharedSites, action, body) {
+  if (action === "sites") return;
+  if (action === "logview") { if (body?.site && !sharedSites.includes(body.site)) { const e = new Error("forbidden"); e.code = 403; throw e; } return; }
+  const reqSerials = [];
+  if (Array.isArray(body?.serials)) reqSerials.push(...body.serials);
+  if (body?.sn) reqSerials.push(body.sn);
+  if (body?.serial) reqSerials.push(body.serial);
+  if (!reqSerials.length) return;
+  const { sites } = await loadSitesCached(auth, accountId);
+  const allowed = new Set();
+  for (const s of sites) if (sharedSites.includes(s.MemberID)) for (const g of (s.GoodsID || [])) allowed.add(typeof g === "string" ? g : g.GoodsID);
+  for (const sn of reqSerials) if (!allowed.has(sn)) { const e = new Error("That inverter isn't part of a site shared with you."); e.code = 403; throw e; }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -351,7 +436,55 @@ export default async function handler(req, res) {
         sb.from("site_photos").select("site_name,url").eq("user_id", user.id),
       ]);
       const sitePhotos = Object.fromEntries((photos || []).map(p => [p.site_name, p.url]));
-      return res.json({ role, email: user.email, accounts: data || [], profile: prof || {}, sitePhotos });
+      // Incoming shares: claim any pending invites for this email, then surface shared accounts (read-only).
+      let sharedAccounts = [];
+      try {
+        await sb.from("site_shares").update({ shared_with_user_id: user.id, status: "active", accepted_at: new Date().toISOString() })
+          .eq("shared_with_email", (user.email || "").toLowerCase()).is("shared_with_user_id", null).eq("status", "pending");
+        const { data: shares } = await sb.from("site_shares").select("owner_account_id,site_name").eq("shared_with_user_id", user.id).eq("status", "active");
+        if (shares?.length) {
+          const ownerAcctIds = [...new Set(shares.map(s => s.owner_account_id))];
+          const { data: oaccts } = await sb.from("midnite_accounts").select("id,label,midnite_username,account_type,user_id").in("id", ownerAcctIds);
+          const ownerUserIds = [...new Set((oaccts || []).map(a => a.user_id))];
+          const { data: ownerProfs } = await sb.from("profiles").select("id,display_name,email").in("id", ownerUserIds);
+          const profById = Object.fromEntries((ownerProfs || []).map(p => [p.id, p]));
+          sharedAccounts = (oaccts || []).map(a => { const op = profById[a.user_id]; return { id: a.id, label: a.label || a.midnite_username, account_type: a.account_type, shared: true, ownerName: op?.display_name || op?.email || "a Sentinel user", sites: shares.filter(s => s.owner_account_id === a.id).map(s => s.site_name) }; });
+        }
+      } catch (e) { /* site_shares not set up yet → no shared accounts */ }
+      return res.json({ role, email: user.email, accounts: data || [], sharedAccounts, profile: prof || {}, sitePhotos });
+    }
+    // ── Site sharing (owner-side management; DB + email only) ──────────────────
+    if (action === "share_create") {
+      const sb = supabaseAdmin();
+      const { accountId, site, email } = req.body || {};
+      const em = String(email || "").trim().toLowerCase();
+      if (!accountId || !site || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return res.status(400).json({ error: "A valid account, site, and recipient email are required." });
+      if (em === (user.email || "").toLowerCase()) return res.status(400).json({ error: "You can't share a site with yourself." });
+      const { data: own } = await sb.from("midnite_accounts").select("id").eq("id", accountId).eq("user_id", user.id).maybeSingle();
+      if (!own) return res.status(403).json({ error: "That account isn't yours." });
+      const { data: prof } = await sb.from("profiles").select("id").eq("email", em).maybeSingle();
+      const row = { owner_user_id: user.id, owner_account_id: accountId, site_name: site, shared_with_email: em, shared_with_user_id: prof?.id || null, role: "viewer", status: prof ? "active" : "pending", accepted_at: prof ? new Date().toISOString() : null, revoked_at: null };
+      const { data: ins, error } = await sb.from("site_shares").upsert(row, { onConflict: "owner_account_id,site_name,shared_with_email" }).select("id,site_name,shared_with_email,status").single();
+      if (error) return res.status(500).json({ error: schemaMissing(error) ? "Sharing isn't set up yet — run supabase/schema.sql in Supabase." : error.message });
+      const ownerName = (await sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle()).data?.display_name || user.email;
+      try { await send({ channel: "email", to: em, message: prof ? buildShareMessage({ ownerName, siteName: site }) : buildShareInviteMessage({ ownerName, siteName: site, email: em }) }); } catch (e) {}
+      return res.json({ share: ins, emailed: channelConfigured("email"), pending: !prof });
+    }
+    if (action === "share_list") {
+      const sb = supabaseAdmin();
+      const accountId = req.body?.accountId || null;
+      let oq = sb.from("site_shares").select("id,owner_account_id,site_name,shared_with_email,status,created_at").eq("owner_user_id", user.id).neq("status", "revoked").order("created_at", { ascending: false });
+      if (accountId) oq = oq.eq("owner_account_id", accountId);
+      const { data: outgoing, error } = await oq;
+      if (error) return res.json({ outgoing: [], incoming: [], unconfigured: schemaMissing(error) });
+      const { data: incoming } = await sb.from("site_shares").select("id,owner_account_id,site_name,status,created_at").eq("shared_with_user_id", user.id).eq("status", "active").order("created_at", { ascending: false });
+      return res.json({ outgoing: outgoing || [], incoming: incoming || [] });
+    }
+    if (action === "share_revoke") {
+      const { id } = req.body || {};
+      if (!id) return res.status(400).json({ error: "id required" });
+      await supabaseAdmin().from("site_shares").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", id).eq("owner_user_id", user.id);
+      return res.json({ ok: true });
     }
     if (action === "updateprofile") {
       const { display_name, avatar_url } = req.body || {};
@@ -484,12 +617,18 @@ export default async function handler(req, res) {
       return res.json({ ok: true, to });
     }
 
-    // ── Data actions: resolve the linked Midnite account, authenticate to Midnite ──
-    const acct = await getLinkedAccount(user.id, req.body?.accountId);
+    // ── Data actions: resolve the account (own OR shared-to-me), authenticate to Midnite ──
+    const resolved = await resolveAccount(user.id, req.body?.accountId);
+    const acct = resolved.acct;
+    // Shared (view-only) access: restrict to the allowed read actions.
+    if (!resolved.owned && !SHARED_ALLOWED.has(action))
+      return res.status(403).json({ error: "This site is shared with you for viewing only." });
     let midPw;
     try { midPw = decryptCred(acct.enc_password); }
     catch (e) { const er = new Error("Stored Midnite credentials couldn't be read — please relink your account in Settings."); er.code = 409; throw er; }
     const auth = await loginCached(acct.midnite_username, midPw);
+    // Shared access: reject serials/sites outside what's actually shared with this viewer.
+    if (!resolved.owned) await assertSharedScope(auth, acct.id, resolved.sharedSites, action, req.body || {});
 
     switch (action) {
       case "logview": {
@@ -501,83 +640,10 @@ export default async function handler(req, res) {
         return res.json({ log: await readAccessLog(), persistent: !!kvEnv().url });
       }
       case "sites": {
-        if (auth.accountType === "installer") {
-          const now = new Date();
-          const baseBody = {
-            MemberID: auth.username, EndUserName: "", OperationName: "",
-            GoodsID: "", inDate: now.toISOString().split("T")[0],
-            inTime: now.toTimeString().split(" ")[0], status: 0,
-          };
-          // Paginate until empty page — terminaluserinfo returns one page at a time
-          const sites = [];
-          for (let page = 1; page <= 100; page++) {
-            const body = { ...baseBody, Page: page };
-            body.sign = makeSign(body);
-            const data = await midnitePost("/Eagle/v1/Operation/terminaluserinfo", body, auth.token);
-            const pageSites = Array.isArray(data) ? data : [];
-            sites.push(...pageSites);
-            if (pageSites.length === 0) break;
-          }
-
-          // Use the end-user memberAutoId (captured via dual Senergytec login) to fetch
-          // inverter AutoIDs from InverterList — required for Eagle getInverterStatus calls
-          const autoIdMap = {};
-          // Eagle's own InverterList returns AutoID + MemberAutoID per inverter
-          // — no Senergytec token needed, works with installer Eagle token alone
-          const memberIdsSeen = new Set(sites.map(s => s.MemberID).filter(Boolean));
-          for (const memberID of memberIdsSeen) {
-            try {
-              const ilb = { MemberID: memberID };
-              ilb.sign = makeSign(ilb);
-              const result = await midnitePost("/Eagle/v1/Inverterapi/InverterList", ilb, auth.token);
-              for (const inv of (result?.AllInverterList || [])) {
-                if (inv.GoodsID && inv.AutoID) {
-                  autoIdMap[inv.GoodsID] = { autoId: String(inv.AutoID), memberAutoId: String(inv.MemberAutoID || "") };
-                }
-              }
-            } catch(e) { console.log("[Eagle InverterList err]", e.message); }
-          }
-          console.log("[installer autoIdMap]", JSON.stringify(autoIdMap));
-
-          // Attach AutoID + MemberAutoID to each site/inverter so status calls can use them
-          const enriched = sites.map(s => {
-            const firstSn = typeof s.GoodsID?.[0] === "string" ? s.GoodsID[0] : s.GoodsID?.[0]?.GoodsID;
-            const siteMemberAutoId = autoIdMap[firstSn]?.memberAutoId || s.MemberAutoID || "";
-            return {
-              ...s,
-              MemberAutoID: siteMemberAutoId,
-              GoodsID: (s.GoodsID || []).map(g => {
-                const sn = typeof g === "string" ? g : g.GoodsID;
-                return { GoodsID: sn, AutoID: autoIdMap[sn]?.autoId || null };
-              }),
-            };
-          });
-          return res.json({ accountType: "installer", sites: enriched });
-        }
-        // End-user: get groups, then inverters for each group
-        const glBody = { MemberAutoID: auth.memberAutoId, inputValue: "" };
-        glBody.sign = makeSign(glBody);
-        const groups = await midnitePost("/Senergytec/web/v2/Inverterapi/GroupList", glBody, auth.token);
-        const groupList = groups?.AllGroupList || [];
-
-        const sites = [];
-        for (const g of groupList) {
-          const groupId = g.AutoID;
-          const ilBody = { MemberAutoID: auth.memberAutoId, GroupAutoID: groupId };
-          ilBody.sign = makeSign(ilBody);
-          const result = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterList", ilBody, auth.token);
-          const list = result?.AllInverterList || [];
-          const status = g.InverterStatus || {};
-          // Debug: log full first inverter object to find AutoID field name
-          if (list[0]) console.log("[InverterList fields]", JSON.stringify(Object.keys(list[0])), JSON.stringify(list[0]));
-          sites.push({
-            MemberID: auth.username,
-            MemberAutoID: auth.memberAutoId,
-            GoodsID: list.map(d => ({ GoodsID: d.GoodsID, AutoID: d.AutoID ?? d.InverterAutoID ?? d.auto_id ?? d.id ?? null })),
-            MemberStateCount: [status.Green||0, status.yellow||0, status.red||0, status.gray||0],
-          });
-        }
-        return res.json({ accountType: "enduser", sites });
+        const { accountType, sites } = await loadSitesCached(auth, acct.id);
+        // Shared (view-only) accounts only see the sites actually shared with them.
+        const out = resolved.sharedSites ? sites.filter(s => resolved.sharedSites.includes(s.MemberID)) : sites;
+        return res.json({ accountType, sites: out });
       }
       case "status": {
         const {serials, autoIds, memberAutoId:endUserMemberId}=req.body||{};
