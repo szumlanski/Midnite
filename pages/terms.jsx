@@ -112,7 +112,7 @@ export default function Terms() {
               Terms &amp; Conditions
             </h1>
             <p style={{ fontSize: 15, color: MUTED, margin: 0 }}>
-              Effective Date: June 20, 2025
+              Effective Date: June 20, 2026
             </p>
           </div>
 
@@ -561,7 +561,7 @@ export default function Terms() {
             paddingTop: 32,
           }}>
             <p style={{ fontSize: 13, color: FAINT, margin: '0 0 6px' }}>
-              © 2025 Second Stream LLC. All rights reserved.
+              © 2026 Second Stream LLC. All rights reserved.
             </p>
             <p style={{ fontSize: 12, color: FAINT, margin: 0 }}>
               Midnite Sentinel is not affiliated with Midnite Electric Co.
