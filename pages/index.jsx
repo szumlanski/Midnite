@@ -505,6 +505,63 @@ function ShareModal({ site, accountId, onClose }){
   );
 }
 
+// Central sharing manager (Settings → Sharing): share any site, see all outgoing shares with status +
+// revoke, and the sites others have shared with you.
+function SharingSettings({ activeId, sites=[] }){
+  const [data,setData]=useState(null);
+  const [site,setSite]=useState("");
+  const [email,setEmail]=useState("");
+  const [busy,setBusy]=useState(false); const [err,setErr]=useState(null); const [msg,setMsg]=useState(null);
+  useEffect(()=>{ if(!site&&sites[0]) setSite(sites[0].name); },[sites,site]);
+  const load=useCallback(()=>{ api("share_list").then(setData).catch(e=>setData({outgoing:[],incoming:[],error:e.message})); },[]);
+  useEffect(()=>{ load(); },[load]);
+  const share=async(e)=>{ e.preventDefault(); if(!site||!email)return; setBusy(true);setErr(null);setMsg(null);
+    try{ const r=await api("share_create",{accountId:activeId,site,email}); setMsg(r.pending?`Invite emailed to ${email} for ${site}.`:`Shared ${site} with ${email}.${r.emailed?"":" (Email isn't configured — no notification sent.)"}`); setEmail(""); load(); }
+    catch(e){ setErr(e.message); } finally{ setBusy(false); } };
+  const revoke=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Stop sharing this site with them?")) return; try{ await api("share_revoke",{id}); load(); }catch(e){ setErr(e.message); } };
+  const out = data?.outgoing||[]; const inc = data?.incoming||[];
+  const selStyle={...authInput,padding:"9px 12px",fontSize:13,cursor:"pointer"};
+  return (
+    <>
+      {err&&<div style={errBox}>{err}</div>}
+      {msg&&<div style={okBox}>{msg}</div>}
+      {data?.error&&<div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#92400E"}}>Sharing isn’t set up on the database yet (run <code style={{fontFamily:"monospace"}}>supabase/schema.sql</code>).</div>}
+      <div style={{fontSize:12,color:MUTED,marginBottom:12,lineHeight:1.5}}>Share <strong>view-only</strong> access to a site. Recipients get an email; if they don’t have an account, they’re invited to make one with that address and the site appears automatically. No equipment control. Revoke anytime.</div>
+      <form onSubmit={share} style={{padding:12,background:BG,borderRadius:10,border:`1px solid ${BORDER}`,marginBottom:16}}>
+        <div style={{marginBottom:10}}><label style={lblS}>Site</label>
+          <select value={site} onChange={e=>setSite(e.target.value)} style={selStyle}>
+            {sites.length===0&&<option value="">No sites on this account</option>}
+            {sites.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
+          </select>
+        </div>
+        <div style={{marginBottom:12}}><label style={lblS}>Recipient email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="person@email.com" style={authInput}/></div>
+        <button type="submit" disabled={busy||!site||!email} style={{...authBtn(busy||!site||!email),width:"auto",padding:"9px 18px"}}>{busy?"Sharing…":"Share site"}</button>
+      </form>
+      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Shared by you</div>
+      {data===null&&<div style={{fontSize:13,color:FAINT,marginBottom:6}}>Loading…</div>}
+      {data&&out.length===0&&<div style={{fontSize:13,color:FAINT,marginBottom:6}}>You haven’t shared any sites yet.</div>}
+      {out.map(s=>(
+        <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{s.site_name}</div>
+            <div style={{fontSize:11,color:FAINT}}>{s.shared_with_email} · <span style={{color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending signup"}</span></div>
+          </div>
+          <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
+        </div>
+      ))}
+      {inc.length>0&&<>
+        <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",margin:"16px 0 8px"}}>Shared with you</div>
+        {inc.map(s=>(
+          <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:TEXT}}>{s.site_name}</div><div style={{fontSize:11,color:FAINT}}>view-only · switch to it from the account selector</div></div>
+            <span style={{fontSize:11,color:BATTERY,fontWeight:700}}>Active</span>
+          </div>
+        ))}
+      </>}
+    </>
+  );
+}
+
 function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
@@ -550,7 +607,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           </div>
           <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
         </div>
-        <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}{tabBtn("alerts","Notifications")}</div>
+        <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}{tabBtn("alerts","Notifications")}{tabBtn("sharing","Sharing")}</div>
         <div style={{padding:"14px 18px"}}>
           {err&&<div style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
@@ -620,6 +677,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           </>}
 
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
+          {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
       </div>
     </div>
