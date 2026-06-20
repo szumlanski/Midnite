@@ -229,6 +229,8 @@ const PageHead = () => (
       .site-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.1)!important}
       .inv-card{transition:box-shadow 0.2s}
       .inv-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1)!important}
+      .fleet-row{transition:background 0.12s}
+      .fleet-row:hover{background:#FAF7F2}
       .inv-scroll::-webkit-scrollbar{display:none}
       .inv-scroll{-ms-overflow-style:none;scrollbar-width:none}
       @media(max-width:640px){
@@ -579,7 +581,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
   );
 }
 
-function SiteSelector({sites, onSelect, onLogout}) {
+function SiteSelector({sites, onSelect, onLogout, onFleet}) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const filtered = q ? sites.filter(s=>s.name.toLowerCase().includes(q)||(s.installer||"").toLowerCase().includes(q)) : sites;
@@ -595,7 +597,10 @@ function SiteSelector({sites, onSelect, onLogout}) {
               <div style={{fontSize:11,color:FAINT}}>{filtered.length} of {sites.length} site{sites.length!==1?"s":""}</div>
             </div>
           </div>
-          <button onClick={onLogout} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {onFleet&&<button onClick={onFleet} style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#FCD34D,#D97706)",color:"#7C2D12",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:"pointer",boxShadow:"0 2px 8px rgba(217,119,6,0.25)"}}>⊞ Fleet View</button>}
+            <button onClick={onLogout} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+          </div>
         </div>
         <div style={{maxWidth:900,margin:"0 auto",padding:"20px 16px",animation:"fadeUp 0.4s ease"}}>
           <div style={{position:"relative",marginBottom:16}}>
@@ -634,6 +639,183 @@ function SiteSelector({sites, onSelect, onLogout}) {
               );
             })}
           </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Fleet View — sortable status + metrics table for multi-site (installer/admin) accounts ──────────
+function FleetView({ sites, onPick, onBack, onLogout }){
+  const [data, setData] = useState({});        // site.name -> { loading, results, error }
+  const [sortKey, setSortKey] = useState("status");
+  const [sortDir, setSortDir] = useState(1);   // 1 asc, -1 desc
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all"); // all | online | issues
+  const [busy, setBusy] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  const load = useCallback(()=>{
+    if(!sites.length) return;
+    setBusy(true); let done=0;
+    sites.forEach(site=>{
+      setData(d=>({ ...d, [site.name]: { ...(d[site.name]||{}), loading:true } }));
+      api("status", { serials: site.inverters.map(i=>i.sn), autoIds: site.inverters.map(i=>i.autoId), memberAutoId: site.memberAutoId })
+        .then(({results})=> setData(d=>({ ...d, [site.name]: { loading:false, results } })))
+        .catch(e=> setData(d=>({ ...d, [site.name]: { loading:false, error:e.message } })))
+        .finally(()=>{ done++; if(done===sites.length){ setBusy(false); setLastRefresh(new Date()); } });
+    });
+  }, [sites]);
+  useEffect(()=>{ load(); const t=setInterval(load,120000); return ()=>clearInterval(t); }, [load]); // 2-min (data is 5-min)
+
+  const metricsOf = (site)=>{
+    const row = data[site.name];
+    const [on=0, al=0, off=0, disc=0] = site.statusCounts || [];
+    const total = site.inverters.length, offline = off + disc;
+    let status;
+    if(al>0) status={label:"Alarm",color:SOLAR,rank:1};
+    else if(on>0 && offline>0) status={label:"Partial",color:SOLAR,rank:2};
+    else if(on>0) status={label:"Online",color:BATTERY,rank:0};
+    else if(total>0) status={label:"Offline",color:GRID_IN,rank:3};
+    else status={label:"—",color:FAINT,rank:5};
+    // skeleton only on first load (no results yet, no error); keep showing data during background refresh
+    const m={ site, status, total, on, offline, error: row?.error, loading: !row?.results && !row?.error };
+    if(row?.results){
+      const v=row.results.filter(r=>r?.ok&&r?.data);
+      m.invOnline=v.length;
+      m.pv=v.reduce((s,i)=>s+(i.data.photovoltaic?.power?.totalDc||0),0);
+      m.load=v.reduce((s,i)=>s+(balanceLoad(i.data)||0),0);
+      m.gridNet=v.reduce((s,i)=>s+(i.data.grid?.netW||0),0);
+      m.batNet=v.reduce((s,i)=>s+((i.data.battery?.charge||0)-(i.data.battery?.discharge||0)),0);
+      const socA=v.filter(i=>(i.data.battery?.soc||0)>0);
+      m.soc=socA.length? socA.reduce((s,i)=>s+i.data.battery.soc,0)/socA.length : null;
+      m.pvToday=v.reduce((s,i)=>s+(i.data.photovoltaic?.production?.today||0),0);
+      m.expToday=v.reduce((s,i)=>s+(i.data.grid?.sold?.today||0),0);
+      m.updated=v.map(i=>i.data.inverter?.lastUpdateTime).filter(Boolean).sort().slice(-1)[0]||null;
+    }
+    return m;
+  };
+
+  const baseM = sites.map(metricsOf);
+  const totalPv = baseM.reduce((s,m)=>s+(m.pv||0),0);
+  const totalPvToday = baseM.reduce((s,m)=>s+(m.pvToday||0),0);
+  const onlineCount = baseM.filter(m=>m.status.rank===0).length;
+  const issueCount = baseM.filter(m=>m.status.rank>=1&&m.status.rank<=3).length;
+
+  let rows = baseM;
+  const q=query.trim().toLowerCase();
+  if(q) rows=rows.filter(m=>m.site.name.toLowerCase().includes(q)||(m.site.installer||"").toLowerCase().includes(q));
+  if(filter==="online") rows=rows.filter(m=>m.status.rank===0);
+  else if(filter==="issues") rows=rows.filter(m=>m.status.rank>=1&&m.status.rank<=3);
+  const sortVal=(m)=>{ switch(sortKey){
+    case "name": return m.site.name.toLowerCase();
+    case "status": return m.status.rank;
+    case "pv": return m.pv??-1; case "load": return m.load??-1; case "soc": return m.soc??-1;
+    case "grid": return m.gridNet??0; case "pvToday": return m.pvToday??-1; case "expToday": return m.expToday??-1;
+    default: return m.site.name.toLowerCase(); } };
+  rows=[...rows].sort((a,b)=>{ const av=sortVal(a),bv=sortVal(b); if(av<bv)return -sortDir; if(av>bv)return sortDir; return a.site.name.localeCompare(b.site.name); });
+  const setSort=(k)=>{ if(sortKey===k) setSortDir(d=>-d); else { setSortKey(k); setSortDir(k==="name"?1:-1); } };
+
+  const cols=[
+    {k:"name",label:"Site",a:"left"},{k:"status",label:"Status",a:"left"},
+    {k:"pv",label:"PV Now",a:"right"},{k:"load",label:"Load",a:"right"},
+    {k:"soc",label:"Battery",a:"right"},{k:"grid",label:"Grid",a:"right"},
+    {k:"pvToday",label:"PV Today",a:"right"},{k:"expToday",label:"Exported",a:"right"},
+    {k:"updated",label:"Updated",a:"right",nosort:true},
+  ];
+  const Sk=()=> <span style={{display:"inline-block",width:46,height:11,borderRadius:4,background:"#ECE7E0",animation:"pulse 1.4s infinite"}}/>;
+  const th={padding:"9px 12px",fontSize:10.5,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",userSelect:"none",position:"sticky",top:0,background:CARD,borderBottom:`1px solid ${BORDER}`,zIndex:1};
+  const td={padding:"11px 12px",fontSize:13,color:TEXT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",borderBottom:`1px solid ${BORDER}`};
+  const kpi=(label,value,color)=>(
+    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"12px 14px",boxShadow:SHADOW_SM}}>
+      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
+      <div style={{fontSize:20,fontWeight:800,color:color||TEXT,marginTop:3,fontVariantNumeric:"tabular-nums"}}>{value}</div>
+    </div>
+  );
+  const fchip=(id,label)=> <button onClick={()=>setFilter(id)} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${filter===id?SOLAR:BORDER}`,background:filter===id?"#FFFBEB":CARD,color:filter===id?"#92400E":MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{label}</button>;
+
+  return (
+    <>
+      <PageHead/>
+      <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
+        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:CARD,position:"sticky",top:0,zIndex:100,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={onBack} title="Back" style={{border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16,lineHeight:1}}>‹</button>
+            <Logo size={30}/>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Fleet View</div>
+              <div style={{fontSize:11,color:FAINT}}>{sites.length} sites · <span style={{color:BATTERY,fontWeight:600}}>{onlineCount} online</span>{issueCount>0&&<> · <span style={{color:SOLAR,fontWeight:600}}>{issueCount} need attention</span></>}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={load} disabled={busy} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:busy?"default":"pointer"}}>{busy?"Refreshing…":"↻ Refresh"}</button>
+            <button onClick={onLogout} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+          </div>
+        </div>
+
+        <div style={{maxWidth:1180,margin:"0 auto",padding:"18px 16px 32px",animation:"fadeUp 0.35s ease"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:16}}>
+            {kpi("Sites",sites.length)}
+            {kpi("Online",onlineCount,BATTERY)}
+            {kpi("Need Attention",issueCount,issueCount>0?SOLAR:FAINT)}
+            {kpi("Fleet PV Now",fmt(totalPv,1),SOLAR)}
+            {kpi("Fleet PV Today",fmtE(totalPvToday),TEXT)}
+          </div>
+
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+            <div style={{position:"relative",flex:"1 1 200px",maxWidth:300}}>
+              <svg style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="Search sites…" value={query} onChange={e=>setQuery(e.target.value)} style={{width:"100%",padding:"9px 12px 9px 34px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:13,fontFamily:SANS,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            {fchip("all","All")}{fchip("online","Online")}{fchip("issues","Issues")}
+            {lastRefresh&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>as of {lastRefresh.toLocaleTimeString()}</span>}
+          </div>
+
+          <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",width:"100%",minWidth:820}}>
+                <thead><tr>
+                  {cols.map(c=>(
+                    <th key={c.k} onClick={()=>!c.nosort&&setSort(c.k)} style={{...th,textAlign:c.a,cursor:c.nosort?"default":"pointer",color:sortKey===c.k?TEXT:FAINT}}>
+                      {c.label}{sortKey===c.k&&!c.nosort&&<span style={{marginLeft:3}}>{sortDir>0?"▲":"▼"}</span>}
+                    </th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {rows.length===0&&<tr><td colSpan={cols.length} style={{...td,textAlign:"center",color:FAINT,padding:"32px 0"}}>No sites match.</td></tr>}
+                  {rows.map(m=>{
+                    const imp=m.gridNet>50, exp=m.gridNet<-50;
+                    const chg=m.batNet>20, dis=m.batNet<-20;
+                    return (
+                      <tr key={m.site.name} onClick={()=>onPick(m.site)} className="fleet-row" style={{cursor:"pointer"}}>
+                        <td style={{...td,maxWidth:240}}>
+                          <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
+                          <div style={{fontSize:11,color:FAINT}}>{m.site.installer||`${m.total} inverter${m.total!==1?"s":""}`}</div>
+                        </td>
+                        <td style={td}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{width:8,height:8,borderRadius:"50%",background:m.status.color,flexShrink:0}}/>
+                            <div>
+                              <div style={{fontWeight:600,color:m.status.color}}>{m.status.label}</div>
+                              <div style={{fontSize:10.5,color:FAINT}}>{(m.invOnline??m.on)}/{m.total} online</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{...td,textAlign:"right",fontWeight:600}}>{m.loading?<Sk/>:fmt(m.pv,1)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmt(m.load,1)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.soc==null?<span style={{color:FAINT}}>—</span>:<span style={{fontWeight:600,color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?<span style={{color:BATTERY}}> ↑</span>:dis?<span style={{color:SOLAR}}> ↓</span>:""}</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT,fontWeight:600}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN,fontWeight:600}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:FAINT}}>—</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmtE(m.pvToday)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.expToday>0?fmtE(m.expToday):<span style={{color:FAINT}}>—</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.error?<span style={{color:GRID_IN,fontSize:11}}>error</span>:(m.updated?<UpdatedChip time={m.updated}/>:<span style={{color:FAINT}}>—</span>))}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status from the fleet feed; metrics are the latest 5-min report, auto-refreshing each minute.</div>
         </div>
       </div>
     </>
@@ -2708,6 +2890,9 @@ export default function Dashboard() {
     localStorage.setItem("midnite_selected_site", s.name);
     setAuthState("dashboard");
   }
+  // Fleet view (multi-site only) — remember where to return to (sites picker or dashboard).
+  const [fleetReturn, setFleetReturn] = useState("sites");
+  const openFleet = () => { setFleetReturn(authState==="dashboard"?"dashboard":"sites"); setAuthState("fleet"); };
 
   useEffect(() => {
     if(!supabaseReady){ setAuthState("appauth"); return; }
@@ -2932,7 +3117,8 @@ export default function Dashboard() {
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <AppLogin/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
-  if(authState==="sites") return <SiteSelector sites={sites} onSelect={handleSelectSite} onLogout={handleLogout}/>;
+  if(authState==="fleet") return <FleetView sites={sites} onPick={handleSelectSite} onBack={()=>setAuthState(fleetReturn)} onLogout={handleLogout}/>;
+  if(authState==="sites") return <SiteSelector sites={sites} onSelect={handleSelectSite} onLogout={handleLogout} onFleet={sites.length>1?openFleet:null}/>;
 
   return (
     <>
@@ -2967,6 +3153,7 @@ export default function Dashboard() {
                 {accounts.map(a=><option key={a.id} value={a.id}>{a.label||a.midnite_username}</option>)}
               </select>
             )}
+            {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Fleet</button>}
             {sites.length>1&&<button onClick={()=>{setAuthState("sites");setSite(null);setStatuses([]);}} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sites</button>}
             <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings</button>
             <button onClick={handleLogout} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
