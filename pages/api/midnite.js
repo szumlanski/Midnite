@@ -691,6 +691,43 @@ export default async function handler(req, res) {
       return res.json({ ok: true, to, empty: !!r.empty, sites: r.sites || 0 });
     }
 
+    if (action === "admin_users") {
+      if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+      const sb = supabaseAdmin();
+      const { data: authData, error } = await sb.auth.admin.listUsers({ perPage: 1000 });
+      if (error) return res.status(500).json({ error: error.message });
+      const [{ data: profiles }, { data: accounts }] = await Promise.all([
+        sb.from("profiles").select("id,display_name,role"),
+        sb.from("midnite_accounts").select("user_id,midnite_username,label,account_type"),
+      ]);
+      const profMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
+      const acctMap = {};
+      for (const a of (accounts || [])) {
+        if (!acctMap[a.user_id]) acctMap[a.user_id] = [];
+        acctMap[a.user_id].push(a);
+      }
+      const users = (authData?.users || []).map(u => ({
+        id: u.id,
+        email: u.email,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at,
+        profile: profMap[u.id] || {},
+        accounts: acctMap[u.id] || [],
+      }));
+      return res.json({ users });
+    }
+    if (action === "admin_reset_password") {
+      if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+      const { email: targetEmail } = req.body || {};
+      if (!targetEmail) return res.status(400).json({ error: "email required" });
+      const sb = supabaseAdmin();
+      const { error } = await sb.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: (process.env.NEXT_PUBLIC_APP_URL || "https://midnite-rose.vercel.app") + "/",
+      });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true });
+    }
+
     // ── Data actions: resolve the account (own OR shared-to-me), authenticate to Midnite ──
     const resolved = await resolveAccount(user.id, req.body?.accountId);
     const acct = resolved.acct;

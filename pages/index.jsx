@@ -3128,6 +3128,9 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   const rtfPrevRef = useRef(null);
   const rtfBusyRef = useRef(false);
   const rtfSn = inverters.find(i=>String(i.autoId)===String(swAutoId))?.sn || inverters[0]?.sn || "";
+  const [users, setUsers] = useState(null);
+  const [usersErr, setUsersErr] = useState(null);
+  const [resetSent, setResetSent] = useState({});
   useEffect(()=>{
     if(!rtfOn || !rtfSn) return;
     let alive = true;
@@ -3236,6 +3239,19 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   };
   useEffect(()=>{ loadLog(); }, []);
 
+  const loadUsers = async () => {
+    setUsersErr(null);
+    try { const r = await api("admin_users", {}); setUsers(r.users||[]); }
+    catch(e){ setUsersErr(String(e)); setUsers([]); }
+  };
+  useEffect(()=>{ loadUsers(); }, []);
+
+  const sendReset = async (email) => {
+    setResetSent(s=>({...s,[email]:"sending"}));
+    try { await api("admin_reset_password",{email}); setResetSent(s=>({...s,[email]:"ok"})); }
+    catch(e){ setResetSent(s=>({...s,[email]:"err:"+String(e).slice(0,50)})); }
+  };
+
   const run = async (a, b) => {
     const act = a || action;
     let body = b;
@@ -3267,6 +3283,43 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
       <div style={{fontSize:11,color:FAINT,fontFamily:"monospace",textAlign:"right"}}>build {BUILD}</div>
+
+      {/* Users — all app accounts + linked Midnite handles + password reset */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
+          <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Users</div>
+          <button onClick={loadUsers} style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:11,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>↻ Refresh</button>
+        </div>
+        {usersErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:8}}>{usersErr}</div>}
+        {!users&&!usersErr && <div style={{fontSize:12,color:FAINT}}>Loading…</div>}
+        {users?.length===0 && <div style={{fontSize:12,color:FAINT}}>No users yet.</div>}
+        {users?.length>0 && <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>
+              <Th a="left">Email</Th>
+              <Th a="left">Name</Th>
+              <Th a="center">Role</Th>
+              <Th a="left">Midnite account</Th>
+              <Th>Last sign-in</Th>
+              <Th a="center">Reset pw</Th>
+            </tr></thead>
+            <tbody>
+              {(users||[]).map(u=>{
+                const rs=resetSent[u.email];
+                return <tr key={u.id} style={{borderTop:`1px solid ${BORDER}`}}>
+                  <Td a="left">{u.email}</Td>
+                  <Td a="left">{u.profile?.display_name||<span style={{color:FAINT}}>—</span>}</Td>
+                  <Td a="center"><span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:10,background:u.profile?.role==="admin"?"#FEF3C7":BORDER,color:u.profile?.role==="admin"?SOLAR:MUTED}}>{u.profile?.role||"user"}</span></Td>
+                  <Td a="left">{u.accounts.length?u.accounts.map(a=>a.midnite_username).join(", "):<span style={{color:FAINT}}>not linked</span>}</Td>
+                  <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:FAINT}}>never</span>}</Td>
+                  <Td a="center"><button onClick={()=>sendReset(u.email)} disabled={rs==="sending"} style={{padding:"3px 8px",borderRadius:6,border:"none",background:rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",color:rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",fontSize:10,fontWeight:700,fontFamily:SANS,cursor:rs==="sending"?"default":"pointer",whiteSpace:"nowrap"}}>{rs==="sending"?"…":rs==="ok"?"✓ Sent":rs?.startsWith("err")?"Failed":"Send reset"}</button></Td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>}
+      </div>
+
       {/* Energy registers — spot stuck feed-in counters */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
