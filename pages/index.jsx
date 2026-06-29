@@ -728,6 +728,44 @@ function LandingPage(){
     </footer>
   </>);
 }
+// Password reset — shown when user arrives via a reset-password email link.
+function ResetPasswordPage({onDone}){
+  const [pw,setPw]=useState(""); const [pw2,setPw2]=useState("");
+  const [busy,setBusy]=useState(false); const [err,setErr]=useState(null); const [done,setDone]=useState(false);
+  const inputS={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${BORDER}`,fontSize:14,fontFamily:SANS,color:TEXT,background:CARD,outline:"none",boxSizing:"border-box"};
+  const submit=async(e)=>{
+    e.preventDefault(); setErr(null);
+    if(pw.length<6){setErr("Password must be at least 6 characters");return;}
+    if(pw!==pw2){setErr("Passwords don't match");return;}
+    setBusy(true);
+    const {error}=await supabase.auth.updateUser({password:pw});
+    setBusy(false);
+    if(error){setErr(error.message);return;}
+    setDone(true);
+    setTimeout(onDone,1500);
+  };
+  return (
+    <div style={{minHeight:"100vh",background:BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:SANS}}>
+      <PageHead title="Set new password — Midnite Sentinel"/>
+      <Logo size={44} style={{marginBottom:20}}/>
+      <div style={{fontSize:22,fontWeight:700,color:TEXT,marginBottom:4}}>Set new password</div>
+      <div style={{fontSize:13,color:MUTED,marginBottom:28,textAlign:"center"}}>Enter a new password for your Midnite Sentinel account.</div>
+      <div style={{width:"100%",maxWidth:360}}>
+        {done
+          ? <div style={{background:"#D1FAE5",border:"1px solid #6EE7B7",borderRadius:12,padding:"14px 20px",color:BATTERY,fontWeight:600,fontSize:14,textAlign:"center"}}>✓ Password updated — signing you in…</div>
+          : <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:12}}>
+              <input type="password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)} autoFocus required minLength={6} style={inputS}/>
+              <input type="password" placeholder="Confirm new password" value={pw2} onChange={e=>setPw2(e.target.value)} required style={inputS}/>
+              {err&&<div style={{color:GRID_IN,fontSize:12}}>{err}</div>}
+              <button type="submit" disabled={busy} style={{padding:"11px",borderRadius:10,border:"none",background:SOLAR,color:"#fff",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:busy?"default":"pointer",marginTop:4}}>
+                {busy?"Updating…":"Update password"}
+              </button>
+            </form>
+        }
+      </div>
+    </div>
+  );
+}
 // First-run: connect a Midnite account to the signed-in app account.
 function LinkMidnite({email,onLinked,onSignOut}){
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(null); const [busy,setBusy]=useState(false);
@@ -3707,6 +3745,7 @@ export default function Dashboard() {
     supabase.auth.getSession().then(({data})=>route(data.session));
     const { data:sub } = supabase.auth.onAuthStateChange((event, session)=>{
       if(event==="SIGNED_OUT"){ setAuthState("appauth"); return; }
+      if(event==="PASSWORD_RECOVERY"){ setAuthState("reset_password"); return; }
       if(event==="SIGNED_IN" || event==="INITIAL_SESSION"){ route(session); }
     });
     return ()=>{ active=false; sub?.subscription?.unsubscribe(); };
@@ -3921,6 +3960,7 @@ export default function Dashboard() {
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <LandingPage/>;
+  if(authState==="reset_password") return <ResetPasswordPage onDone={async()=>{ setAuthState("loading"); try{await loadContext();}catch{setAuthState("appauth");} }}/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
   if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos} onPhotoChanged={reloadAccounts} readOnly={sharedAccounts.some(a=>a.id===activeAccountId)}/>;
 
