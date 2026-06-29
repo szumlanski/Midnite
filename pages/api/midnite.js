@@ -727,6 +727,32 @@ export default async function handler(req, res) {
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true });
     }
+    if (action === "admin_link_account") {
+      if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+      const { targetEmail, username, password: targetPw, label } = req.body || {};
+      if (!targetEmail || !username || !targetPw) return res.status(400).json({ error: "targetEmail, username, and password required" });
+      const sb = supabaseAdmin();
+      // Find the target Supabase user by email.
+      const { data: authData, error: listErr } = await sb.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr) return res.status(500).json({ error: listErr.message });
+      const targetUser = (authData?.users || []).find(u => (u.email || "").toLowerCase() === targetEmail.toLowerCase());
+      if (!targetUser) return res.status(404).json({ error: `No Sentinel account found for ${targetEmail}` });
+      // Enforce one-linked-account limit for non-admin target users.
+      const { data: prof } = await sb.from("profiles").select("role").eq("id", targetUser.id).maybeSingle();
+      const targetRole = prof?.role || "user";
+      const { data: existing } = await sb.from("midnite_accounts").select("id").eq("user_id", targetUser.id);
+      if (targetRole !== "admin" && (existing || []).length >= 1)
+        return res.status(409).json({ error: "That user already has a linked Midnite account. Unlink it first via Settings." });
+      // Validate the Midnite credentials.
+      let v; try { v = await login(username, targetPw); } catch (e) { return res.status(400).json({ error: "Midnite login failed — check the username and password." }); }
+      const { data: ins, error: insErr } = await sb.from("midnite_accounts")
+        .insert({ user_id: targetUser.id, label: label || username, midnite_username: username, enc_password: encryptCred(targetPw), account_type: v.accountType })
+        .select("id,label,midnite_username,account_type,created_at").single();
+      if (insErr) return res.status(insErr.code === "23505" ? 409 : 500)
+        .json({ error: insErr.code === "23505" ? "That Midnite account is already linked to another login." : insErr.message });
+      await logAccess({ type: "link", user: targetEmail, account: username });
+      return res.json({ ok: true, account: ins });
+    }
 
     // ── Data actions: resolve the account (own OR shared-to-me), authenticate to Midnite ──
     const resolved = await resolveAccount(user.id, req.body?.accountId);

@@ -3169,6 +3169,11 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   const [users, setUsers] = useState(null);
   const [usersErr, setUsersErr] = useState(null);
   const [resetSent, setResetSent] = useState({});
+  const [linkTarget, setLinkTarget] = useState(null); // userId of the row with link form open
+  const [linkUser, setLinkUser] = useState("");
+  const [linkPw, setLinkPw] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkErr, setLinkErr] = useState(null);
   useEffect(()=>{
     if(!rtfOn || !rtfSn) return;
     let alive = true;
@@ -3289,6 +3294,14 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     try { await api("admin_reset_password",{email}); setResetSent(s=>({...s,[email]:"ok"})); }
     catch(e){ setResetSent(s=>({...s,[email]:"err:"+String(e).slice(0,50)})); }
   };
+  const openLink = (userId) => { setLinkTarget(userId); setLinkUser(""); setLinkPw(""); setLinkErr(null); };
+  const doLink = async (targetEmail) => {
+    if(!linkUser||!linkPw){setLinkErr("Username and password required");return;}
+    setLinkBusy(true); setLinkErr(null);
+    try { await api("admin_link_account",{targetEmail,username:linkUser,password:linkPw}); setLinkTarget(null); await loadUsers(); }
+    catch(e){ setLinkErr(String(e)); }
+    setLinkBusy(false);
+  };
 
   const run = async (a, b) => {
     const act = a || action;
@@ -3342,16 +3355,34 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
               <Th a="center">Reset pw</Th>
             </tr></thead>
             <tbody>
-              {(users||[]).map(u=>{
+              {(users||[]).flatMap(u=>{
                 const rs=resetSent[u.email];
-                return <tr key={u.id} style={{borderTop:`1px solid ${BORDER}`}}>
+                const isLinking=linkTarget===u.id;
+                const miniBtn=(label,onClick,bg,fg,disabled)=><button onClick={onClick} disabled={disabled} style={{padding:"3px 8px",borderRadius:6,border:"none",background:bg,color:fg,fontSize:10,fontWeight:700,fontFamily:SANS,cursor:disabled?"default":"pointer",whiteSpace:"nowrap"}}>{label}</button>;
+                const rows=[<tr key={u.id} style={{borderTop:`1px solid ${BORDER}`}}>
                   <Td a="left">{u.email}</Td>
                   <Td a="left">{u.profile?.display_name||<span style={{color:FAINT}}>—</span>}</Td>
                   <Td a="center"><span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:10,background:u.profile?.role==="admin"?"#FEF3C7":BORDER,color:u.profile?.role==="admin"?SOLAR:MUTED}}>{u.profile?.role||"user"}</span></Td>
-                  <Td a="left">{u.accounts.length?u.accounts.map(a=>a.midnite_username).join(", "):<span style={{color:FAINT}}>not linked</span>}</Td>
+                  <Td a="left">{u.accounts.length
+                    ? u.accounts.map(a=>a.midnite_username).join(", ")
+                    : isLinking
+                      ? <span style={{color:SOLAR,fontSize:10,fontWeight:700}}>Linking…</span>
+                      : <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:FAINT}}>not linked</span>{miniBtn("Link Midnite",()=>openLink(u.id),"#0EA5E9","#fff",false)}</span>}</Td>
                   <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:FAINT}}>never</span>}</Td>
-                  <Td a="center"><button onClick={()=>sendReset(u.email)} disabled={rs==="sending"} style={{padding:"3px 8px",borderRadius:6,border:"none",background:rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",color:rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",fontSize:10,fontWeight:700,fontFamily:SANS,cursor:rs==="sending"?"default":"pointer",whiteSpace:"nowrap"}}>{rs==="sending"?"…":rs==="ok"?"✓ Sent":rs?.startsWith("err")?"Failed":"Send reset"}</button></Td>
-                </tr>;
+                  <Td a="center">{miniBtn(rs==="sending"?"…":rs==="ok"?"✓ Sent":rs?.startsWith("err")?"Failed":"Send reset",()=>sendReset(u.email),rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",rs==="sending")}</Td>
+                </tr>];
+                if(isLinking) rows.push(<tr key={`link-${u.id}`} style={{borderTop:`1px solid ${BORDER}`}}>
+                  <td colSpan={6} style={{padding:"10px 12px",background:"#FAFAF9"}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <input value={linkUser} onChange={e=>setLinkUser(e.target.value)} placeholder="Midnite username" autoFocus style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:12,fontFamily:SANS,color:TEXT,background:CARD,outline:"none",width:160}}/>
+                      <input type="password" value={linkPw} onChange={e=>setLinkPw(e.target.value)} placeholder="Midnite password" style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:12,fontFamily:SANS,color:TEXT,background:CARD,outline:"none",width:160}}/>
+                      {miniBtn(linkBusy?"Linking…":"Link account",()=>doLink(u.email),SOLAR,"#fff",linkBusy)}
+                      {miniBtn("Cancel",()=>setLinkTarget(null),BORDER,MUTED,false)}
+                      {linkErr&&<span style={{color:GRID_IN,fontSize:11}}>{linkErr}</span>}
+                    </div>
+                  </td>
+                </tr>);
+                return rows;
               })}
             </tbody>
           </table>
