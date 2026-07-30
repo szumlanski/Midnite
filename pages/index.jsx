@@ -3832,7 +3832,7 @@ export default function Dashboard() {
       try {
         const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
         if(!alive) return;
-        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false) next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time}; } return next; });
+        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false){ const hasData=!!(r.pv||r.grid||r.load||r.eps||r.battery); next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time,noData:!hasData}; } } return next; });
         // Stamp freshness only when a sample genuinely ADVANCED (its SystemTime changed) — so the age
         // reflects the inverter's report time, and duplicate polls let the "X ago" honestly grow.
         let fresh=false;
@@ -3947,26 +3947,32 @@ export default function Dashboard() {
   // for this selection (old-but-correct beats new-but-partial/invalid), and only fall back to the 5-min
   // status before the first complete live snapshot has ever arrived.
   const liveSel = selectedSns.map(sn=>liveFlow[sn]).filter(Boolean);
-  const liveAgg = (liveSel.length && liveSel.length===selectedSns.length) ? (()=>{
+  // Slave inverters return all-zero flowrt responses (no independent telemetry). Filter them out before
+  // computing aggregates so selecting a slave alone falls back to the 5-min status rather than showing
+  // 0W everywhere. Completeness still requires every selected inverter to have responded (liveSel check),
+  // but sums use only inverters that actually reported data (liveWithData) — so an all-zero slave adds
+  // nothing but doesn't block the live overlay when the master is reporting.
+  const liveWithData = liveSel.filter(x=>!x.noData);
+  const liveAgg = (liveSel.length && liveSel.length===selectedSns.length && liveWithData.length) ? (()=>{
     // AIO/EPS units serve the house through the EPS port, so loadCurrpac reads 0 — use epsCurrpac.
     const homeOf = (x) => (x.load>0 ? x.load : (x.eps||0));
-    const pv = liveSel.reduce((s,x)=>s+(x.pv||0),0);
-    const grid = liveSel.reduce((s,x)=>s+(x.grid||0),0);
+    const pv = liveWithData.reduce((s,x)=>s+(x.pv||0),0);
+    const grid = liveWithData.reduce((s,x)=>s+(x.grid||0),0);
     // Generator from the live genCurrpac. A smart port designated as "generator input" is reported here
     // by the real-time flow feed, so a running gen shows live and reads 0 when off. This is the only live
     // gen signal — the 5-min smart-port gen value was phantom (e.g. 25.8 kW on an idle gen) and is dropped.
     // gen is part of the balance below, so when it runs the battery figure stays correct (not double-fed).
-    const gen = liveSel.reduce((s,x)=>s+(x.gen||0),0);
-    const load = liveSel.reduce((s,x)=>s+homeOf(x),0);
+    const gen = liveWithData.reduce((s,x)=>s+(x.gen||0),0);
+    const load = liveWithData.reduce((s,x)=>s+homeOf(x),0);
     // Smart load: only a genuine SEPARATE EPS/backup load (load>0 AND eps>0). On AIO units the EPS port
     // IS the house (load=0 → home=eps), so there's no separate smart load; flowrt carries no other
     // smart-load signal, so this keeps a phantom value from ever showing.
-    const smartLoad = liveSel.reduce((s,x)=>s+(((x.load||0)>0 && (x.eps||0)>0) ? x.eps : 0),0);
+    const smartLoad = liveWithData.reduce((s,x)=>s+(((x.load||0)>0 && (x.eps||0)>0) ? x.eps : 0),0);
     // Battery net (+charge/−discharge) from the energy balance — the live Pbat sign is unreliable.
     const battery = pv + grid + gen - load;
-    const socs = liveSel.map(x=>x.soc).filter(v=>v>0); // live SOC can come back 0; fall back to status
+    const socs = liveWithData.map(x=>x.soc).filter(v=>v>0); // live SOC can come back 0; fall back to status
     const soc = socs.length ? socs.reduce((a,b)=>a+b,0)/socs.length : null;
-    const time = liveSel.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null;
+    const time = liveWithData.map(x=>x.time).filter(Boolean).sort().slice(-1)[0]||null;
     return { pv, grid, load, battery, gen, smartLoad, soc, time };
   })() : null;
   // Cache the last complete snapshot (keyed to this exact selection) and reuse it when a poll is
