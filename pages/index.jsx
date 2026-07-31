@@ -2139,11 +2139,18 @@ function SettingsCompareModal({inverters, onClose}){
     </div>
   );
 }
-function InverterCard({inv, status}) {
+function InverterCard({inv, status, live}) {
   const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
-  const pv = d?.photovoltaic?.power?.totalDc ?? null;
-  const load = balanceLoad(d);
+  // Prefer live flowrt values (5s) for solar and home load — the 5-min snapshot can be stale by several
+  // minutes (or capture a 0W moment) while the inverter is actively producing. live.pv = TotalDCpower;
+  // load from EPS port (AIO serves house through smart/EPS port, so loadCurrpac=0, epsCurrpac=real load).
+  const pvStatus = d?.photovoltaic?.power?.totalDc ?? null;
+  const pvLive = (live && !live.noData && live.pv > 0) ? live.pv : null;
+  const pv = pvLive ?? pvStatus;
+  const loadStatus = balanceLoad(d);
+  const loadLive = (live && !live.noData) ? (live.load > 0 ? live.load : (live.eps || 0)) : 0;
+  const load = loadLive > 0 ? loadLive : loadStatus;
   const gridNet = d?.grid?.netW ?? null;
   const soc = d?.battery?.soc ?? null;
   const batChg = d?.battery?.charge ?? null;
@@ -4072,7 +4079,7 @@ export default function Dashboard() {
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
                       {visibleStatuses.map(s=>{
                         const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
-                        return <InverterCard key={s.sn} inv={inv} status={s}/>;
+                        return <InverterCard key={s.sn} inv={inv} status={s} live={liveFlow[s.sn]}/>;
                       })}
                     </div>
                   )}
