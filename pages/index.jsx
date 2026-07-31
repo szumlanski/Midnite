@@ -2167,6 +2167,10 @@ function InverterCard({inv, status, live}) {
   const gridInToday = d?.grid?.consumption?.today||0;
   const gridOutToday = d?.grid?.sold?.today||0;
   const mppts = d?.photovoltaic?.mppts||[];
+  // Only show the PV Strings section when at least one MPPT has panel voltage — voltage > 0 indicates
+  // a connected string even when a stale snapshot captured 0W current. All-zero (voltage AND power)
+  // means no data at all: either no strings or the rich endpoint isn't available.
+  const hasAnyMpptData = mppts.some(m => (m.voltage||0) > 0 || (m.power||0) > 0);
   const activePorts = d?.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&(p.lines||[]).reduce((s,l)=>s+(l.power||0),0)>0) : [];
   return (
     <div className="inv-card" style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,overflow:"hidden",boxShadow:SHADOW_SM}}>
@@ -2200,17 +2204,20 @@ function InverterCard({inv, status, live}) {
               <StatTile label={batChg>10?"Charging":batDis>10?"Discharging":"Battery"} value={fmt(batChg>10?batChg:batDis>10?-batDis:0)} color={batChg>10?BATTERY:batDis>10?SOLAR:MUTED}/>
             </div>
             {/* MPPT strings */}
-            {mppts.length>0&&(
+            {hasAnyMpptData&&(
               <div style={{marginBottom:10,padding:"8px 10px",background:BG,borderRadius:10}}>
                 <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>PV Strings</div>
-                {mppts.map((m,i)=>(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:i<mppts.length-1?4:0}}>
-                    <span style={{color:MUTED,fontWeight:600}}>MPPT {i+1}</span>
-                    {m.power>0
-                      ? <span style={{color:SOLAR,fontVariantNumeric:"tabular-nums"}}>{m.voltage.toFixed(0)}V · {m.current.toFixed(2)}A · {fmt(m.power)}</span>
-                      : <span style={{color:FAINT}}>—</span>}
-                  </div>
-                ))}
+                {mppts.map((m,i)=>{
+                  const v=m.voltage||0, a=m.current||0, w=m.power||0;
+                  return (
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:i<mppts.length-1?4:0}}>
+                      <span style={{color:MUTED,fontWeight:600}}>MPPT {i+1}</span>
+                      {v>0||w>0
+                        ? <span style={{color:w>0?SOLAR:MUTED,fontVariantNumeric:"tabular-nums"}}>{v.toFixed(0)}V · {a.toFixed(2)}A · {fmt(w)}</span>
+                        : <span style={{color:FAINT}}>—</span>}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {/* Smart Ports */}
