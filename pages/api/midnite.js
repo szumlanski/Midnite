@@ -332,6 +332,40 @@ function schemaMissing(err) {
 }
 const SCHEMA_HINT = "Notifications tables aren't set up yet — run supabase/schema.sql in the Supabase SQL editor, then reload.";
 
+// ── Per-site metric helpers (used by admin_fleet to avoid duplicating switch-case logic) ────────────
+async function fetchFlowForSerials(serials, auth) {
+  return Promise.all(serials.map(async sn => {
+    const body = { GoodsID: sn }; body.sign = makeSign(body);
+    try {
+      const r = await midnitePost("/Eagle/v1/Inverterapi/getHybridFlowgraphRealTimeData", body, auth.token);
+      return { sn, ok: true, online: r?.online ?? false,
+        pv: parseFloat(r?.TotalDCpower || 0), grid: parseFloat(r?.gridCurrpac || 0),
+        load: parseFloat(r?.loadCurrpac || 0), eps: parseFloat(r?.epsCurrpac || 0),
+        gen: parseFloat(r?.genCurrpac || 0), battery: parseFloat(r?.Pbat || 0),
+        soc: parseFloat(r?.SOC || 0) };
+    } catch(e) { return { sn, ok: false, online: false }; }
+  }));
+}
+async function fetchStatusForSerials(serials, autoIds, memberAutoId, auth) {
+  return Promise.all(serials.map(async (sn, idx) => {
+    const autoId = autoIds?.[idx];
+    const memberId = memberAutoId || auth.memberAutoId;
+    if (autoId && memberId) {
+      try {
+        const richBody = { AutoId: String(autoId), memberAutoID: String(memberId) }; richBody.sign = makeSign(richBody);
+        const rich = await midnitePost("/Eagle/v1/Inverterapi/getInverterStatus", richBody, auth.token);
+        if (rich?.data?.photovoltaic?.mppts) { const data = normalizeRich(rich); return { sn, ok: !!data, data }; }
+      } catch(e) { /* fall through to detail endpoint */ }
+    }
+    const senTok = auth.senToken || auth.token;
+    const body = { GoodsID: sn, MemberAutoID: auth.memberAutoId }; body.sign = makeSign(body);
+    try {
+      const raw = await midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone", body, senTok);
+      const data = normalizeDetail(raw, sn); return { sn, ok: !!data, data };
+    } catch(e) { return { sn, ok: false, data: null }; }
+  }));
+}
+
 // ── Site list loader (extracted so the `sites` action AND share-scoping can both use it) ─────────────
 async function loadSites(auth) {
   if (auth.accountType === "installer") {
@@ -752,6 +786,84 @@ export default async function handler(req, res) {
         .json({ error: insErr.code === "23505" ? "That Midnite account is already linked to another login." : insErr.message });
       await logAccess({ type: "link", user: targetEmail, account: username });
       return res.json({ ok: true, account: ins });
+    }
+
+    if (action === "admin_fleet") {
+      // Returns live + daily metrics for every site visible to the admin. By default, only the admin's
+      // own linked Midnite accounts are queried (typically FLOSOL2 = the full installer fleet).
+      // Pass allUsers:true to also pull in every other user's linked accounts (e.g. site-owner logins).
+      if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+      const { allUsers = false } = req.body || {};
+      const sb = supabaseAdmin();
+
+      const { data: myAccts } = await sb.from("midnite_accounts")
+        .select("id,user_id,midnite_username,enc_password,account_type").eq("user_id", user.id);
+      const acctSets = (myAccts || []).map(a => ({ ...a, ownerEmail: null }));
+
+      if (allUsers) {
+        const { data: otherAccts } = await sb.from("midnite_accounts")
+          .select("id,user_id,midnite_username,enc_password,account_type").neq("user_id", user.id);
+        const otherIds = [...new Set((otherAccts || []).map(a => a.user_id))];
+        const { data: profs } = otherIds.length
+          ? await sb.from("profiles").select("id,email").in("id", otherIds)
+          : { data: [] };
+        const emailById = Object.fromEntries((profs || []).map(p => [p.id, p.email]));
+        for (const a of (otherAccts || [])) acctSets.push({ ...a, ownerEmail: emailById[a.user_id] || "unknown" });
+      }
+
+      const allSiteRows = [];
+      for (const acct of acctSets) {
+        try {
+          const pw = decryptCred(acct.enc_password);
+          const acctAuth = await loginCached(acct.midnite_username, pw);
+          const { sites } = await loadSites(acctAuth);
+          const siteMetrics = await Promise.all(sites.map(async s => {
+            const serials = (s.GoodsID || []).map(g => (typeof g === "string" ? g : g.GoodsID)).filter(Boolean);
+            const autoIds  = (s.GoodsID || []).map(g => (typeof g === "object" ? g.AutoID : null));
+            const memberAutoId = s.MemberAutoID || "";
+            const [flowRes, statusRes] = await Promise.all([
+              fetchFlowForSerials(serials, acctAuth).catch(() => []),
+              fetchStatusForSerials(serials, autoIds, memberAutoId, acctAuth).catch(() => []),
+            ]);
+            const inv = statusRes.filter(r => r?.ok && r?.data);
+            const fl  = flowRes.filter(f => f?.ok !== false);
+            const flOnline = fl.filter(f => f.online);
+            const total = serials.length;
+            const onlineN = fl.length ? flOnline.length : inv.length;
+            const statusLabel = total === 0 ? "offline" : onlineN === 0 ? "offline" : onlineN < total ? "partial" : "online";
+            let pv = null, load = null, gridNet = null, batNet = null, liveSoc = null;
+            if (flOnline.length) {
+              pv = flOnline.reduce((a, f) => a + (f.pv || 0), 0);
+              load = flOnline.reduce((a, f) => a + (f.load > 0 ? f.load : (f.eps || 0)), 0);
+              gridNet = flOnline.reduce((a, f) => a + (f.grid || 0), 0);
+              batNet = pv + gridNet + flOnline.reduce((a, f) => a + (f.gen || 0), 0) - load;
+              const ss = flOnline.map(f => f.soc).filter(v => v > 0);
+              liveSoc = ss.length ? ss.reduce((a, b) => a + b, 0) / ss.length : null;
+            } else if (inv.length) {
+              pv      = inv.reduce((a, i) => a + (i.data.photovoltaic?.power?.totalDc || 0), 0);
+              gridNet = inv.reduce((a, i) => a + (i.data.grid?.netW || 0), 0);
+            }
+            let soc = null, pvToday = null, expToday = null, impToday = null, updated = null;
+            if (inv.length) {
+              const socA = inv.filter(i => (i.data.battery?.soc || 0) > 0);
+              soc = liveSoc ?? (socA.length ? socA.reduce((a, i) => a + i.data.battery.soc, 0) / socA.length : null);
+              pvToday  = inv.reduce((a, i) => a + (i.data.photovoltaic?.production?.today || 0), 0);
+              expToday = inv.reduce((a, i) => a + (i.data.grid?.sold?.today || 0), 0);
+              impToday = inv.reduce((a, i) => a + (i.data.grid?.consumption?.today || 0), 0);
+              updated  = inv.map(i => i.data.inverter?.lastUpdateTime).filter(Boolean).sort().slice(-1)[0] || null;
+            } else { soc = liveSoc; }
+            // Consumed today ≈ PV + imported − exported (energy balance; excludes intra-day battery cycling)
+            const consumedToday = (pvToday != null && expToday != null && impToday != null)
+              ? pvToday - expToday + impToday : null;
+            return { name: s.MemberID, ownerEmail: acct.ownerEmail, total, status: statusLabel, invOnline: onlineN,
+              pv, load, gridNet, batNet, soc, pvToday, expToday, impToday, consumedToday, updated };
+          }));
+          allSiteRows.push(...siteMetrics);
+        } catch (e) {
+          allSiteRows.push({ name: acct.midnite_username, ownerEmail: acct.ownerEmail, status: "error", error: e.message });
+        }
+      }
+      return res.json({ ok: true, sites: allSiteRows });
     }
 
     // ── Data actions: resolve the account (own OR shared-to-me), authenticate to Midnite ──

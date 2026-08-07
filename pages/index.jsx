@@ -3144,6 +3144,56 @@ const CONFIG_CODES = new Set([
 // live power-flow screen (which register tracks PV vs grid vs load vs battery).
 const WATCH_CODES = (()=>{ const a=[]; for(let i=0x3000;i<=0x301F;i++) a.push(i.toString(16).toUpperCase()); a.push("2562","2563","212F"); return a; })();
 function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
+  // ── Fleet Overview (new) ────────────────────────────────────────────────────
+  const [fleetData, setFleetData] = useState(null);      // null = not loaded yet
+  const [fleetErr, setFleetErr] = useState(null);
+  const [fleetBusy, setFleetBusy] = useState(false);
+  const [fleetAllUsers, setFleetAllUsers] = useState(false);
+  const [fleetLastRefresh, setFleetLastRefresh] = useState(null);
+  const [fleetSort, setFleetSort] = useState({key:"name", dir:1});
+
+  const loadFleet = async (allUsers) => {
+    setFleetBusy(true); setFleetErr(null);
+    try {
+      const r = await api("admin_fleet", { allUsers: !!allUsers });
+      setFleetData(r.sites || []);
+      setFleetLastRefresh(new Date());
+    } catch(e) { setFleetErr(String(e)); }
+    setFleetBusy(false);
+  };
+  useEffect(()=>{ loadFleet(false); }, []);
+  // Auto-refresh every 2 minutes
+  useEffect(()=>{
+    const t = setInterval(()=>loadFleet(fleetAllUsers), 120000);
+    return ()=>clearInterval(t);
+  }, [fleetAllUsers]);
+
+  const toggleFleetSort = (key) => setFleetSort(s => s.key===key ? {key, dir:-s.dir} : {key, dir:1});
+  const sortIcon = (key) => fleetSort.key===key ? (fleetSort.dir===1 ? " ▴" : " ▾") : "";
+
+  const STATUS_META = { online:{label:"Online",bg:"#D1FAE5",c:BATTERY}, partial:{label:"Partial",bg:"#FEF3C7",c:SOLAR}, offline:{label:"Offline",bg:"#FEE2E2",c:GRID_IN}, error:{label:"Error",bg:"#FEE2E2",c:GRID_IN} };
+  const statusRank = {online:3,partial:2,offline:1,error:0};
+
+  const fleetRows = fleetData ? [...fleetData].sort((a,b)=>{
+    const k = fleetSort.key, d = fleetSort.dir;
+    const v = (m)=>{
+      switch(k){
+        case "name":   return (m.name||"").toLowerCase();
+        case "status": return statusRank[m.status]??-1;
+        case "pv":     return m.pv??-1;
+        case "load":   return m.load??-1;
+        case "soc":    return m.soc??-1;
+        case "grid":   return m.gridNet??0;
+        case "pvToday":      return m.pvToday??-1;
+        case "consumed":     return m.consumedToday??-1;
+        case "expToday":     return m.expToday??-1;
+        default: return (m.name||"").toLowerCase();
+      }
+    };
+    const av=v(a), bv=v(b);
+    if(av<bv) return -d; if(av>bv) return d; return (a.name||"").localeCompare(b.name||"");
+  }) : [];
+
   const [log, setLog] = useState(null);
   const [logErr, setLogErr] = useState(null);
   const [persistent, setPersistent] = useState(false);
@@ -3348,6 +3398,97 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
       <div style={{fontSize:11,color:FAINT,fontFamily:"monospace",textAlign:"right"}}>build {BUILD}</div>
+
+      {/* ── Fleet Overview ────────────────────────────────────────────────── */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Fleet Overview</div>
+            <div style={{fontSize:11,color:FAINT}}>
+              {fleetLastRefresh ? `Updated ${fleetLastRefresh.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}` : "Loading…"}
+              {fleetBusy && " · refreshing…"}
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}>
+              <input type="checkbox" checked={fleetAllUsers} onChange={e=>{setFleetAllUsers(e.target.checked);loadFleet(e.target.checked);}} style={{cursor:"pointer"}}/>
+              Include all users' sites
+            </label>
+            <button onClick={()=>loadFleet(fleetAllUsers)} disabled={fleetBusy}
+              style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:11,fontWeight:700,fontFamily:SANS,cursor:fleetBusy?"default":"pointer"}}>
+              ↻ Refresh
+            </button>
+          </div>
+        </div>
+        {fleetErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:8}}>{fleetErr}</div>}
+        {!fleetData && !fleetErr && <div style={{fontSize:12,color:FAINT}}>Loading fleet data…</div>}
+        {fleetData && fleetData.length===0 && <div style={{fontSize:12,color:FAINT}}>No sites found.</div>}
+        {fleetData && fleetData.length>0 && (() => {
+          const totalPvNow   = fleetRows.reduce((s,m)=>s+(m.pv||0),0);
+          const totalPvToday = fleetRows.reduce((s,m)=>s+(m.pvToday||0),0);
+          const totalLoad    = fleetRows.reduce((s,m)=>s+(m.load||0),0);
+          const onlineCnt    = fleetRows.filter(m=>m.status==="online").length;
+          const thStyle={textAlign:"right",padding:"5px 8px",fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap",cursor:"pointer",userSelect:"none"};
+          const tdStyle=(a="right",c=TEXT,b=false)=>({textAlign:a,padding:"5px 8px",fontSize:12,color:c,fontWeight:b?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"});
+          return <div style={{overflowX:"auto"}}>
+            {/* KPI summary row */}
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10}}>
+              {[
+                {label:"Sites", val:fleetRows.length, c:TEXT},
+                {label:"Online", val:`${onlineCnt}/${fleetRows.length}`, c:BATTERY},
+                {label:"Fleet PV Now", val:fmt(totalPvNow), c:SOLAR},
+                {label:"Fleet Load", val:fmt(totalLoad), c:LOAD_C},
+                {label:"PV Today", val:fmtE(totalPvToday), c:CHART_PROD},
+              ].map(({label,val,c})=>(
+                <div key={label} style={{background:BG,borderRadius:10,padding:"6px 12px",minWidth:90}}>
+                  <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:FAINT,marginBottom:2}}>{label}</div>
+                  <div style={{fontSize:14,fontWeight:700,color:c}}>{val}</div>
+                </div>
+              ))}
+            </div>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{borderBottom:`2px solid ${BORDER}`}}>
+                <th style={{...thStyle,textAlign:"left"}} onClick={()=>toggleFleetSort("name")}>Site{sortIcon("name")}</th>
+                <th style={{...thStyle,textAlign:"center"}} onClick={()=>toggleFleetSort("status")}>Status{sortIcon("status")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("pv")}>PV Now{sortIcon("pv")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("load")}>Home{sortIcon("load")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("soc")}>SOC{sortIcon("soc")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("grid")}>Grid{sortIcon("grid")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("pvToday")}>PV Today{sortIcon("pvToday")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("consumed")}>Consumed{sortIcon("consumed")}</th>
+                <th style={thStyle} onClick={()=>toggleFleetSort("expToday")}>Exported{sortIcon("expToday")}</th>
+                <th style={thStyle}>Updated</th>
+                {fleetAllUsers && <th style={{...thStyle,textAlign:"left"}}>Account</th>}
+              </tr></thead>
+              <tbody>
+                {fleetRows.map((m,i)=>{
+                  const sm = STATUS_META[m.status] || STATUS_META.offline;
+                  const gridC = (m.gridNet||0)<-50?GRID_OUT:(m.gridNet||0)>50?GRID_IN:MUTED;
+                  const socC  = (m.soc||0)<20?GRID_IN:(m.soc||0)<50?SOLAR:BATTERY;
+                  const fmtUpdated=(iso)=>{if(!iso) return "—"; try{const d=new Date(iso);return d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});}catch{return iso;}};
+                  return <tr key={i} style={{borderTop:`1px solid ${BORDER}`}}>
+                    <td style={tdStyle("left",TEXT,true)}>{m.name}</td>
+                    <td style={{...tdStyle("center"),padding:"5px 8px"}}>
+                      <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:sm.bg,color:sm.c}}>{sm.label}</span>
+                      {m.total>1&&<span style={{fontSize:9,color:FAINT,marginLeft:4}}>{m.invOnline??0}/{m.total}</span>}
+                    </td>
+                    <td style={tdStyle("right",SOLAR)}>{m.pv!=null?fmt(m.pv):"—"}</td>
+                    <td style={tdStyle("right",LOAD_C)}>{m.load!=null?fmt(m.load):"—"}</td>
+                    <td style={tdStyle("right",socC)}>{m.soc!=null?`${Math.round(m.soc)}%`:"—"}</td>
+                    <td style={tdStyle("right",gridC)}>{m.gridNet!=null?(Math.abs(m.gridNet)>50?`${fmt(Math.abs(m.gridNet))}${m.gridNet<0?" ⤴":" ⤵"}`:"~0"):"—"}</td>
+                    <td style={tdStyle("right",CHART_PROD)}>{m.pvToday!=null?fmtE(m.pvToday):"—"}</td>
+                    <td style={tdStyle("right",CHART_CONS)}>{m.consumedToday!=null?fmtE(m.consumedToday):"—"}</td>
+                    <td style={tdStyle("right",GRID_OUT)}>{m.expToday!=null?fmtE(m.expToday):"—"}</td>
+                    <td style={tdStyle("right",FAINT)}>{fmtUpdated(m.updated)}</td>
+                    {fleetAllUsers&&<td style={tdStyle("left",MUTED)}>{m.ownerEmail||<span style={{color:FAINT}}>you</span>}</td>}
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+            <div style={{fontSize:10,color:FAINT,marginTop:8}}>PV Now / Home from live flow (≤5s); SOC / PV Today / Consumed / Exported from 5-min report. Auto-refreshes every 2 min. Click a column header to sort.</div>
+          </div>;
+        })()}
+      </div>
 
       {/* Users — all app accounts + linked Midnite handles + password reset */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
