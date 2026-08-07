@@ -49,8 +49,10 @@ create policy "own accounts read" on public.midnite_accounts for select using (a
 --   update public.profiles set role = 'admin' where email = 'jason@floridasolardesigngroup.com';
 
 -- ── profile details (display name + avatar) ─────────────────────────────────
-alter table public.profiles add column if not exists display_name text;
-alter table public.profiles add column if not exists avatar_url   text;
+alter table public.profiles add column if not exists display_name      text;
+alter table public.profiles add column if not exists avatar_url        text;
+-- Set to true once admin(s) have been notified of this signup; prevents repeat emails.
+alter table public.profiles add column if not exists signup_notified   boolean not null default false;
 
 -- ── per-site photos (keyed by user + the Midnite site name) ─────────────────
 create table if not exists public.site_photos (

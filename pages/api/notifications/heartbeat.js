@@ -15,6 +15,7 @@
 import { supabaseAdmin, decryptCred, loginCached, fetchInverterDetail } from "@/lib/midniteServer";
 import { buildSnapshot, offlineSnapshot } from "@/lib/notifications/snapshot";
 import { persistSnapshot, evaluateNotificationsForDevice, isEntitled } from "@/lib/notifications/server";
+import { send, buildNewSignupMessage, channelConfigured } from "@/lib/notifications/deliver";
 
 // Current time as "HH:MM" in the site timezone (the fleet runs on US Eastern;
 // the proxy already pins the Midnite cookie to America/New_York) — for time-gates.
@@ -38,13 +39,44 @@ export default async function handler(req, res) {
   const sb = supabaseAdmin();
   if (!sb) return res.status(500).json({ error: "supabase not configured" });
 
+  // ── New-signup notifications (admin alert, runs every heartbeat) ────────────
+  // Query profiles where signup_notified = false (new signups since last check).
+  // Send one email per admin for each new user, then mark them notified.
+  const signupResults = [];
+  if (channelConfigured("email")) {
+    const { data: newUsers } = await sb
+      .from("profiles")
+      .select("id,email,created_at")
+      .eq("signup_notified", false);
+
+    if (newUsers?.length) {
+      const { data: admins } = await sb
+        .from("profiles")
+        .select("email")
+        .eq("role", "admin")
+        .not("email", "is", null);
+
+      const adminEmails = (admins || []).map((a) => a.email).filter(Boolean);
+
+      for (const user of newUsers) {
+        const msg = buildNewSignupMessage({ email: user.email, createdAt: user.created_at });
+        for (const adminEmail of adminEmails) {
+          const r = await send({ channel: "email", to: adminEmail, message: msg });
+          signupResults.push({ user: user.email, admin: adminEmail, ok: r.ok, skipped: r.skipped });
+        }
+        // Mark as notified regardless of send success to avoid repeated re-sends on transport failure.
+        await sb.from("profiles").update({ signup_notified: true }).eq("id", user.id);
+      }
+    }
+  }
+
   // ── Enumerate devices that have enabled rules ───────────────────────────────
   const { data: rules, error: rerr } = await sb
     .from("notification_rules")
     .select("user_id,account_id,site_name,device_id,device_label")
     .eq("enabled", true);
   if (rerr) return res.status(500).json({ error: rerr.message });
-  if (!rules?.length) return res.json({ ok: true, devices: 0, evaluated: 0, sent: 0, note: "no enabled rules" });
+  if (!rules?.length) return res.json({ ok: true, devices: 0, evaluated: 0, sent: 0, note: "no enabled rules", signups: signupResults });
 
   // Profiles (entitlement + recipient email) for involved users.
   const userIds = [...new Set(rules.map((r) => r.user_id))];
@@ -123,5 +155,5 @@ export default async function handler(req, res) {
     evaluated += r.evaluated || 0;
   }
 
-  return res.json({ ok: true, devices: deviceMap.size, evaluated, sent: totalSent, errors: errors.slice(0, 20) });
+  return res.json({ ok: true, devices: deviceMap.size, evaluated, sent: totalSent, errors: errors.slice(0, 20), signups: signupResults });
 }
