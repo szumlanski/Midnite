@@ -3857,8 +3857,15 @@ export default function Dashboard() {
       installer: s.op_member?.installer || "",
     }));
     setSites(normalized);
-    if(normalized.length===0) { setLoginError("No sites found for this account"); setAuthState("login"); }
-    else if(normalized.length===1) { setSite(normalized[0]); setAuthState("dashboard"); }
+    if(normalized.length===0) { setLoginError("No sites found for this account"); setAuthState("login"); return; }
+    // Deep-link: email digest links contain ?site=SiteName — auto-navigate there.
+    const dlParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("site") : null;
+    const dlMatch = dlParam && normalized.find(s=>s.name===dlParam);
+    if(dlMatch){
+      window.history.replaceState({}, "", window.location.pathname); // clean up URL
+      setSite(dlMatch); setAuthState("dashboard"); return;
+    }
+    if(normalized.length===1) { setSite(normalized[0]); setAuthState("dashboard"); }
     else {
       const savedName = localStorage.getItem("midnite_selected_site");
       const saved = savedName && normalized.find(s=>s.name===savedName);
