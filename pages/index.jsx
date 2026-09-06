@@ -3238,6 +3238,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   const [linkPw, setLinkPw] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkErr, setLinkErr] = useState(null);
+  const [unlinkBusy, setUnlinkBusy] = useState({}); // { [email]: true } while unlinking
   useEffect(()=>{
     if(!rtfOn || !rtfSn) return;
     let alive = true;
@@ -3359,6 +3360,13 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     catch(e){ setResetSent(s=>({...s,[email]:"err:"+String(e).slice(0,50)})); }
   };
   const openLink = (userId) => { setLinkTarget(userId); setLinkUser(""); setLinkPw(""); setLinkErr(null); };
+  const doUnlink = async (targetEmail) => {
+    if(!window.confirm(`Remove the linked Midnite account for ${targetEmail}? They will need to re-link to access data.`)) return;
+    setUnlinkBusy(s=>({...s,[targetEmail]:true}));
+    try { await api("admin_unlink_account",{targetEmail}); await loadUsers(); }
+    catch(e){ alert("Unlink failed: "+String(e)); }
+    setUnlinkBusy(s=>({...s,[targetEmail]:false}));
+  };
   const doLink = async (targetEmail) => {
     if(!linkUser||!linkPw){setLinkErr("Username and password required");return;}
     setLinkBusy(true); setLinkErr(null);
@@ -3519,7 +3527,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                   <Td a="left">{u.profile?.display_name||<span style={{color:FAINT}}>—</span>}</Td>
                   <Td a="center"><span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:10,background:u.profile?.role==="admin"?"#FEF3C7":BORDER,color:u.profile?.role==="admin"?SOLAR:MUTED}}>{u.profile?.role||"user"}</span></Td>
                   <Td a="left">{u.accounts.length
-                    ? u.accounts.map(a=>a.midnite_username).join(", ")
+                    ? <span style={{display:"flex",alignItems:"center",gap:6}}><span>{u.accounts.map(a=>a.midnite_username).join(", ")}</span>{miniBtn(unlinkBusy[u.email]?"…":"Unlink",()=>doUnlink(u.email),unlinkBusy[u.email]?BORDER:"#FEE2E2",unlinkBusy[u.email]?MUTED:GRID_IN,!!unlinkBusy[u.email])}</span>
                     : isLinking
                       ? <span style={{color:SOLAR,fontSize:10,fontWeight:700}}>Linking…</span>
                       : <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:FAINT}}>not linked</span>{miniBtn("Link Midnite",()=>openLink(u.id),"#0EA5E9","#fff",false)}</span>}</Td>

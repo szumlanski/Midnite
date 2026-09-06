@@ -788,6 +788,22 @@ export default async function handler(req, res) {
       return res.json({ ok: true, account: ins });
     }
 
+    if (action === "admin_unlink_account") {
+      if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+      const { targetEmail } = req.body || {};
+      if (!targetEmail) return res.status(400).json({ error: "targetEmail required" });
+      const sb = supabaseAdmin();
+      const { data: authData, error: listErr } = await sb.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr) return res.status(500).json({ error: listErr.message });
+      const targetUser = (authData?.users || []).find(u => (u.email || "").toLowerCase() === targetEmail.toLowerCase());
+      if (!targetUser) return res.status(404).json({ error: `No Sentinel account found for ${targetEmail}` });
+      const { data: accts } = await sb.from("midnite_accounts").select("id,midnite_username").eq("user_id", targetUser.id);
+      if (!accts || accts.length === 0) return res.status(404).json({ error: "No linked Midnite account found for that user" });
+      await sb.from("midnite_accounts").delete().eq("user_id", targetUser.id);
+      await logAccess({ type: "unlink", user: targetEmail, account: (accts[0]?.midnite_username || "?") });
+      return res.json({ ok: true, removed: accts.map(a => a.midnite_username) });
+    }
+
     if (action === "admin_fleet") {
       // Returns live + daily metrics for every site visible to the admin. By default, only the admin's
       // own linked Midnite accounts are queried (typically FLOSOL2 = the full installer fleet).
