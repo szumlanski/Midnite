@@ -767,8 +767,8 @@ function ResetPasswordPage({onDone}){
   );
 }
 // First-run: connect a Midnite account to the signed-in app account.
-function LinkMidnite({email,onLinked,onSignOut}){
-  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(null); const [busy,setBusy]=useState(false);
+function LinkMidnite({email,onLinked,onSignOut,initErr=null}){
+  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(initErr); const [busy,setBusy]=useState(false);
   const submit=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null);
     try{ const r=await api("linkaccount",{username:u,password:p}); onLinked(r.account); }
     catch(e){ setErr(e.message); setBusy(false); }
@@ -3857,7 +3857,7 @@ export default function Dashboard() {
       installer: s.op_member?.installer || "",
     }));
     setSites(normalized);
-    if(normalized.length===0) { setLoginError("No sites found for this account"); setAuthState("login"); return; }
+    if(normalized.length===0) { setLoginError("No sites found for this account"); setAuthState("link"); return; }
     // Deep-link: email digest links contain ?site=SiteName — auto-navigate there.
     const dlParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("site") : null;
     const dlMatch = dlParam && normalized.find(s=>s.name===dlParam);
@@ -4160,8 +4160,10 @@ export default function Dashboard() {
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <LandingPage/>;
   if(authState==="reset_password") return <ResetPasswordPage onDone={async()=>{ setAuthState("loading"); try{await loadContext();}catch{setAuthState("appauth");} }}/>;
-  if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout}/>;
+  if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout} initErr={loginError}/>;
   if(authState==="fleet"||authState==="sites") return <FleetView sites={sites} onPick={handleSelectSite} onBack={site?()=>setAuthState("dashboard"):null} onLogout={handleLogout} sitePhotos={sitePhotos} onPhotoChanged={reloadAccounts} readOnly={sharedAccounts.some(a=>a.id===activeAccountId)}/>;
+  // Safety net: if site is null for any reason (e.g. no sites found for a linked account), fall back to link screen.
+  if(!site) return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout} initErr={loginError}/>;
 
   return (
     <>
