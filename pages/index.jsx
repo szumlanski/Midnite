@@ -4,6 +4,7 @@ import { supabase, supabaseReady } from "../lib/supabaseClient";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
 import { triggerGroups, getTrigger } from "@/lib/notifications/triggers";
 import { summarizeRule } from "@/lib/notifications/engine";
+import { usePolling, POLL } from "../lib/usePolling";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -1373,7 +1374,7 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
         .finally(()=>{ done++; if(done===sites.length){ setBusy(false); setLastRefresh(new Date()); } });
     });
   }, [sites]);
-  useEffect(()=>{ load(); const t=setInterval(load,120000); return ()=>clearInterval(t); }, [load]); // 2-min (data is 5-min)
+  usePolling(load, POLL.SITE_MS, [load]); // 2-min (data is 5-min), paused while hidden
 
   // House load per inverter: the direct (EPS-detected) load reading OR the balance, whichever is larger —
   // balanceLoad alone nets to ~0 on some AIO/EPS units even when the house is clearly drawing.
@@ -3162,11 +3163,8 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     setFleetBusy(false);
   };
   useEffect(()=>{ loadFleet(false); }, []);
-  // Auto-refresh every 2 minutes
-  useEffect(()=>{
-    const t = setInterval(()=>loadFleet(fleetAllUsers), 120000);
-    return ()=>clearInterval(t);
-  }, [fleetAllUsers]);
+  // Auto-refresh every 2 minutes, paused while the tab is hidden.
+  usePolling(()=>loadFleet(fleetAllUsers), POLL.FLEET_MS, [fleetAllUsers], { leading:false });
 
   const toggleFleetSort = (key) => setFleetSort(s => s.key===key ? {key, dir:-s.dir} : {key, dir:1});
   const sortIcon = (key) => fleetSort.key===key ? (fleetSort.dir===1 ? " ▴" : " ▾") : "";
@@ -3244,6 +3242,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     let alive = true;
     const poll = async ()=>{
       if(rtfBusyRef.current) return;              // skip if the previous request is still in flight
+      if(document.visibilityState==="hidden") return;  // never poll a hidden tab (1s is brutal)
       rtfBusyRef.current = true;
       try {
         const r = await api("flowrt", { serial: rtfSn });
@@ -3267,6 +3266,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     if(!swWatch || !swAutoId) return;
     let alive = true;
     const poll = async ()=>{
+      if(document.visibilityState==="hidden") return;  // never poll a hidden tab
       try {
         const r = await api("readsettings", { autoId: swAutoId, codes: WATCH_CODES });
         if(!alive) return;
@@ -3969,7 +3969,8 @@ export default function Dashboard() {
     finally { setLiveLoading(false); }
   }, [site]);
 
-  useEffect(() => { if(!site) return; setLiveLoading(true); fetchLive(); const t=setInterval(fetchLive,60000); return()=>clearInterval(t); }, [fetchLive]);
+  useEffect(() => { if(site) setLiveLoading(true); }, [site]);
+  usePolling(fetchLive, POLL.LIVE_STATUS_MS, [fetchLive], { enabled: !!site });
 
   // Multi-select: selectedSns holds the serials currently shown. Default to all when a site loads.
   useEffect(() => { if(site){ setSelectedSns(site.inverters.map(i=>i.sn)); setExplorerSn(site.inverters[0]?.sn||null); } }, [site]);
@@ -3992,28 +3993,26 @@ export default function Dashboard() {
 
   // Real-time power flow: getHybridFlowgraphRealTimeData refreshes ~every 5s (verified), so poll it
   // every 5s for the selected inverters while on the Live tab and overlay it on the flow/hero.
+  // Reset freshness whenever the site or the selected inverters change.
   useEffect(() => {
     if(tab!=="live" || !site) return;
-    lastFlowTimesRef.current = {}; setLiveUpdatedAt(null); // reset freshness for the new selection/site
-    let alive = true, busy = false;
-    const sns = snKey ? snKey.split(",") : [];
-    const poll = async () => {
-      if(busy || !sns.length) return; busy = true;
-      try {
-        const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
-        if(!alive) return;
-        setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false){ const hasData=!!(r.pv||r.grid||r.load||r.eps||r.battery); next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time,noData:!hasData}; } } return next; });
-        // Stamp freshness only when a sample genuinely ADVANCED (its SystemTime changed) — so the age
-        // reflects the inverter's report time, and duplicate polls let the "X ago" honestly grow.
-        let fresh=false;
-        for(const {sn,r} of res){ if(r && r.ok!==false && r.time && lastFlowTimesRef.current[sn]!==r.time){ lastFlowTimesRef.current[sn]=r.time; fresh=true; } }
-        if(fresh) setLiveUpdatedAt(Date.now());
-      } catch(e){ /* keep polling */ } finally { busy = false; }
-    };
-    poll();
-    const id = setInterval(poll, 5000);
-    return ()=>{ alive=false; clearInterval(id); };
+    lastFlowTimesRef.current = {}; setLiveUpdatedAt(null);
   }, [tab, site, snKey]);
+
+  // Live real-time overlay. Paused while the tab is hidden: a forgotten Live tab
+  // used to fire one request per inverter every 5s forever, which made this the
+  // single biggest consumer of the Vercel plan credit.
+  usePolling(async () => {
+    const sns = snKey ? snKey.split(",") : [];
+    if(!sns.length) return;
+    const res = await Promise.all(sns.map(sn=>api("flowrt",{serial:sn}).then(r=>({sn,r})).catch(()=>({sn,r:null}))));
+    setLiveFlow(prev=>{ const next={...prev}; for(const {sn,r} of res){ if(r && r.ok!==false){ const hasData=!!(r.pv||r.grid||r.load||r.eps||r.battery); next[sn]={pv:r.pv,grid:r.grid,load:r.load,eps:r.eps,gen:r.gen,battery:r.battery,soc:r.soc,time:r.time,noData:!hasData}; } } return next; });
+    // Stamp freshness only when a sample genuinely ADVANCED (its SystemTime changed) — so the age
+    // reflects the inverter's report time, and duplicate polls let the "X ago" honestly grow.
+    let fresh=false;
+    for(const {sn,r} of res){ if(r && r.ok!==false && r.time && lastFlowTimesRef.current[sn]!==r.time){ lastFlowTimesRef.current[sn]=r.time; fresh=true; } }
+    if(fresh) setLiveUpdatedAt(Date.now());
+  }, POLL.LIVE_FLOW_MS, [tab, site, snKey], { enabled: tab==="live" && !!site });
 
   useEffect(() => {
     if(tab!=="day"||!site) return;
