@@ -4,7 +4,7 @@ import { supabase, supabaseReady } from "../lib/supabaseClient";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
 import { triggerGroups, getTrigger } from "@/lib/notifications/triggers";
 import { summarizeRule } from "@/lib/notifications/engine";
-import { usePolling, POLL } from "../lib/usePolling";
+import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -3999,6 +3999,16 @@ export default function Dashboard() {
     lastFlowTimesRef.current = {}; setLiveUpdatedAt(null);
   }, [tab, site, snKey]);
 
+  // Caps on the expensive real-time feed: pause after 10 min untouched, and after
+  // 1 hour of continuous use. The cheaper 60s status poll keeps running, so the
+  // page still shows real (if slower) numbers while the live overlay is paused.
+  const liveGate = useLiveGate({
+    idleMs: POLL.IDLE_PAUSE_MS,
+    sessionMs: POLL.SESSION_MAX_MS,
+    enabled: tab==="live" && !!site,
+  });
+  const liveOn = tab==="live" && !!site && !liveGate.paused;
+
   // Live real-time overlay. Paused while the tab is hidden: a forgotten Live tab
   // used to fire one request per inverter every 5s forever, which made this the
   // single biggest consumer of the Vercel plan credit.
@@ -4012,7 +4022,7 @@ export default function Dashboard() {
     let fresh=false;
     for(const {sn,r} of res){ if(r && r.ok!==false && r.time && lastFlowTimesRef.current[sn]!==r.time){ lastFlowTimesRef.current[sn]=r.time; fresh=true; } }
     if(fresh) setLiveUpdatedAt(Date.now());
-  }, POLL.LIVE_FLOW_MS, [tab, site, snKey], { enabled: tab==="live" && !!site });
+  }, POLL.LIVE_FLOW_MS, [tab, site, snKey], { enabled: liveOn });
 
   useEffect(() => {
     if(tab!=="day"||!site) return;
@@ -4225,6 +4235,21 @@ export default function Dashboard() {
               {liveLoading
                 ? <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting to Midnite portal…</div>
                 : <>
+                  {liveGate.paused&&(
+                    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",boxShadow:SHADOW_SM}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:TEXT,fontFamily:SANS}}>
+                          {liveGate.reason==="session" ? "Live view paused after 1 hour" : "Live view paused"}
+                        </div>
+                        <div style={{fontSize:12,color:MUTED,fontFamily:SANS,marginTop:2}}>
+                          {liveGate.reason==="session"
+                            ? "Still here? Resume to keep the real-time feed running."
+                            : "Paused after 10 minutes with no activity. Numbers below still refresh every minute."}
+                        </div>
+                      </div>
+                      <button onClick={liveGate.resume} style={{padding:"8px 16px",minHeight:44,borderRadius:10,border:"none",background:SOLAR,color:"#fff",fontSize:13,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Resume live</button>
+                    </div>
+                  )}
                   {flowAgg&&<FlowDiagram flow={flowAgg}/>}
                   {allSelected&&<SiteHero statuses={statuses} live={liveAgg} liveAt={liveUpdatedAt}/>}
                   {allSelected&&<BatteryPanel statuses={statuses}/>}
