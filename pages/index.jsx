@@ -8,7 +8,7 @@ import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
 import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT, LOAD_C, SOLAR_TEXT, BATTERY_TEXT, GRID_OUT_TEXT, GRID_IN_TEXT, SHADOW, SHADOW_SM, SANS, CHART_PROD, CHART_CONS, CHART_BAT, CHART_GRID, FS, textTone } from "@/components/ui/tokens";
 import { Icon, svgIcon } from "@/components/ui/Icon";
 import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
-import { CountUp, Meter, useStaggerIn, useSlidingIndicator } from "@/components/ui/motion";
+import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -874,11 +874,11 @@ function NotificationsSettings({activeId, site=null}){
   const delRule = async (id)=>{ if(typeof window!=="undefined"&&!window.confirm("Delete this alert rule?")) return; try{ await api("alertrule_delete",{id}); await load(); }catch(e){ setErr(e.message); } };
   const sendTest = async (dev)=>{ setErr(null); setMsg(null); setTesting(dev.sn); try{ const r=await api("alerttest",{ site_name:dev.siteName, device_label:dev.label, device_id:dev.sn }); setMsg(`Test email sent to ${r.to}.`); }catch(e){ setErr(e.message); } finally{ setTesting(null); } };
 
-  if(loading) return <div style={{fontSize:FS.subhead,color:MUTED,padding:"8px 0"}}>Loading alerts…</div>;
+  if(loading) return <div><div className="ui-skel" style={{height:120,borderRadius:14,marginBottom:12}}/><div className="ui-skel" style={{height:160,borderRadius:14}}/></div>;
   return (
     <>
       <DigestSettings activeId={activeId} site={site}/>
-      <div style={{fontSize:FS.subhead,fontWeight:800,color:TEXT,margin:"4px 0 10px"}}>Threshold alerts</div>
+      <h3 style={{fontSize:FS.headline,fontWeight:800,color:TEXT,margin:"8px 0 10px",display:"flex",alignItems:"center",gap:8}}><Icon name="bell" style={{color:SOLAR}}/>Threshold alerts</h3>
       {err&&<div style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {data && !data.emailConfigured &&
@@ -892,34 +892,41 @@ function NotificationsSettings({activeId, site=null}){
       {!site && <div style={{fontSize:FS.subhead,color:MUTED}}>Select a system to manage its alerts.</div>}
       {site && devices.length===0 && <div style={{fontSize:FS.subhead,color:MUTED}}>No devices on this system.</div>}
       {devices.map(dev=>(
-        <div key={dev.sn} style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:FS.subhead,fontWeight:700,color:TEXT}}>{dev.label}</div>
-              <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dev.siteName} · {dev.sn}</div>
+        <div key={dev.sn} className="ui-group" style={{marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <span style={{color:MUTED,fontSize:20,display:"inline-flex"}}><Icon name="inverter"/></span>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>{dev.label}</div>
+                <div style={{fontSize:FS.footnote,color:MUTED,fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dev.sn}</div>
+              </div>
             </div>
-            <button onClick={()=>sendTest(dev)} disabled={testing===dev.sn} style={{padding:"5px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer",whiteSpace:"nowrap"}}>{testing===dev.sn?"Sending…":"Send test"}</button>
+            <Button size="sm" variant="plain" icon="mail" onClick={()=>sendTest(dev)} disabled={testing===dev.sn}>{testing===dev.sn?"Sending…":"Send test"}</Button>
           </div>
-          {rulesFor(dev.sn).length===0 && addingFor!==dev.sn && <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:8}}>No alerts on this device.</div>}
+          {rulesFor(dev.sn).length===0 && addingFor!==dev.sn && <div className="ui-row" style={{fontSize:FS.subhead,color:MUTED}}>No alerts on this inverter yet.</div>}
           {rulesFor(dev.sn).map(rule=>{
             const t=getTrigger(rule.trigger_type);
             return (
-              <div key={rule.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:`1px solid ${BORDER}`}}>
+              <div key={rule.id} className="ui-row">
                 <Switch checked={rule.enabled} label={rule.enabled?"Alert on":"Alert off"} onChange={()=>toggleRule(rule)}/>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:FS.footnote,fontWeight:600,color:rule.enabled?TEXT:MUTED}}>{summarizeRule(rule)}{t?.group&&<span style={{marginLeft:6,fontSize:FS.caption,color:MUTED,fontWeight:500}}>{t.group}</span>}</div>
-                  <div style={{fontSize:FS.caption,color:MUTED}}>
-                    cooldown {rule.cooldown_minutes}m{rule.trigger_after_time?` · after ${rule.trigger_after_time}`:""}
-                    {rule.last_triggered_at?` · last sent ${new Date(rule.last_triggered_at).toLocaleString()}`:""}
+                  <div style={{fontSize:FS.subhead,fontWeight:600,color:rule.enabled?TEXT:MUTED}}>{summarizeRule(rule)}{t?.group&&<span style={{marginLeft:6,fontSize:FS.footnote,color:MUTED,fontWeight:500}}>{t.group}</span>}</div>
+                  <div style={{fontSize:FS.footnote,color:MUTED}}>
+                    Cooldown {rule.cooldown_minutes} min{rule.trigger_after_time?` · after ${rule.trigger_after_time}`:""}
+                    {rule.last_triggered_at?` · last sent ${new Date(rule.last_triggered_at).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}`:""}
                   </div>
                 </div>
-                <button onClick={()=>delRule(rule.id)} style={{padding:"3px 8px",borderRadius:7,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>Delete</button>
+                <MoreMenu label="Alert options" items={[
+                  {label:rule.enabled?"Turn off":"Turn on", icon:rule.enabled?"stop":"play", onClick:()=>toggleRule(rule)},
+                  {sep:true},
+                  {label:"Delete alert", icon:"trash", destructive:true, onClick:()=>delRule(rule.id)},
+                ]}/>
               </div>
             );
           })}
           {addingFor===dev.sn
             ? <RuleForm onCancel={()=>setAddingFor(null)} onSave={(form)=>saveRule(dev,form)}/>
-            : <button onClick={()=>{setAddingFor(dev.sn);setErr(null);setMsg(null);}} style={{marginTop:8,padding:"6px 12px",borderRadius:8,border:`1px dashed ${BORDER}`,background:"transparent",color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>+ Add alert</button>}
+            : <div className="ui-row"><Button size="sm" variant="plain" icon="plus" onClick={()=>{setAddingFor(dev.sn);setErr(null);setMsg(null);}}>Add alert</Button></div>}
         </div>
       ))}
     </>
@@ -939,7 +946,7 @@ function RuleForm({onSave,onCancel}){
   const selStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer"};
   const numStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead};
   return (
-    <div style={{marginTop:10,padding:12,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
+    <div style={{margin:"0 14px 12px",padding:12,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
       <div style={{marginBottom:10}}>
         <label style={lblS}>When</label>
         <select value={type} onChange={e=>onType(e.target.value)} style={selStyle}>
@@ -966,8 +973,8 @@ function RuleForm({onSave,onCancel}){
           </div>}
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>onSave({trigger_type:type,threshold,cooldown,afterTime:t.timeGate?afterTime:null})} disabled={threshold===""} style={{...authBtn(threshold===""),width:"auto",padding:"8px 18px",fontSize:FS.subhead}}>Add alert</button>
-        <button onClick={onCancel} style={{padding:"8px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+        <Button variant="primary" onClick={()=>onSave({trigger_type:type,threshold,cooldown,afterTime:t.timeGate?afterTime:null})} disabled={threshold===""}>Add alert</Button>
+        <Button onClick={onCancel}>Cancel</Button>
       </div>
     </div>
   );
@@ -1000,18 +1007,12 @@ function ShareModal({ site, accountId, onClose }){
             <input type="email" required placeholder="person@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={{...authInput,flex:1}}/>
             <button type="submit" disabled={busy||!email} style={{...authBtn(busy||!email),width:"auto",padding:"0 18px"}}>{busy?"…":"Share"}</button>
           </form>
-          <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:8}}>Shared with</div>
-          {shares===null&&<div style={{fontSize:FS.subhead,color:MUTED}}>Loading…</div>}
-          {shares&&shares.length===0&&<div style={{fontSize:FS.subhead,color:MUTED}}>Not shared with anyone yet.</div>}
-          {shares&&shares.map(s=>(
-            <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.shared_with_email}</div>
-                <div style={{fontSize:FS.caption,color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending — awaiting signup"}</div>
-              </div>
-              <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
-            </div>
-          ))}
+          <div className="ui-section-label">Shared with</div>
+          <div className="ui-group">
+            {shares===null&&<div className="ui-row"><div className="ui-skel" style={{height:20,borderRadius:6,flex:1}}/></div>}
+            {shares&&shares.length===0&&<div className="ui-row" style={{fontSize:FS.subhead,color:MUTED}}>Not shared with anyone yet.</div>}
+            {shares&&shares.map(s=><ShareRow key={s.id} title={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)}/>)}
+          </div>
         </div>
       </div>
     </div>
@@ -1048,28 +1049,25 @@ function SharingSettings({ activeId, sites=[] }){
           </select>
         </div>
         <div style={{marginBottom:12}}><label style={lblS}>Recipient email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="person@email.com" style={authInput}/></div>
-        <button type="submit" disabled={busy||!site||!email} style={{...authBtn(busy||!site||!email),width:"auto",padding:"9px 18px"}}>{busy?"Sharing…":"Share site"}</button>
+        <Button type="submit" variant="primary" icon="share" disabled={busy||!site||!email}>{busy?"Sharing…":"Share site"}</Button>
       </form>
-      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:8}}>Shared by you</div>
-      {data===null&&<div style={{fontSize:FS.subhead,color:MUTED,marginBottom:6}}>Loading…</div>}
-      {data&&out.length===0&&<div style={{fontSize:FS.subhead,color:MUTED,marginBottom:6}}>You haven’t shared any sites yet.</div>}
-      {out.map(s=>(
-        <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT}}>{s.site_name}</div>
-            <div style={{fontSize:FS.caption,color:MUTED}}>{s.shared_with_email} · <span style={{color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending signup"}</span></div>
-          </div>
-          <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
-        </div>
-      ))}
+      <div className="ui-section-label">Shared by you</div>
+      <div className="ui-group" style={{marginBottom:16}}>
+        {data===null&&<div className="ui-row"><div className="ui-skel" style={{height:20,borderRadius:6,flex:1}}/></div>}
+        {data&&out.length===0&&<div className="ui-row" style={{fontSize:FS.subhead,color:MUTED}}>You haven’t shared any sites yet.</div>}
+        {out.map(s=><ShareRow key={s.id} title={s.site_name} sub={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)}/>)}
+      </div>
       {inc.length>0&&<>
-        <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,margin:"16px 0 8px"}}>Shared with you</div>
-        {inc.map(s=>(
-          <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT}}>{s.site_name}</div><div style={{fontSize:FS.caption,color:MUTED}}>view-only · switch to it from the account selector</div></div>
-            <span style={{fontSize:FS.caption,color:BATTERY,fontWeight:700}}>Active</span>
-          </div>
-        ))}
+        <div className="ui-section-label">Shared with you</div>
+        <div className="ui-group">
+          {inc.map(s=>(
+            <div key={s.id} className="ui-row">
+              <span style={{color:MUTED,fontSize:20,display:"inline-flex"}}><Icon name="users"/></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:FS.body,fontWeight:600,color:TEXT}}>{s.site_name}</div><div style={{fontSize:FS.footnote,color:MUTED}}>View only · switch to it from the account menu</div></div>
+              <span className="ui-pill" style={{background:"#DCFCE7",color:BATTERY_TEXT}}>Active</span>
+            </div>
+          ))}
+        </div>
       </>}
     </>
   );
@@ -1103,7 +1101,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
   const removeSitePhoto=async(siteName)=>{ setBusy(true); try{ await api("setsitephoto",{site:siteName,url:null}); onChanged(); }finally{setBusy(false);} };
 
   const tabBtn=(id,label)=><button onClick={()=>{setSec(id);setErr(null);setMsg(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:sec===id?BG:"transparent",color:sec===id?TEXT:MUTED,fontSize:FS.footnote,fontWeight:sec===id?700:500,cursor:"pointer",fontFamily:SANS}}>{label}</button>;
-  const fileBtn=(label,onChange)=>(<label style={{display:"inline-block",padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.footnote,fontWeight:600,cursor:"pointer"}}>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
+  const fileBtn=(label,onChange)=>(<label className="ui-btn ui-btn--secondary ui-btn--sm" style={{flexShrink:0}}><Icon name="upload"/>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -1115,7 +1113,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
               : <div style={{width:34,height:34,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.body,fontWeight:700,color:MUTED}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
             <div>
               <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>{profile.display_name||"Account Settings"}</div>
-              <div style={{fontSize:FS.caption,color:MUTED}}>{email}{isAdmin&&<span style={{marginLeft:6,color:SOLAR,fontWeight:700}}>ADMIN</span>}</div>
+              <div style={{fontSize:FS.footnote,color:MUTED,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{email}{isAdmin&&<span className="ui-pill" style={{background:"#FEF3C7",color:SOLAR_TEXT}}>Admin</span>}</div>
             </div>
           </div>
           <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
@@ -1126,27 +1124,32 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {msg&&<div style={okBox}>{msg}</div>}
 
           {sec==="accounts" && <>
-            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:8}}>Linked Midnite accounts</div>
-            {accounts.length===0 && <div style={{fontSize:FS.subhead,color:MUTED,marginBottom:12}}>None linked yet.</div>}
-            {accounts.map(a=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
-                {isAdmin && <input type="radio" name="activeacct" checked={activeId===a.id} onChange={()=>onSetActive(a.id)} style={{cursor:"pointer"}}/>}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT}}>{a.label||a.midnite_username}{activeId===a.id&&<span style={{marginLeft:6,fontSize:FS.caption,color:BATTERY,fontWeight:800}}>ACTIVE</span>}</div>
-                  <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
+            <div className="ui-section-label">Linked Midnite accounts</div>
+            <div className="ui-group">
+              {accounts.length===0 && <div className="ui-row" style={{fontSize:FS.subhead,color:MUTED}}>None linked yet.</div>}
+              {accounts.map(a=>(
+                <div key={a.id} className="ui-row">
+                  <span style={{color:activeId===a.id?BATTERY:MUTED,fontSize:20,display:"inline-flex"}}><Icon name={activeId===a.id?"check":"user"}/></span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:FS.body,fontWeight:600,color:TEXT,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{a.label||a.midnite_username}{activeId===a.id&&<span className="ui-pill" style={{background:"#DCFCE7",color:BATTERY_TEXT}}>Active</span>}</div>
+                    <div style={{fontSize:FS.footnote,color:MUTED,fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
+                  </div>
+                  <MoreMenu label="Account options" items={[
+                    ...(isAdmin&&activeId!==a.id?[{label:"Use this account", icon:"check", onClick:()=>onSetActive(a.id)},{sep:true}]:[]),
+                    {label:"Unlink account", icon:"link", destructive:true, onClick:()=>unlink(a.id)},
+                  ]}/>
                 </div>
-                <button onClick={()=>unlink(a.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Unlink</button>
-              </div>
-            ))}
-            {canAdd && !adding && <button onClick={()=>setAdding(true)} style={{marginTop:14,padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{accounts.length===0?"Link a Midnite account":"+ Add Midnite account"}</button>}
+              ))}
+            </div>
+            {canAdd && !adding && <div style={{marginTop:12}}><Button icon="plus" onClick={()=>setAdding(true)}>{accounts.length===0?"Link a Midnite account":"Add Midnite account"}</Button></div>}
             {!canAdd && accounts.length>0 && <div style={{marginTop:12,fontSize:FS.caption,color:MUTED}}>Your plan allows one linked Midnite account. Unlink the current one to connect a different system.</div>}
             {adding && (
               <form onSubmit={addAcct} style={{marginTop:14,padding:14,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
-                <div style={{marginBottom:10}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
-                <div style={{marginBottom:14}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
+                <div style={{marginBottom:10}}><label style={lblS}>Midnite username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus autoComplete="username" style={authInput}/></div>
+                <div style={{marginBottom:14}}><label style={lblS}>Midnite password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} autoComplete="current-password" style={authInput}/></div>
                 <div style={{display:"flex",gap:8}}>
-                  <button type="submit" disabled={busy||!u||!p} style={{...authBtn(busy||!u||!p),width:"auto",padding:"9px 18px"}}>{busy?"Linking…":"Link"}</button>
-                  <button type="button" onClick={()=>{setAdding(false);setErr(null);}} style={{padding:"9px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+                  <Button type="submit" variant="primary" disabled={busy||!u||!p}>{busy?"Linking…":"Link account"}</Button>
+                  <Button onClick={()=>{setAdding(false);setErr(null);}}>Cancel</Button>
                 </div>
               </form>
             )}
@@ -1177,28 +1180,26 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {sec==="sites" && <>
             <div style={{fontSize:FS.caption,color:MUTED,marginBottom:12}}>{readOnly?"These sites are shared with you view-only — photos are set by the owner.":"Add a photo for each site. These show here and may be used elsewhere later."}</div>
             {sites.length===0 && <div style={{fontSize:FS.subhead,color:MUTED}}>No sites yet — link a Midnite account first.</div>}
+            <div className="ui-group">
             {sites.map(s=>(
-              <div key={s.name} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${BORDER}`}}>
+              <div key={s.name} className="ui-row">
                 {sitePhotos[s.name]
-                  ? <img src={sitePhotos[s.name]} alt="" style={{width:56,height:56,borderRadius:10,objectFit:"cover",border:`1px solid ${BORDER}`}}/>
-                  : <div style={{width:56,height:56,borderRadius:10,background:BG,border:`1px dashed ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.headline}}>🏠</div>}
-                <div style={{flex:1,minWidth:0,fontSize:FS.subhead,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                  ? <img src={sitePhotos[s.name]} alt="" style={{width:52,height:52,borderRadius:10,objectFit:"cover",border:`1px solid ${BORDER}`,flexShrink:0}}/>
+                  : <div style={{width:52,height:52,borderRadius:10,background:BG,border:`1px dashed ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:MUTED,flexShrink:0}}><Icon name="home"/></div>}
+                <div style={{flex:1,minWidth:0,fontSize:FS.body,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
                 {!readOnly && fileBtn(sitePhotos[s.name]?"Replace":"Upload", e=>onSitePhoto(s.name,e))}
-                {!readOnly && sitePhotos[s.name] && <button onClick={()=>removeSitePhoto(s.name)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Remove</button>}
+                {!readOnly && sitePhotos[s.name] && <MoreMenu label="Photo options" items={[{label:"Remove photo", icon:"trash", destructive:true, onClick:()=>removeSitePhoto(s.name)}]}/>}
               </div>
             ))}
+            </div>
           </>}
 
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderTop:`1px solid ${BORDER}`}}>
-          <a href="/faq" target="_blank" rel="noopener" style={{fontSize:FS.subhead,fontWeight:600,color:MUTED,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:FS.callout}}>❓</span> Help &amp; FAQ
-          </a>
-          {onLogout && (
-            <button onClick={onLogout} style={{padding:"9px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
-          )}
+          <a href="/faq" target="_blank" rel="noopener" className="ui-btn ui-btn--plain"><Icon name="help"/>Help &amp; FAQ</a>
+          {onLogout && <Button variant="destructive" icon="logout" onClick={onLogout}>Sign out</Button>}
         </div>
       </div>
     </div>
@@ -1392,120 +1393,155 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
 
+  // Rows glide to their new places when the sort or filter changes (GSAP Flip; skipped under Reduce Motion).
+  const tbodyRef = useRef(null), flipState = useRef(null), kpiRef = useRef(null), largeTitleRef = useRef(null);
+  const titlePast = useScrolledPast(largeTitleRef, []);
+  const captureFlip = ()=>{ if(!prefersReducedMotion() && tbodyRef.current) flipState.current = Flip.getState(tbodyRef.current.querySelectorAll("tr[data-flip-id]")); };
+  const sortBy = (k)=>{ captureFlip(); setSort(k); };
+  const switchFilter = (f)=>{ captureFlip(); setFilter(f); };
+  useIsoLayoutEffect(()=>{
+    const st = flipState.current; flipState.current = null;
+    if(!st || !tbodyRef.current) return;
+    Flip.from(st, { targets: tbodyRef.current.querySelectorAll("tr[data-flip-id]"), duration:0.38, ease:"power2.inOut",
+      onEnter: els=>gsap.fromTo(els,{autoAlpha:0},{autoAlpha:1,duration:0.25}) });
+  }, [sortKey, sortDir, filter]);
+  useStaggerIn(kpiRef, [], {y:6});
+
   const cols=[
     {k:"photo",label:"",a:"left",nosort:true},
     {k:"name",label:"Site",a:"left"},{k:"status",label:"Status",a:"left"},
-    {k:"pv",label:"PV Now",a:"right"},{k:"load",label:"Load",a:"right"},
+    {k:"pv",label:"PV now",a:"right"},{k:"load",label:"Home",a:"right"},
     {k:"soc",label:"Battery",a:"right"},{k:"grid",label:"Grid",a:"right"},
-    {k:"pvToday",label:"PV Today",a:"right"},{k:"expToday",label:"Exported",a:"right"},
+    {k:"pvToday",label:"PV today",a:"right"},{k:"expToday",label:"Exported",a:"right"},
     {k:"updated",label:"Updated",a:"right",nosort:true},
   ];
-  const Sk=()=> <span style={{display:"inline-block",width:46,height:11,borderRadius:4,background:"#ECE7E0",animation:"pulse 1.4s infinite"}}/>;
-  const th={padding:"9px 12px",fontSize:FS.caption,color:MUTED,fontWeight:700,whiteSpace:"nowrap",userSelect:"none",position:"sticky",top:0,background:CARD,borderBottom:`1px solid ${BORDER}`,zIndex:1};
-  const td={padding:"11px 12px",fontSize:FS.subhead,color:TEXT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",borderBottom:`1px solid ${BORDER}`};
-  const kpi=(label,value,color,onClick,active)=>(
-    <div onClick={onClick} style={{background:active?"#FFFBEB":CARD,border:`1px solid ${active?SOLAR:BORDER}`,borderRadius:12,padding:"12px 14px",boxShadow:SHADOW_SM,cursor:onClick?"pointer":"default"}}>
-      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700}}>{label}</div>
-      <div style={{fontSize:FS.title3,fontWeight:800,color:color||TEXT,marginTop:3,fontVariantNumeric:"tabular-nums"}}>{value}</div>
-    </div>
-  );
-  const fchip=(id,label)=> <button onClick={()=>setFilter(id)} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${filter===id?SOLAR:BORDER}`,background:filter===id?"#FFFBEB":CARD,color:filter===id?"#92400E":MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{label}</button>;
+  const Sk=()=> <span className="ui-skel" style={{display:"inline-block",width:52,height:12,borderRadius:4,verticalAlign:"middle"}}/>;
+  const th={padding:"10px 12px",fontSize:FS.footnote,color:MUTED,fontWeight:600,whiteSpace:"nowrap",userSelect:"none",position:"sticky",top:0,background:CARD,borderBottom:`1px solid ${BORDER}`,zIndex:2};
+  const td={padding:"10px 12px",height:56,fontSize:FS.subhead,color:TEXT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",borderBottom:`1px solid ${BORDER}`};
+  const kpi=(label,value,num,format,color,filterId)=>{
+    const active = filterId && filter===filterId;
+    const inner = (<>
+      <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600}}>{label}</div>
+      <div style={{fontSize:FS.title2,fontWeight:800,color:textTone(color||TEXT),marginTop:2}}>{format?<CountUp value={num} format={format}/>:value}</div>
+    </>);
+    const style={background:active?"#FFFBEB":CARD,border:`1px solid ${active?SOLAR:BORDER}`,borderRadius:14,padding:"12px 14px",boxShadow:SHADOW_SM,textAlign:"left",fontFamily:SANS,width:"100%"};
+    return filterId
+      ? <button key={label} type="button" aria-pressed={active} className="ui-press" onClick={()=>switchFilter(filterId)} style={{...style,cursor:"pointer"}}>{inner}</button>
+      : <div key={label} style={style}>{inner}</div>;
+  };
+  const sortIcon=(k)=> sortKey===k ? <Icon name={sortDir>0?"chevron-up":"chevron-down"} style={{marginLeft:2}}/> : null;
+  const subtitle = <>{sites.length} sites · <span style={{color:BATTERY_TEXT,fontWeight:600}}>{onlineCount} online</span>{issueCount>0&&<> · <span style={{color:SOLAR_TEXT,fontWeight:600}}>{issueCount} need{issueCount===1?"s":""} attention</span></>}</>;
+  const menu=[
+    {label:"Export CSV", icon:"download", onClick:exportCsv},
+    {label:"Help & FAQ", icon:"help", onClick:()=>window.open("/faq","_blank","noopener")},
+    {sep:true},
+    {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout},
+  ];
 
   return (
     <>
-      <PageHead/>
+      <PageHead title="Fleet · Midnite Sentinel"/>
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
-        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:CARD,position:"sticky",top:0,zIndex:100,flexWrap:"wrap"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {onBack&&<button onClick={onBack} title="Back" style={{border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:FS.callout,lineHeight:1}}>‹</button>}
-            <Logo size={30}/>
-            <div>
-              <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Fleet View</div>
-              <div style={{fontSize:FS.caption,color:MUTED}}>{sites.length} sites · <span style={{color:BATTERY,fontWeight:600}}>{onlineCount} online</span>{issueCount>0&&<> · <span style={{color:SOLAR,fontWeight:600}}>{issueCount} need attention</span></>}</div>
-            </div>
+        <header className="ui-navbar">
+          {onBack
+            ? <button type="button" className="ui-backlink" onClick={onBack}><Icon name="back"/>Site</button>
+            : <span style={{display:"inline-flex",flexShrink:0}}><Logo size={28}/></span>}
+          <div className="hide-desktop" style={{flex:1,minWidth:0,textAlign:"center"}}>
+            <div className={`ui-navtitle${titlePast?" is-shown":""}`} aria-hidden={!titlePast}>Fleet</div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button onClick={exportCsv} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⬇ CSV</button>
-            <button onClick={load} disabled={busy} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:busy?"default":"pointer"}}>{busy?"Refreshing…":"↻ Refresh"}</button>
-            <button onClick={onLogout} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+          <div className="hide-phone" style={{flex:1}}/>
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+            <span className="hide-phone"><Button size="sm" icon="download" onClick={exportCsv}>Export CSV</Button></span>
+            <IconButton icon="refresh" label={busy?"Refreshing":"Refresh"} onClick={load} disabled={busy} className={busy?"spin":""}/>
+            <MoreMenu label="More" items={menu}/>
           </div>
-        </div>
+        </header>
 
-        <div style={{maxWidth:1180,margin:"0 auto",padding:"18px 16px 32px",animation:"fadeUp 0.35s ease"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:16}}>
-            {kpi("Sites",sites.length,TEXT,()=>setFilter("all"),filter==="all")}
-            {kpi("Online",onlineCount,BATTERY,()=>setFilter("online"),filter==="online")}
-            {kpi("Need Attention",issueCount,issueCount>0?SOLAR:FAINT,()=>setFilter("issues"),filter==="issues")}
-            {kpi("Fleet PV Now",fmt(totalPv,1),SOLAR)}
-            {kpi("Fleet PV Today",fmtE(totalPvToday),TEXT)}
+        <main style={{maxWidth:1180,margin:"0 auto",padding:"16px 16px 32px"}}>
+          <div ref={largeTitleRef} style={{margin:"2px 0 16px"}}>
+            <h1 className="ui-largetitle">Fleet</h1>
+            <div style={{fontSize:FS.subhead,color:MUTED,marginTop:4}}>{subtitle}</div>
           </div>
-
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-            <div style={{position:"relative",flex:"1 1 200px",maxWidth:300}}>
-              <svg style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" placeholder="Search sites…" value={query} onChange={e=>setQuery(e.target.value)} style={{width:"100%",padding:"9px 12px 9px 34px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:FS.subhead,fontFamily:SANS,boxSizing:"border-box"}}/>
-            </div>
-            {fchip("all","All")}{fchip("online","Online")}{fchip("issues","Issues")}
-            {lastRefresh&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:"auto"}}>as of {lastRefresh.toLocaleTimeString()}</span>}
+          <div ref={kpiRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:16}}>
+            {kpi("Sites",null,sites.length,v=>String(Math.round(v)),TEXT,"all")}
+            {kpi("Online",null,onlineCount,v=>String(Math.round(v)),BATTERY,"online")}
+            {kpi("Need attention",null,issueCount,v=>String(Math.round(v)),issueCount>0?SOLAR:MUTED,"issues")}
+            {kpi("Fleet PV now",null,totalPv,v=>fmt(v,1),SOLAR)}
+            {kpi("Fleet PV today",null,totalPvToday,v=>fmtE(v),TEXT)}
           </div>
 
-          <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
-            <div style={{overflow:"auto",maxHeight:"min(70vh,680px)"}}>
-              <table style={{borderCollapse:"collapse",width:"100%",minWidth:864}}>
+          <div className="fleet-tools">
+            <label className="ui-search">
+              <Icon name="search"/>
+              <input type="search" placeholder="Search sites" aria-label="Search sites" value={query} onChange={e=>setQuery(e.target.value)}/>
+            </label>
+            <Segmented label="Filter" value={filter} onChange={switchFilter} options={[{value:"all",label:`All ${sites.length}`},{value:"online",label:`Online ${onlineCount}`},{value:"issues",label:`Issues ${issueCount}`}]}/>
+            {lastRefresh&&<span className="hide-phone" style={{fontSize:FS.footnote,color:MUTED,marginLeft:"auto"}}>Updated {lastRefresh.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span>}
+          </div>
+
+          <div className="ui-card" style={{overflow:"hidden"}}>
+            <div style={{overflow:"auto",maxHeight:"min(72vh,720px)"}}>
+              <table className="fleet-table" style={{borderCollapse:"separate",borderSpacing:0,width:"100%",minWidth:820}}>
                 <thead><tr>
-                  {cols.map(c=>(
-                    <th key={c.k} onClick={()=>!c.nosort&&setSort(c.k)} style={{...th,textAlign:c.a,cursor:c.nosort?"default":"pointer",color:sortKey===c.k?TEXT:MUTED}}>
-                      {c.label}{sortKey===c.k&&!c.nosort&&<span style={{marginLeft:3}}>{sortDir>0?"▲":"▼"}</span>}
+                  {cols.filter(c=>c.k!=="photo").map(c=>(
+                    <th key={c.k} aria-sort={sortKey===c.k?(sortDir>0?"ascending":"descending"):undefined} className={c.k==="name"?"sticky-col":undefined} style={{...th,textAlign:c.a,color:sortKey===c.k?TEXT:MUTED,...(c.k==="name"?{zIndex:3}:{})}}>
+                      {c.nosort ? c.label : (
+                        <button type="button" data-compact onClick={()=>sortBy(c.k)} style={{display:"inline-flex",alignItems:"center",gap:2,border:"none",background:"none",padding:"4px 0",font:"inherit",color:"inherit",cursor:"pointer"}}>
+                          {c.label}{sortIcon(c.k)}
+                        </button>
+                      )}
                     </th>
                   ))}
                 </tr></thead>
-                <tbody>
-                  {rows.length===0&&<tr><td colSpan={cols.length} style={{...td,textAlign:"center",color:MUTED,padding:"32px 0"}}>No sites match.</td></tr>}
+                <tbody ref={tbodyRef}>
+                  {rows.length===0&&<tr><td colSpan={cols.length-1} style={{...td,whiteSpace:"normal",height:"auto"}}><EmptyState icon="search" title="No sites match" hint="Try a different search or filter."/></td></tr>}
                   {rows.map(m=>{
                     const imp=m.gridNet>50, exp=m.gridNet<-50;
                     const chg=m.batNet>20, dis=m.batNet<-20;
+                    const ph=photoFor(m.site.name);
                     return (
-                      <tr key={m.site.name} onClick={()=>onPick(m.site)} className="fleet-row" style={{cursor:"pointer"}}>
-                        <td style={{...td,padding:"6px 8px 6px 12px",width:44}}>
-                          {(()=>{ const ph=photoFor(m.site.name); return ph
-                            ? <img src={ph} alt="" onClick={e=>openPhoto(e,m.site.name)} onMouseEnter={e=>showPreview(e,ph)} onMouseLeave={()=>setPreview(null)} style={{width:30,height:30,borderRadius:7,objectFit:"cover",border:`1px solid ${BORDER}`,display:"block",cursor:"pointer"}}/>
-                            : <div onClick={readOnly?undefined:e=>openPhoto(e,m.site.name)} title={readOnly?"":"Add a photo"} style={{width:30,height:30,borderRadius:7,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:readOnly?"default":"pointer"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>; })()}
-                        </td>
-                        <td style={{...td,maxWidth:240}}>
-                          <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
-                          <div style={{fontSize:FS.caption,color:MUTED}}>{m.site.installer||`${m.total} inverter${m.total!==1?"s":""}`}</div>
-                        </td>
-                        <td style={td}>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <span style={{width:8,height:8,borderRadius:"50%",background:m.status.color,flexShrink:0}}/>
-                            <div>
-                              <div style={{fontWeight:600,color:m.status.color}}>{m.status.label}</div>
-                              <div style={{fontSize:FS.caption,color:MUTED}}>{(m.invOnline??m.on)}/{m.total} online</div>
+                      <tr key={m.site.name} data-flip-id={m.site.name} onClick={()=>onPick(m.site)} onKeyDown={e=>{if(e.key==="Enter")onPick(m.site);}} tabIndex={0} className="fleet-row" style={{cursor:"pointer"}}>
+                        <td className="sticky-col" style={{...td,maxWidth:260,paddingLeft:10}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
+                            {ph
+                              ? <img src={ph} alt="" onClick={e=>openPhoto(e,m.site.name)} onMouseEnter={e=>showPreview(e,ph)} onMouseLeave={()=>setPreview(null)} style={{width:36,height:36,borderRadius:9,objectFit:"cover",border:`1px solid ${BORDER}`,display:"block",cursor:"pointer",flexShrink:0}}/>
+                              : <button type="button" data-compact aria-label={readOnly?"No photo":`Add a photo for ${m.site.name}`} onClick={readOnly?(e=>e.stopPropagation()):e=>openPhoto(e,m.site.name)} style={{width:36,height:36,borderRadius:9,background:"#F1ECE4",border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:readOnly?"default":"pointer",color:MUTED,fontSize:17,flexShrink:0,padding:0}}><Icon name="image"/></button>}
+                            <div style={{minWidth:0}}>
+                              <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
+                              <div style={{fontSize:FS.footnote,color:MUTED}}>{m.site.installer||`${m.total} inverter${m.total!==1?"s":""}`}</div>
                             </div>
                           </div>
                         </td>
-                        <td style={{...td,textAlign:"right",fontWeight:600,color:m.pv>0?SOLAR:TEXT}}>{m.loading?<Sk/>:fmt(m.pv,1)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmt(m.load,1)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.soc==null?<span style={{color:MUTED}}>—</span>:<span style={{fontWeight:600,color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?<span style={{color:BATTERY}}> ↑</span>:dis?<span style={{color:SOLAR}}> ↓</span>:""}</span>)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT,fontWeight:600}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN,fontWeight:600}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:MUTED}}>—</span>)}</td>
+                        <td style={td}>
+                          <div style={{display:"flex",alignItems:"center",gap:7}}>
+                            <span className="ui-dot" style={{background:m.status.color,width:8,height:8}}/>
+                            <div>
+                              <div style={{fontWeight:600,color:textTone(m.status.color)}}>{m.status.label}</div>
+                              <div style={{fontSize:FS.footnote,color:MUTED}}>{(m.invOnline??m.on)}/{m.total} online</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{...td,textAlign:"right",fontWeight:600,color:m.pv>0?SOLAR_TEXT:TEXT}}>{m.loading?<Sk/>:<CountUp value={m.pv} format={v=>fmt(v,1)}/>}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:<CountUp value={m.load} format={v=>fmt(v,1)}/>}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.soc==null?<span style={{color:MUTED}}>—</span>:<span style={{fontWeight:600,color:textTone(m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN),display:"inline-flex",alignItems:"center",gap:3}}>{Math.round(m.soc)}%{chg?<Icon name="arrow-up" label="Charging" style={{color:BATTERY}}/>:dis?<Icon name="arrow-down" label="Discharging" style={{color:SOLAR}}/>:null}</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT_TEXT,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><Icon name="arrow-up" label="Exporting"/>{fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN_TEXT,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><Icon name="arrow-down" label="Importing"/>{fmt(m.gridNet,1)}</span>:<span style={{color:MUTED}}>—</span>)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmtE(m.pvToday)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.expToday>0?fmtE(m.expToday):<span style={{color:MUTED}}>—</span>)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.error?<span style={{color:GRID_IN,fontSize:FS.caption}}>error</span>:(m.updated?<UpdatedChip time={m.updated}/>:<span style={{color:MUTED}}>—</span>))}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.error?<span style={{color:GRID_IN_TEXT,fontSize:FS.footnote}}>Error</span>:(m.updated?<UpdatedChip time={m.updated}/>:<span style={{color:MUTED}}>—</span>))}</td>
                       </tr>
                     );
                   })}
-                  {rows.length>1&&(()=>{ const t=rows.reduce((a,m)=>({pv:a.pv+(m.pv||0),load:a.load+(m.load||0),pvToday:a.pvToday+(m.pvToday||0),exp:a.exp+(m.expToday||0)}),{pv:0,load:0,pvToday:0,exp:0}); return (
-                    <tr style={{background:"#FBF8F3",position:"sticky",bottom:0}}>
-                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
-                      <td style={{...td,fontWeight:800,borderTop:`2px solid ${BORDER}`}}>{rows.length} sites</td>
-                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
-                      <td style={{...td,textAlign:"right",fontWeight:800,color:SOLAR,borderTop:`2px solid ${BORDER}`}}>{fmt(t.pv,1)}</td>
-                      <td style={{...td,textAlign:"right",fontWeight:700,borderTop:`2px solid ${BORDER}`}}>{fmt(t.load,1)}</td>
-                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
-                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
-                      <td style={{...td,textAlign:"right",fontWeight:700,borderTop:`2px solid ${BORDER}`}}>{fmtE(t.pvToday)}</td>
-                      <td style={{...td,textAlign:"right",fontWeight:700,borderTop:`2px solid ${BORDER}`}}>{t.exp>0?fmtE(t.exp):"—"}</td>
-                      <td style={{...td,borderTop:`2px solid ${BORDER}`}}/>
+                  {rows.length>1&&(()=>{ const t=rows.reduce((a,m)=>({pv:a.pv+(m.pv||0),load:a.load+(m.load||0),pvToday:a.pvToday+(m.pvToday||0),exp:a.exp+(m.expToday||0)}),{pv:0,load:0,pvToday:0,exp:0}); const ft={...td,background:"#FBF8F3",borderTop:`2px solid ${BORDER}`,position:"sticky",bottom:0,zIndex:1}; return (
+                    <tr>
+                      <td className="sticky-col" style={{...ft,fontWeight:800,zIndex:2}}>{rows.length} sites</td>
+                      <td style={ft}/>
+                      <td style={{...ft,textAlign:"right",fontWeight:800,color:SOLAR_TEXT}}>{fmt(t.pv,1)}</td>
+                      <td style={{...ft,textAlign:"right",fontWeight:700}}>{fmt(t.load,1)}</td>
+                      <td style={ft}/>
+                      <td style={ft}/>
+                      <td style={{...ft,textAlign:"right",fontWeight:700}}>{fmtE(t.pvToday)}</td>
+                      <td style={{...ft,textAlign:"right",fontWeight:700}}>{t.exp>0?fmtE(t.exp):"—"}</td>
+                      <td style={ft}/>
                     </tr>
                   ); })()}
                 </tbody>
@@ -1513,8 +1549,8 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
             </div>
           </div>
 
-          <div style={{fontSize:FS.caption,color:MUTED,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status is the live fleet fetch; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
-        </div>
+          <div style={{fontSize:FS.footnote,color:MUTED,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status comes from the live feed; the other numbers are the latest 5-minute report. Refreshes every 2 minutes.</div>
+        </main>
       </div>
       {preview && (
         <div style={{position:"fixed",left:preview.x,top:preview.y,zIndex:150,pointerEvents:"none",animation:"fadeUp 0.12s ease"}}>
@@ -3046,6 +3082,24 @@ function SeriesToggle({series}) {
           {s.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// One share in a list: who/what, its status pill, and a "…" menu with the destructive Revoke.
+function ShareRow({title, sub, status, onRevoke}){
+  const active = status==="active";
+  return (
+    <div className="ui-row">
+      <span style={{color:MUTED,fontSize:20,display:"inline-flex"}}><Icon name="user"/></span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:FS.body,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title}</div>
+        <div style={{fontSize:FS.footnote,color:MUTED,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          {sub&&<span>{sub}</span>}
+          <span className="ui-pill" style={{background:active?"#DCFCE7":"#FEF3C7",color:active?BATTERY_TEXT:SOLAR_TEXT}}>{active?"Active":"Pending signup"}</span>
+        </div>
+      </div>
+      <MoreMenu label="Share options" items={[{label:"Revoke access", icon:"lock", destructive:true, onClick:onRevoke}]}/>
     </div>
   );
 }

@@ -2,6 +2,21 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.5.0 (2026-10-02): Lists
+
+- Fleet: navigation bar with Refresh (spins while working) and a "…" menu (Export CSV, Help, Sign out);
+  large "Fleet" title with an online/attention summary; KPI tiles count up and the first three filter the
+  table; full-width search and an All/Online/Issues segmented filter with counts; the table stays a table
+  on phones (as preferred) with a sticky site column, 56px rows, keyboard-openable rows, sortable column
+  buttons, skeleton cells while loading, and rows that glide to their new places when you sort or filter
+  (GSAP Flip, off under Reduce Motion).
+- Settings lists are grouped rows with a "…" menu per row; destructive actions (Delete alert, Revoke
+  access, Unlink account, Remove photo) sit in the menu, in red, after a divider.
+- The "…" menu now renders above everything and flips upward near the bottom of the screen, so sheets and
+  tables never clip it.
+- Alert rules: inverter header with Send test, sentence-case details, Add alert as a plain button.
+- Linked accounts: an Active pill and "Use this account" in the menu replace the radio buttons.
+
 ## 0.4.0 (2026-10-02): Detail views and charts
 
 - Day, Month, Year and Explorer share one header: a title with a plain-language subtitle, then 44px step

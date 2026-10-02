@@ -1,6 +1,7 @@
 // Buttons, the "…" menu and segmented controls. Styling lives in styles/globals.css (ui-* classes)
 // so hover, press, focus and the phone/desktop target sizes come from one place.
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
 import { gsap, prefersReducedMotion, useIsoLayoutEffect, useSlidingIndicator } from "./motion";
 
@@ -30,17 +31,36 @@ export function IconButton({ icon, label, className = "", badge, ...rest }) {
 // Escape or a click outside closes it and returns focus to the button.
 export function MoreMenu({ items = [], label = "More", icon = "more", buttonClassName = "", align = "right" }) {
   const [open, setOpen] = useState(false);
-  const wrap = useRef(null);
+  const [pos, setPos] = useState(null);
   const btn = useRef(null);
   const menu = useRef(null);
 
+  // The menu renders in a portal with fixed positioning so scrolling sheets and tables never clip it.
+  // It opens below the button, or above when there is not enough room underneath.
+  const place = () => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return;
+    const h = menu.current?.offsetHeight || 0;
+    const below = window.innerHeight - r.bottom;
+    const up = h && below < h + 12 && r.top > below;
+    setPos({
+      top: up ? Math.max(8, r.top - h - 6) : r.bottom + 6,
+      left: align === "right" ? undefined : Math.max(8, r.left),
+      right: align === "right" ? Math.max(8, window.innerWidth - r.right) : undefined,
+      origin: `${up ? "bottom" : "top"} ${align === "right" ? "right" : "left"}`,
+    });
+  };
+
   useEffect(() => {
     if (!open) return;
-    const onDown = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    const onDown = (e) => {
+      if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     const onKey = (e) => {
-      if (e.key === "Escape") { setOpen(false); btn.current?.focus(); }
+      if (e.key === "Escape") { e.stopPropagation(); setOpen(false); btn.current?.focus(); }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        const els = [...(menu.current?.querySelectorAll("button.ui-menu-item") || [])];
+        const els = [...(menu.current?.querySelectorAll("button.ui-menu-item:not([disabled])") || [])];
         if (!els.length) return;
         e.preventDefault();
         const i = els.indexOf(document.activeElement);
@@ -48,29 +68,45 @@ export function MoreMenu({ items = [], label = "More", icon = "more", buttonClas
         els[n].focus();
       }
     };
+    const onMove = () => setOpen(false);
     document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("pointerdown", onDown, true); document.removeEventListener("keydown", onKey); };
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
+    };
   }, [open]);
 
   useIsoLayoutEffect(() => {
-    if (!open || !menu.current) return;
-    menu.current.querySelector("button.ui-menu-item")?.focus({ preventScroll: true });
-    if (prefersReducedMotion()) return;
-    gsap.fromTo(menu.current, { autoAlpha: 0, scale: 0.96, y: -4 },
-      { autoAlpha: 1, scale: 1, y: 0, duration: 0.16, ease: "power2.out", transformOrigin: align === "right" ? "top right" : "top left" });
+    if (!open) { setPos(null); return; }
+    place();
   }, [open]);
+
+  useIsoLayoutEffect(() => {
+    if (!open || !pos || !menu.current) return;
+    // Re-measure once the real height is known (decides whether to open upward).
+    if (!menu.current.dataset.placed) { menu.current.dataset.placed = "1"; place(); return; }
+    menu.current.querySelector("button.ui-menu-item:not([disabled])")?.focus({ preventScroll: true });
+    if (prefersReducedMotion()) return;
+    gsap.fromTo(menu.current, { autoAlpha: 0, scale: 0.96 },
+      { autoAlpha: 1, scale: 1, duration: 0.16, ease: "power2.out", transformOrigin: pos.origin });
+  }, [pos]);
 
   const choose = (it) => { setOpen(false); btn.current?.focus(); it.onClick?.(); };
 
   return (
-    <div ref={wrap} className="ui-menu-wrap">
+    <>
       <button ref={btn} type="button" className={`ui-iconbtn ${buttonClassName}`.trim()} aria-label={label} title={label}
-        aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        aria-haspopup="menu" aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>
         <Icon name={icon} />
       </button>
-      {open && (
-        <div ref={menu} role="menu" className={`ui-menu ui-menu--${align}`}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div ref={menu} role="menu" className="ui-menu" onClick={(e) => e.stopPropagation()}
+          style={{ position: "fixed", top: pos?.top ?? -9999, left: pos?.left, right: pos?.right, visibility: pos ? "visible" : "hidden" }}>
           {items.filter(Boolean).map((it, i) => {
             if (it.sep) return <div key={`s${i}`} className="ui-menu-sep" role="separator" />;
             if (it.header) return <div key={`h${i}`} className="ui-menu-header">{it.header}</div>;
@@ -85,9 +121,9 @@ export function MoreMenu({ items = [], label = "More", icon = "more", buttonClas
               </button>
             );
           })}
-        </div>
-      )}
-    </div>
+        </div>,
+        document.body)}
+    </>
   );
 }
 

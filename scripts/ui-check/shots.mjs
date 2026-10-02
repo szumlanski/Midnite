@@ -302,7 +302,7 @@ async function runViewport(browser, vp) {
   screen = "fleet";
   const fleetOk = await step("fleet", async () => {
     await page.goto(BASE, { waitUntil: "load" });
-    await page.getByText("Fleet View", { exact: true }).first().waitFor({ timeout: 20000 });
+    await page.getByRole("heading", { name: "Fleet", exact: true }).first().waitFor({ timeout: 20000 });
     await page.locator("tr", { hasText: "Wise Naples" }).first().waitFor({ timeout: 10000 });
   });
   if (fleetOk) await shoot(page, idle, "fleet");
