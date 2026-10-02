@@ -8,6 +8,7 @@ import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
 import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT, LOAD_C, SOLAR_TEXT, BATTERY_TEXT, GRID_OUT_TEXT, GRID_IN_TEXT, SHADOW, SHADOW_SM, SANS, CHART_PROD, CHART_CONS, CHART_BAT, CHART_GRID, FS, textTone } from "@/components/ui/tokens";
 import { Icon, svgIcon } from "@/components/ui/Icon";
 import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
+import { Sheet } from "@/components/ui/Sheet";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
@@ -993,19 +994,14 @@ function ShareModal({ site, accountId, onClose }){
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
   const revoke=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Stop sharing this site with them?")) return; try{ await api("share_revoke",{id}); load(); }catch(e){ setErr(e.message); } };
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:460,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`}}>
-          <div><div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Share site</div><div style={{fontSize:FS.caption,color:MUTED}}>{site.name}</div></div>
-          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
-        </div>
-        <div style={{padding:"14px 18px"}}>
+    <Sheet title="Share site" subtitle={site.name} onClose={onClose} maxWidth={480}>
+        <div>
           {err&&<div style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
           <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:12,lineHeight:1.5}}>Give someone <strong>view-only</strong> access to this site. They'll get an email; if they don't have an account yet, they'll be invited to create one with that address and the site appears automatically. No equipment control — viewing only. Revoke anytime.</div>
           <form onSubmit={submit} style={{display:"flex",gap:8,marginBottom:18}}>
-            <input type="email" required placeholder="person@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={{...authInput,flex:1}}/>
-            <button type="submit" disabled={busy||!email} style={{...authBtn(busy||!email),width:"auto",padding:"0 18px"}}>{busy?"…":"Share"}</button>
+            <input type="email" required placeholder="person@email.com" aria-label="Email address" autoComplete="email" data-autofocus value={email} onChange={e=>setEmail(e.target.value)} style={{...authInput,flex:1}}/>
+            <Button type="submit" variant="primary" icon="share" disabled={busy||!email}>{busy?"Sharing…":"Share"}</Button>
           </form>
           <div className="ui-section-label">Shared with</div>
           <div className="ui-group">
@@ -1014,8 +1010,7 @@ function ShareModal({ site, accountId, onClose }){
             {shares&&shares.map(s=><ShareRow key={s.id} title={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)}/>)}
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1100,26 +1095,22 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
     catch(e){setErr(e.message);} finally{setBusy(false);} };
   const removeSitePhoto=async(siteName)=>{ setBusy(true); try{ await api("setsitephoto",{site:siteName,url:null}); onChanged(); }finally{setBusy(false);} };
 
-  const tabBtn=(id,label)=><button onClick={()=>{setSec(id);setErr(null);setMsg(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:sec===id?BG:"transparent",color:sec===id?TEXT:MUTED,fontSize:FS.footnote,fontWeight:sec===id?700:500,cursor:"pointer",fontFamily:SANS}}>{label}</button>;
+  const goSec=(id)=>{ setSec(id); setErr(null); setMsg(null); };
   const fileBtn=(label,onChange)=>(<label className="ui-btn ui-btn--secondary ui-btn--sm" style={{flexShrink:0}}><Icon name="upload"/>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,background:CARD,zIndex:1}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {profile.avatar_url
-              ? <img src={profile.avatar_url} alt="" style={{width:34,height:34,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`}}/>
-              : <div style={{width:34,height:34,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.body,fontWeight:700,color:MUTED}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
-            <div>
-              <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>{profile.display_name||"Account Settings"}</div>
-              <div style={{fontSize:FS.footnote,color:MUTED,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{email}{isAdmin&&<span className="ui-pill" style={{background:"#FEF3C7",color:SOLAR_TEXT}}>Admin</span>}</div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
-        </div>
-        <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}{tabBtn("alerts","Notifications")}{tabBtn("sharing","Sharing")}</div>
-        <div style={{padding:"14px 18px"}}>
+    <Sheet maxWidth={560} onClose={onClose}
+      title={profile.display_name||"Settings"}
+      subtitle={<span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{email}{isAdmin&&<span className="ui-pill" style={{background:"#FEF3C7",color:SOLAR_TEXT}}>Admin</span>}</span>}
+      leading={profile.avatar_url
+        ? <img src={profile.avatar_url} alt="" style={{width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`,flexShrink:0}}/>
+        : <div style={{width:40,height:40,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.callout,fontWeight:700,color:MUTED,flexShrink:0}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
+      toolbar={<div className="seg-scroll"><Segmented label="Settings sections" value={sec} onChange={goSec} options={[{value:"accounts",label:"Midnite"},{value:"profile",label:"Profile"},{value:"security",label:"Security"},{value:"sites",label:"Photos"},{value:"alerts",label:"Alerts"},{value:"sharing",label:"Sharing"}]}/></div>}
+      footer={<>
+        <a href="/faq" target="_blank" rel="noopener" className="ui-btn ui-btn--plain"><Icon name="help"/>Help &amp; FAQ</a>
+        {onLogout && <Button variant="destructive" icon="logout" onClick={onLogout}>Sign out</Button>}
+      </>}>
+        <div>
           {err&&<div style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
 
@@ -1197,12 +1188,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderTop:`1px solid ${BORDER}`}}>
-          <a href="/faq" target="_blank" rel="noopener" className="ui-btn ui-btn--plain"><Icon name="help"/>Help &amp; FAQ</a>
-          {onLogout && <Button variant="destructive" icon="logout" onClick={onLogout}>Sign out</Button>}
-        </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1557,32 +1543,20 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
           <img src={preview.url} alt="" style={{width:200,height:200,objectFit:"cover",borderRadius:12,border:`3px solid ${CARD}`,boxShadow:"0 16px 44px rgba(0,0,0,0.34)"}}/>
         </div>
       )}
-      {photoModal && (()=>{ const upBtn={display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:uploading?"default":"pointer",opacity:uploading?0.6:1};
-        return (
-        <div onClick={()=>!uploading&&setPhotoModal(null)} style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:440,width:"100%",boxShadow:"0 16px 56px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:SANS,animation:"fadeUp 0.2s ease"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px 16px",borderBottom:`1px solid ${BORDER}`}}>
-              <div style={{fontSize:FS.body,fontWeight:700,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{photoModal.site}</div>
-              <button onClick={()=>!uploading&&setPhotoModal(null)} style={{border:"none",background:"transparent",fontSize:FS.title2,lineHeight:1,color:MUTED,cursor:"pointer",flexShrink:0}}>×</button>
+      {photoModal && (
+        <Sheet title={photoModal.site} subtitle={readOnly?"Shared with you · view only":"Site photo"} onClose={()=>setPhotoModal(null)} closeDisabled={uploading} maxWidth={460}>
+          {uploadErr&&<div role="alert" style={errBox}>{uploadErr}</div>}
+          {photoModal.url
+            ? <img src={photoModal.url} alt={`${photoModal.site} site photo`} style={{width:"100%",maxHeight:"56vh",objectFit:"contain",borderRadius:12,background:"#000",display:"block"}}/>
+            : <EmptyState icon="image" title="No photo yet" hint={readOnly?"The site owner hasn’t added one.":"Add one so you can spot this site at a glance."}/>}
+          {!readOnly && (
+            <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center",flexWrap:"wrap"}}>
+              <label className={`ui-btn ui-btn--secondary${uploading?" is-busy":""}`} aria-disabled={uploading}><Icon name="camera"/>{uploading?"Uploading…":"Take photo"}<input type="file" accept="image/*" capture="environment" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
+              <label className={`ui-btn ui-btn--secondary${uploading?" is-busy":""}`} aria-disabled={uploading}><Icon name="image"/>{uploading?"Uploading…":(photoModal.url?"Replace":"Choose file")}<input type="file" accept="image/*" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
             </div>
-            <div style={{padding:16}}>
-              {uploadErr&&<div style={errBox}>{uploadErr}</div>}
-              {photoModal.url
-                ? <img src={photoModal.url} alt="" style={{width:"100%",maxHeight:"60vh",objectFit:"contain",borderRadius:12,background:"#000",display:"block"}}/>
-                : <div style={{padding:"26px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:42,marginBottom:8}}>🏠</div>
-                    <div style={{fontSize:FS.subhead,color:MUTED}}>{readOnly?"No photo set by the site owner.":"No photo for this site yet — add one below."}</div>
-                  </div>}
-              {readOnly
-                ? <div style={{marginTop:14,textAlign:"center",fontSize:FS.caption,color:MUTED}}>Shared with you · view-only</div>
-                : <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center",flexWrap:"wrap"}}>
-                    <label style={upBtn}>{uploading?"Uploading…":"📷 Take photo"}<input type="file" accept="image/*" capture="environment" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
-                    <label style={upBtn}>{uploading?"Uploading…":(photoModal.url?"🖼 Replace":"🖼 Choose file")}<input type="file" accept="image/*" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
-                  </div>}
-            </div>
-          </div>
-        </div>
-      ); })()}
+          )}
+        </Sheet>
+      )}
     </>
   );
 }
@@ -2007,41 +1981,42 @@ function SettingsModal({inv, onClose}){
   const modeOk = (s)=> !s.mode || s.mode === (isSoc ? "soc" : "voltage");
   const shown = (g)=> SETTINGS_MAP.filter(s=>s.group===g && data && (s.code in data) && modeOk(s));
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:560,width:"100%",maxHeight:"85vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,background:CARD}}>
-          <div>
-            <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Inverter Settings</div>
-            <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace"}}>{inv.label} · {inv.sn}</div>
-          </div>
-          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
-        </div>
-        <div style={{padding:"14px 18px"}}>
-          {err && <div style={{fontSize:FS.footnote,color:GRID_IN,padding:"8px 10px",background:"#FEF2F2",borderRadius:8}}>{err}</div>}
-          {!err && !data && <div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"24px 0"}}>Reading live settings from the inverter…</div>}
+    <Sheet title={`${inv.label} settings`} subtitle={<span style={{fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{inv.sn}</span>} onClose={onClose} maxWidth={560}
+      leading={<span style={{width:40,height:40,borderRadius:10,background:"#F5F1EB",color:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}><Icon name="sliders"/></span>}>
+        <div>
+          {err && <div role="alert" style={{...errBox,display:"flex",gap:6,alignItems:"center"}}><Icon name="alert"/>{err}</div>}
+          {!err && !data && <div role="status" aria-label="Reading settings"><div style={{fontSize:FS.subhead,color:MUTED,marginBottom:12}}>Reading live settings from the inverter…</div>{[0,1,2,3,4,5].map(i=><div key={i} className="ui-skel" style={{height:40,borderRadius:8,marginBottom:6}}/>)}</div>}
           {!err && data && groups.map(g=>{
             const rows = shown(g);
             if(!rows.length) return null;
             return (
-              <div key={g} style={{marginBottom:14}}>
-                <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>{g}</div>
-                {rows.map(s=>(
-                  <div key={s.code} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",borderBottom:`1px solid ${BORDER}`,gap:12}}>
-                    <span style={{fontSize:FS.subhead,color:TEXT}}>{s.label}</span>
-                    <span style={{fontSize:FS.subhead,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtSetting(s, data[s.code])}</span>
-                  </div>
-                ))}
+              <div key={g} style={{marginBottom:16}}>
+                <div className="ui-section-label">{toSentence(g)}</div>
+                <div className="ui-group">
+                  {rows.map(s=>(
+                    <div key={s.code} className="ui-row" style={{minHeight:48,justifyContent:"space-between"}}>
+                      <span style={{fontSize:FS.body,color:TEXT}}>{toSentence(s.label)}</span>
+                      <span style={{fontSize:FS.body,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtSetting(s, data[s.code])}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             );
           })}
           {!err && data && (
-            <div style={{fontSize:FS.caption,color:MUTED,marginTop:8,lineHeight:1.5}}>Only settings we've confidently mapped from the register set are shown ({SETTINGS_MAP.length} so far). The list grows as more registers are correlated to the Remote-Setting screens.</div>
+            <div style={{fontSize:FS.footnote,color:MUTED,marginTop:8,lineHeight:1.5}}>Read only. Only settings we’ve mapped with certainty are shown ({SETTINGS_MAP.length} so far); the list grows as more registers are matched to the inverter’s setting screens.</div>
           )}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
+// Vendor setting names arrive in Title Case ("Maximum Feed-In Grid Power"); show them in sentence case,
+// keeping acronyms (SOC, EPS), words with digits, mixed-case names (TimeBase) and proper nouns.
+const KEEP_CASE = new Set(["Modbus","MidNite","Midnite","Wi-Fi","Li-ion"]);
+const toSentence = (label="") => String(label).split(" ").map((w,i)=>{
+  if(i===0 || KEEP_CASE.has(w) || /\d/.test(w) || /[A-Z].*[A-Z]/.test(w.replace(/-[A-Z]/g,"-x"))) return w;
+  return w.toLowerCase();
+}).join(" ");
 // Fleet settings comparison — settings as rows, inverters as columns; rows that differ are highlighted.
 function SettingsCompareModal({inverters, onClose}){
   const cols = inverters.filter(i=>i.autoId);
@@ -2083,40 +2058,33 @@ function SettingsCompareModal({inverters, onClose}){
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:1100,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:`1px solid ${BORDER}`,gap:8,flexWrap:"wrap"}}>
-          <div>
-            <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Compare Inverter Settings</div>
-            <div style={{fontSize:FS.caption,color:MUTED}}>{data ? `${cols.length} inverters · ${diffCount} setting${diffCount===1?"":"s"} differ` : `Reading… ${done}/${cols.length}`}</div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            {data && <label style={{display:"flex",alignItems:"center",gap:5,fontSize:FS.caption,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}><input type="checkbox" checked={diffOnly} onChange={e=>setDiffOnly(e.target.checked)} style={{cursor:"pointer"}}/>Differences only</label>}
-            {data && rows.length>0 && <button onClick={exportCsv} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Export CSV</button>}
-            <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
-          </div>
-        </div>
-        <div style={{overflow:"auto",padding:"4px 0"}}>
-          {!data && <div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"32px 0"}}>Reading live settings from {cols.length} inverters…</div>}
-          {data && cols.length===0 && <div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"32px 0"}}>No inverters with installer access.</div>}
+    <Sheet maxWidth={1100} flush onClose={onClose} title="Compare inverter settings"
+      subtitle={data ? `${cols.length} inverters · ${diffCount} setting${diffCount===1?"":"s"} differ` : `Reading ${done} of ${cols.length}…`}
+      toolbar={data && <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <Segmented size="sm" label="Show" value={diffOnly?"diff":"all"} onChange={v=>setDiffOnly(v==="diff")} options={[{value:"all",label:"All settings"},{value:"diff",label:`Differences (${diffCount})`}]}/>
+        {rows.length>0 && <Button size="sm" icon="download" onClick={exportCsv}>Export CSV</Button>}
+      </div>}>
+        <div>
+          {!data && <div style={{padding:16}} role="status" aria-label="Reading settings">{[0,1,2,3,4,5,6].map(i=><div key={i} className="ui-skel" style={{height:36,borderRadius:8,marginBottom:6}}/>)}</div>}
+          {data && cols.length===0 && <EmptyState icon="lock" title="No inverters with installer access" hint="Settings can be read only through an installer account."/>}
           {data && cols.length>0 && (
             <table style={{borderCollapse:"collapse",width:"100%",fontSize:FS.footnote}}>
-              <thead><tr style={{position:"sticky",top:0,background:CARD,zIndex:1}}>
-                <th style={{textAlign:"left",padding:"8px 14px",fontSize:FS.caption,color:MUTED,fontWeight:700,position:"sticky",left:0,background:CARD,minWidth:200}}>Setting</th>
-                {cols.map(inv=><th key={inv.sn} style={{textAlign:"right",padding:"8px 14px",fontSize:FS.caption,color:TEXT,fontWeight:700,whiteSpace:"nowrap"}}>{inv.label}</th>)}
+              <thead><tr>
+                <th style={{textAlign:"left",padding:"10px 14px",fontSize:FS.footnote,color:MUTED,fontWeight:600,position:"sticky",left:0,top:0,zIndex:3,background:CARD,minWidth:200,boxShadow:`inset 0 -1px 0 ${BORDER}`}}>Setting</th>
+                {cols.map(inv=><th key={inv.sn} style={{textAlign:"right",padding:"10px 14px",fontSize:FS.footnote,color:TEXT,fontWeight:700,whiteSpace:"nowrap",position:"sticky",top:0,zIndex:2,background:CARD,boxShadow:`inset 0 -1px 0 ${BORDER}`}}>{inv.label}</th>)}
               </tr></thead>
               <tbody>
                 {groups.flatMap(g=>{
                   const grows = rows.filter(r=>r.s.group===g);
                   if(!grows.length) return [];
                   return [
-                    <tr key={"h-"+g}><td colSpan={cols.length+1} style={{padding:"10px 14px 4px",fontSize:FS.caption,color:MUTED,fontWeight:700}}>{g}</td></tr>,
+                    <tr key={"h-"+g}><td colSpan={cols.length+1} style={{padding:"14px 14px 6px",fontSize:FS.footnote,color:MUTED,fontWeight:600}}><span style={{position:"sticky",left:14}}>{toSentence(g)}</span></td></tr>,
                     ...grows.map(({s,vals})=>{
                       const diff = isDiff(vals);
                       return (
                         <tr key={s.code} style={{background:diff?"#FEF3C7":"transparent",borderTop:`1px solid ${BORDER}`}}>
-                          <td style={{textAlign:"left",padding:"6px 14px",color:TEXT,position:"sticky",left:0,background:diff?"#FEF3C7":CARD,whiteSpace:"nowrap"}}>{diff&&<span style={{color:SOLAR,fontWeight:800,marginRight:4}}>⚠</span>}{s.label}</td>
-                          {vals.map((v,i)=><td key={i} style={{textAlign:"right",padding:"6px 14px",color:v==null?MUTED:TEXT,fontWeight:diff?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v==null?"—":v}</td>)}
+                          <td style={{textAlign:"left",padding:"10px 14px",color:TEXT,position:"sticky",left:0,background:diff?"#FEF3C7":CARD,whiteSpace:"nowrap"}}>{diff&&<Icon name="alert" label="Differs" style={{color:SOLAR_TEXT,marginRight:6}}/>}{toSentence(s.label)}</td>
+                          {vals.map((v,i)=><td key={i} style={{textAlign:"right",padding:"10px 14px",color:v==null?MUTED:TEXT,fontWeight:diff?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v==null?"—":v}</td>)}
                         </tr>
                       );
                     })
@@ -2126,8 +2094,7 @@ function SettingsCompareModal({inverters, onClose}){
             </table>
           )}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 function InverterCard({inv, status, live}) {

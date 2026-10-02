@@ -44,7 +44,7 @@ const VIEWPORTS = [
   { w: 390, h: 844, dsf: 2, mobile: true },
   { w: 1280, h: 800, dsf: 1, mobile: false },
 ];
-const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter"];
+const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings"];
 
 const log = (...m) => process.stderr.write(m.join(" ") + "\n");
 const summary = { screens: 0, errs: {}, blocked: 0, failedSteps: {} };
@@ -362,7 +362,7 @@ async function runViewport(browser, vp) {
 
   screen = "settings-alerts";
   if (settingsOk && await step("settings-alerts", async () => {
-    await clickModalTab("Notifications");
+    await clickModalTab("Alerts");
     await page.getByText("Threshold alerts", { exact: true }).waitFor({ timeout: 10000 });
     await page.getByText(/Daily digest/).first().waitFor({ timeout: 10000 });
   })) await shoot(page, idle, "settings-alerts", { full: false });
@@ -388,6 +388,21 @@ async function runViewport(browser, vp) {
     await page.locator("button[aria-pressed]").filter({ hasText: /^INV-1/ }).first().click();
     await page.getByText("Inverter details and firmware", { exact: true }).first().waitFor({ timeout: 10000 });
   })) await shoot(page, idle, "inverter");
+
+  screen = "compare";
+  if (liveOk && await step("compare", async () => {
+    await reloadSite();
+    await page.getByRole("button", { name: "Compare settings" }).first().click();
+    await page.getByRole("heading", { name: "Compare inverter settings" }).first().waitFor({ timeout: 10000 });
+    await page.locator('[role="dialog"] table').first().waitFor({ timeout: 15000 });
+  })) await shoot(page, idle, "compare", { full: false });
+
+  screen = "inv-settings";
+  if (liveOk && await step("inv-settings", async () => {
+    await reloadSite();
+    await page.getByRole("button", { name: "Inverter settings" }).first().click();
+    await page.locator('[role="dialog"] .ui-group').first().waitFor({ timeout: 15000 });
+  })) await shoot(page, idle, "inv-settings", { full: false });
 
   await ctx.close();
 }

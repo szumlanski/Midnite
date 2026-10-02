@@ -344,3 +344,38 @@ button, input, select, textarea { font-family: inherit; }
 .ui-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 10px 8px 14px; border-top: 1px solid var(--border); }
 .ui-group > .ui-row:first-child { border-top: none; }
 .ui-section-label { margin: 6px 4px 8px; font-size: var(--fs-footnote); font-weight: 600; color: var(--muted); }
+
+/* Sheets (components/ui/Sheet.jsx): centered dialog on desktop, bottom sheet on phones */
+.ui-sheet-root { position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ui-sheet-overlay { position: absolute; inset: 0; background: rgba(28, 25, 23, 0.42); }
+.ui-sheet {
+  position: relative; display: flex; flex-direction: column; width: 100%; max-width: var(--sheet-max, 520px); max-height: 88vh;
+  background: var(--card); border-radius: 14px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08);
+  outline: none; overflow: hidden;
+}
+.ui-sheet-head { flex-shrink: 0; border-bottom: 1px solid var(--border); background: var(--card); touch-action: none; }
+.ui-sheet-grabber { display: none; }
+.ui-sheet-titlebar { display: flex; align-items: center; gap: 12px; padding: 12px 10px 12px 18px; }
+.ui-sheet-title { font-size: var(--fs-headline); font-weight: 700; color: var(--text); line-height: 1.25; }
+.ui-sheet-sub { font-size: var(--fs-footnote); color: var(--muted); margin-top: 1px; }
+.ui-sheet-close { color: var(--muted); font-size: 20px; }
+.ui-sheet-toolbar { padding: 0 14px 10px; }
+.ui-sheet-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 18px; }
+.ui-sheet-foot { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--card); }
+@media (max-width: 768px) {
+  .ui-sheet-root { align-items: flex-end; padding: 0; }
+  .ui-sheet { max-width: none; max-height: 92dvh; border-radius: 16px 16px 0 0; }
+  .ui-sheet-grabber { display: block; width: 36px; height: 5px; border-radius: 3px; background: #D6D0C8; margin: 8px auto 0; }
+  .ui-sheet-titlebar { padding: 6px 8px 10px 18px; }
+  .ui-sheet-body { padding: 16px 16px; }
+  .ui-sheet-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .ui-sheet-body:last-child { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+/* A segmented control that may be wider than the sheet scrolls sideways. */
+.seg-scroll { overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 0 2px; }
+.seg-scroll::-webkit-scrollbar { display: none; }
+.ui-btn.is-busy { opacity: 0.6; pointer-events: none; }
+.ui-sheet-body--flush { padding: 0 !important; }
+@media (max-width: 768px) {
+  .seg-scroll { -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+}

@@ -36,7 +36,7 @@ Measured 2026-10-02 on `pages/index.jsx` (4,300 lines, 47 components, inline sty
       sentence case, 768 breakpoint, 5-tab bar, globals.css + font cleanup, Reduce Motion, dead code
 - [x] 3. v0.4.0 Other detail views: inverter detail, battery/lifetime/fault, Day/Month/Year/Explorer headers
 - [x] 4. v0.5.0 Lists: Fleet (table kept on phones), alert rules, shares, linked accounts with "…" menus
-- [ ] 5. v0.6.0 Sheets: one `<Sheet>` for the 5 overlays; Settings sub-tabs as a segmented control
+- [x] 5. v0.6.0 Sheets: one `<Sheet>` for the 5 overlays; Settings sub-tabs as a segmented control
 - [ ] 6. v0.7.0 Alerts + toasts: `confirmAlert` at every confirm site, toasts for completed actions
 - [ ] 7. v0.8.0 Icons: emoji/glyphs to the SVG icon set (emails excluded)
 - [ ] 8. v0.9.0 Remaining screens at 390px: landing, auth, FAQ, Terms, Admin, empty/loading/error states

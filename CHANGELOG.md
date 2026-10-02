@@ -2,6 +2,20 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.6.0 (2026-10-02): Sheets
+
+- One `Sheet` component for every pop-up: Settings, Share site, Inverter settings, Compare inverter
+  settings and the site photo viewer. On phones it rises from the bottom with a grabber and can be dragged
+  down to dismiss; on desktop it is a centered dialog. Escape and the backdrop close it, focus moves in and
+  stays inside while it is open, the page behind stops scrolling, and focus returns afterwards. GSAP
+  in/out motion, none under Reduce Motion.
+- Settings: sections are a segmented control (Midnite, Profile, Security, Photos, Alerts, Sharing) that
+  scrolls sideways on phones; Help and Sign out sit in a footer that stays put.
+- Inverter settings: grouped rows with names in sentence case and skeleton rows while the inverter answers.
+- Compare: All settings / Differences segmented filter with a count, Export CSV, sticky header row and
+  setting column, differing rows flagged with an icon.
+- Site photo viewer: Take photo / Choose file buttons with icons; can't be dismissed mid-upload.
+
 ## 0.5.0 (2026-10-02): Lists
 
 - Fleet: navigation bar with Refresh (spins while working) and a "…" menu (Export CSV, Help, Sign out);
