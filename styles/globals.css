@@ -265,3 +265,56 @@ button, input, select, textarea { font-family: inherit; }
 @media (min-width: 769px) {
   button:not(.ui-switch):not(.ui-tab):not(.ui-seg-btn):not(.ui-menu-item):not([data-compact]) { min-height: 28px; }
 }
+
+/* Period views (Day / Month / Year / Explorer) */
+.period-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.period-ctrls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 768px) {
+  .period-ctrls { width: 100%; }
+  .period-ctrls .ui-field { flex: 1 1 0; min-width: 0; }
+}
+
+/* Form field (date, month, select, text) */
+.ui-field {
+  min-height: var(--tap); padding: 0 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--card); color: var(--text); font-size: var(--fs-subhead); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer; color-scheme: light;
+}
+.ui-field:hover { border-color: #DDD5CA; }
+
+.ui-iconbtn--bordered { border: 1px solid var(--border); background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
+.ui-iconbtn--bordered:hover { background: #FBF9F6; }
+.ui-iconbtn[disabled] { opacity: 0.4; cursor: default; transform: none; }
+
+/* Chips (multi-select toggles) */
+.ui-chip {
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; min-height: var(--tap); padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted);
+  font-size: var(--fs-footnote); font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.ui-chip:hover { border-color: #DDD5CA; color: var(--text); }
+.ui-chip:active { transform: scale(0.96); }
+.chip-group { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.chip-group-label { flex-shrink: 0; width: 84px; font-size: var(--fs-footnote); font-weight: 600; color: var(--muted); }
+.chip-scroll { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
+@media (max-width: 768px) {
+  /* One sideways-scrolling row per group, faded at the edge so it reads as scrollable. */
+  .chip-group { flex-direction: column; align-items: stretch; gap: 6px; }
+  .chip-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .chip-scroll::-webkit-scrollbar { display: none; }
+}
+
+/* Disclosure chevron */
+.chev { transition: transform 0.2s; }
+.chev[data-open="true"] { transform: rotate(180deg); }
+@media (max-width: 768px) {
+  .period-ctrls > .ui-seg { width: 100%; }
+  .period-ctrls > .ui-seg .ui-seg-btn { flex: 1; }
+  /* Date ranges: the two dates share the first row; the step buttons share the second. */
+  .period-ctrls--range > .ui-field { flex: 1 1 calc(50% - 4px); order: 1; }
+  .period-ctrls--range > span { display: none; }
+  .period-ctrls--range > .ui-iconbtn { flex: 1 1 calc(50% - 4px); width: auto; order: 2; }
+  .chip-group-label { width: auto; }
+}

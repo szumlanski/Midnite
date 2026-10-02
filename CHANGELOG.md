@@ -2,6 +2,24 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.4.0 (2026-10-02): Detail views and charts
+
+- Day, Month, Year and Explorer share one header: a title with a plain-language subtitle, then 44px step
+  buttons around the date picker. Day gets a "Today" button. Month switches between Month and Custom range
+  with a segmented control. On phones the controls take the full width, and date ranges put both dates on
+  one row and the step buttons on the next.
+- Chart series toggles are chips that keep their series color (Grid and Battery replace
+  "Imported/Exported" and "Charged/Discharged"). Series colors and the Month/Year bar rules are unchanged.
+- Axis labels: round values (12k, 8k, 4k); fixes the clipped negative labels on the Year chart and the
+  repeated "2k, 2k" labels in Explorer. The Day chart's power axis now snaps to round extents.
+- Explorer: the readings picker is grouped with a count, Select all and Clear; on phones each group is one
+  sideways-scrolling row.
+- Loading shows a skeleton instead of "Loading…"; empty charts and searches explain what to do next.
+- Single-inverter view: icon section titles, animated numbers and charge bar, a proper "Inverter
+  settings" button, a status pill with a dot, and a disclosure chevron for details and firmware.
+- Fault log: icon title, Search button, Active/Cleared pills, clear empty states.
+- An inverter with no report for 30+ minutes now reads Offline (the older status call always said Online).
+
 ## 0.3.0 (2026-10-02): Foundation, app wide
 
 - Readable text everywhere: 156 text colors moved from the 2.5:1 gray to the 5.3:1 gray (including chart

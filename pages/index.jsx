@@ -1593,13 +1593,17 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
     ]:[]),
   ];
   return (
-    <div style={{background:CARD,borderRadius:14,padding:"16px 20px",marginBottom:16,boxShadow:SHADOW_SM,border:`1px solid ${BORDER}`}}>
-      <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
+    <div className="ui-card" style={{padding:"14px 16px",marginBottom:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(112px,1fr))",gap:"12px 16px"}}>
         {items.map(it=>(
-          <div key={it.label} onClick={it.tip?()=>setOpenTip(t=>t===it.label?null:it.label):undefined} title={it.tip||undefined} style={{cursor:it.tip?"pointer":"default"}}>
-            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:600,marginBottom:2}}>{it.label}{it.tip&&<span style={{marginLeft:4,color:MUTED,fontWeight:700}}>ⓘ</span>}</div>
-            <div style={{fontSize:FS.callout,fontWeight:700,color:it.color,fontVariantNumeric:"tabular-nums"}}>{it.value}</div>
-            {it.tip&&openTip===it.label&&<div style={{fontSize:FS.caption,color:MUTED,fontWeight:500,marginTop:3,whiteSpace:"nowrap"}}>{it.tip}</div>}
+          <div key={it.label} style={{minWidth:0}}>
+            <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
+              {it.label}
+              {it.tip&&<button type="button" data-compact aria-label={`How ${it.label.toLowerCase()} is calculated`} aria-expanded={openTip===it.label} onClick={()=>setOpenTip(t=>t===it.label?null:it.label)}
+                style={{border:"none",background:"none",padding:2,margin:-2,color:MUTED,cursor:"pointer",display:"inline-flex"}}><Icon name="info"/></button>}
+            </div>
+            <div style={{fontSize:FS.headline,fontWeight:700,color:textTone(it.color),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{it.value}</div>
+            {it.tip&&openTip===it.label&&<div style={{fontSize:FS.caption,color:MUTED,fontWeight:500,marginTop:3}}>{it.tip}</div>}
           </div>
         ))}
       </div>
@@ -1803,35 +1807,32 @@ function FaultPanel({site}) {
       .finally(()=>setLoading(false));
   },[site,startDate,endDate]);
   const activeCount = events?.filter(e=>e.status==="1").length||0;
-  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"4px 8px",fontSize:FS.caption,fontFamily:SANS,cursor:"pointer"};
   return (
-    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,overflow:"hidden",boxShadow:SHADOW_SM,marginBottom:16}}>
-      <button onClick={()=>setExpanded(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:FS.footnote,color:MUTED}}>⚡</span>
-          <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>Fault Log</span>
-          {!loading&&events&&<span style={{fontSize:FS.caption,color:MUTED}}>— {events.length} events · {activeCount} active</span>}
-          {!loading&&!events&&<span style={{fontSize:FS.caption,color:MUTED}}>— pick a range & search</span>}
-          {loading&&<span style={{fontSize:FS.caption,color:MUTED}}>Loading…</span>}
-        </div>
-        <span style={{fontSize:FS.caption,color:MUTED}}>{expanded?"▲":"▼"}</span>
+    <div className="ui-card" style={{overflow:"hidden",marginBottom:16}}>
+      <button type="button" aria-expanded={expanded} onClick={()=>setExpanded(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,minHeight:52,padding:"10px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
+        <span style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
+          <span className="ui-card-title"><Icon name="alert"/>Fault log</span>
+          {!loading&&events&&<span style={{fontSize:FS.footnote,color:MUTED}}>{events.length} events · {activeCount} active</span>}
+          {!loading&&!events&&<span style={{fontSize:FS.footnote,color:MUTED}}>Pick a range and search</span>}
+          {loading&&<span style={{fontSize:FS.footnote,color:MUTED}}>Searching…</span>}
+        </span>
+        <span className="chev" data-open={expanded?"true":"false"} style={{color:MUTED,fontSize:18,display:"inline-flex"}}><Icon name="chevron-down"/></span>
       </button>
       {expanded&&(
         <>
           <div style={{borderTop:`1px solid ${BORDER}`,padding:"10px 16px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:FS.caption,color:MUTED}}>From</span>
-            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inputS}/>
-            <span style={{fontSize:FS.caption,color:MUTED}}>to</span>
-            <input type="date" value={endDate} max={today} onChange={e=>setEndDate(e.target.value)} style={inputS}/>
-            <button onClick={load} disabled={loading||!startDate||!endDate} style={{...inputS,background:SOLAR,color:"#fff",border:"none",fontWeight:700,cursor:loading?"default":"pointer"}}>{loading?"…":"Search"}</button>
+            <input type="date" className="ui-field" aria-label="From" value={startDate} onChange={e=>setStartDate(e.target.value)}/>
+            <span style={{fontSize:FS.subhead,color:MUTED}}>to</span>
+            <input type="date" className="ui-field" aria-label="To" value={endDate} max={today} onChange={e=>setEndDate(e.target.value)}/>
+            <Button variant="primary" size="sm" icon="search" onClick={load} disabled={loading||!startDate||!endDate}>{loading?"Searching…":"Search"}</Button>
           </div>
-          <div style={{borderTop:`1px solid ${BORDER}`,overflowY:"auto",maxHeight:320,padding:"4px 0"}}>
-            {loading&&<div style={{color:MUTED,fontSize:FS.footnote,textAlign:"center",padding:"16px 0"}}>Loading…</div>}
-            {!loading&&!events&&<div style={{color:MUTED,fontSize:FS.footnote,textAlign:"center",padding:"16px 0"}}>Pick a date range and press Search.</div>}
-            {!loading&&events?.length===0&&<div style={{color:MUTED,fontSize:FS.footnote,textAlign:"center",padding:"16px 0"}}>No fault events in this range</div>}
+          <div style={{borderTop:`1px solid ${BORDER}`,overflowY:"auto",maxHeight:360,padding:"4px 0"}}>
+            {loading&&<div style={{padding:"12px 16px"}}><div className="ui-skel" style={{height:44,borderRadius:10,marginBottom:8}}/><div className="ui-skel" style={{height:44,borderRadius:10}}/></div>}
+            {!loading&&!events&&<EmptyState icon="search" title="No search yet" hint="Pick a date range and press Search."/>}
+            {!loading&&events?.length===0&&<EmptyState icon="check" title="No faults in this range" hint="Nothing was logged between these dates."/>}
             {!loading&&events?.map((e,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"7px 16px",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
-                <span style={{fontSize:FS.caption,fontWeight:700,color:e.status==="1"?GRID_IN:BATTERY,padding:"2px 6px",borderRadius:4,background:e.status==="1"?"#FEF2F2":"#DCFCE7",whiteSpace:"nowrap"}}>{e.status==="1"?"ACTIVE":"CLEARED"}</span>
+              <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"10px 16px",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
+                <span className="ui-pill" style={{color:e.status==="1"?GRID_IN_TEXT:BATTERY_TEXT,background:e.status==="1"?"#FEF2F2":"#DCFCE7"}}>{e.status==="1"?"Active":"Cleared"}</span>
                 <div>
                   <div style={{fontSize:FS.footnote,fontWeight:600,color:TEXT}}>Code {e.ErrorCode}: {FAULT_DESC[e.ErrorCode]||"Unrecognized code"}</div>
                   <div style={{fontSize:FS.caption,color:MUTED}}>{e.GoodsID}</div>
@@ -2110,7 +2111,9 @@ function InverterCard({inv, status, live}) {
   const batChg = d?.battery?.charge ?? null;
   const batDis = d?.battery?.discharge ?? null;
   const temp = d?.inverter?.temperature ?? null;
-  const online = d?.inverter?.online ?? false;
+  // The older status call always reports online; treat 30+ minutes without a report as offline.
+  const reportAge = ageMin(d?.inverter?.lastUpdateTime);
+  const online = (d?.inverter?.online ?? false) && !(reportAge!=null && reportAge>30);
   const eToday = d?.photovoltaic?.production?.today ?? null;
   const gridColor = gridNet!=null ? (gridNet<0?GRID_OUT:GRID_IN) : FAINT;
   const gridLabel = gridNet!=null ? (gridNet<0?"Exporting":"Importing") : "Grid";
@@ -2232,10 +2235,10 @@ function InverterCard({inv, status, live}) {
   );
 }
 
-function SectionCard({title, children, fullWidth}) {
+function SectionCard({title, icon, children, fullWidth}) {
   return (
-    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"16px 18px",boxShadow:SHADOW_SM,...(fullWidth?{gridColumn:"1/-1"}:{})}}>
-      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:12}}>{title}</div>
+    <div className="ui-card" style={{padding:"16px 18px",...(fullWidth?{gridColumn:"1/-1"}:{})}}>
+      <div className="ui-card-title" style={{marginBottom:12}}>{icon&&<Icon name={icon}/>}{title}</div>
       {children}
     </div>
   );
@@ -2245,12 +2248,12 @@ function PhaseRow({label, line, exportWhenNegative}) {
   if(!line||(!(line.voltage>0)&&!(line.power>0))) return null;
   const exporting = exportWhenNegative && (line.current||0) < 0;
   return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${BORDER}`}}>
-      <span style={{fontSize:FS.caption,fontWeight:600,color:MUTED,minWidth:22}}>{label}</span>
-      <div style={{display:"flex",gap:14,fontSize:FS.caption,fontVariantNumeric:"tabular-nums"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${BORDER}`}}>
+      <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED,minWidth:22}}>{label}</span>
+      <div style={{display:"flex",gap:14,fontSize:FS.footnote,fontVariantNumeric:"tabular-nums"}}>
         <span style={{color:MUTED}}>{(line.voltage||0).toFixed(1)} V</span>
         <span style={{color:MUTED}}>{Math.abs(line.current||0).toFixed(1)} A</span>
-        <span style={{fontWeight:700,color:exporting?GRID_OUT:LOAD_C}}>{fmt(Math.abs(line.power||0))}</span>
+        <span style={{fontWeight:700,color:exporting?GRID_OUT_TEXT:LOAD_C}}>{fmt(Math.abs(line.power||0))}</span>
       </div>
     </div>
   );
@@ -2260,7 +2263,7 @@ function InverterDetailPanel({inv, status}) {
   const [showInfo, setShowInfo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
-  if(!d) return <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:FS.subhead}}>Connecting…</div>;
+  if(!d) return <div className="ui-card"><EmptyState icon="refresh" title="Connecting to this inverter…" hint="Waiting for its first report."/></div>;
 
   const stateLabel   = d.inverter?.state  != null ? (INV_STATE_LABELS[d.inverter.state]  || `State ${d.inverter.state}`)  : null;
   const workLabel    = d.inverter?.workMode != null ? (WORK_MODE_LABELS[d.inverter.workMode] || `Mode ${d.inverter.workMode}`) : null;
@@ -2289,46 +2292,46 @@ function InverterDetailPanel({inv, status}) {
       <div style={{gridColumn:"1/-1",background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"18px 20px",border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
           <div>
-            <div style={{fontSize:FS.caption,color:"#92400E",fontWeight:700,marginBottom:2}}>
-              {d.inverter?.model||inv.label} · <span style={{fontFamily:"monospace",fontWeight:400}}>{inv.sn}</span>
+            <div style={{fontSize:FS.subhead,color:"#92400E",fontWeight:700,marginBottom:6,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <Icon name="sun" style={{color:SOLAR,fontSize:18}}/>{inv.label} solar now <span style={{fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace",fontWeight:500,color:MUTED}}>{d.inverter?.model?`${d.inverter.model} · `:""}{inv.sn}</span>
             </div>
-            <div style={{fontSize:32,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-0.5px",fontVariantNumeric:"tabular-nums"}}>{fmt(pvTotal,2)}</div>
+            <div style={{fontSize:36,fontWeight:800,color:"#7C2D12",lineHeight:1,letterSpacing:"-1px"}}><CountUp value={pvTotal} format={v=>fmt(v,2)}/></div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
-            {stateLabel&&<span style={{fontSize:FS.caption,fontWeight:700,color:stateColor,padding:"3px 10px",borderRadius:12,background:stateColor===BATTERY?"#DCFCE7":"#F1F5F9"}}>{stateLabel}</span>}
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {stateLabel&&<span className="ui-pill" style={{color:textTone(stateColor),background:stateColor===BATTERY?"#DCFCE7":stateColor===GRID_IN?"#FEE2E2":"#F1F5F9"}}><span className="ui-dot" style={{background:stateColor}}/>{stateLabel}</span>}
             {workLabel&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:500}}>{workLabel}</span>}
             <UpdatedChip time={d.inverter?.lastUpdateTime}/>
-            {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid #FDE68A`,background:"#FFFBEB",color:"#92400E",fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
+            {inv.autoId&&<Button size="sm" icon="sliders" iconRight="chevron" onClick={()=>setShowSettings(true)}>Inverter settings</Button>}
           </div>
         </div>
         {showSettings&&<SettingsModal inv={inv} onClose={()=>setShowSettings(false)}/>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
-          <StatTile label="PV today"       value={fmtE(pvToday)}   color={TEXT}/>
-          <StatTile label="PV lifetime"    value={fmtE(pvLifetime)} color={TEXT}/>
-          {pvPeak>0&&<StatTile label="Peak today"    value={fmt(pvPeak)}    color={SOLAR}/>}
-          {d.inverter?.selfConsumptionPercent!=null&&<StatTile label="Self-Consumed"  value={`${d.inverter.selfConsumptionPercent}%`} color={MUTED}/>}
-          {d.inverter?.selfSufficiencyPercent!=null&&<StatTile label="Self-Sufficient" value={`${d.inverter.selfSufficiencyPercent}%`} color={MUTED}/>}
-          <StatTile label="Inverter temperature"  value={`${d.inverter?.temperature||0}°C`} color={TEXT}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:8}}>
+          <StatTile tint="rgba(255,255,255,0.72)" label="PV today"       value={fmtE(pvToday)}   color={TEXT}/>
+          <StatTile tint="rgba(255,255,255,0.72)" label="PV lifetime"    value={fmtE(pvLifetime)} color={TEXT}/>
+          {pvPeak>0&&<StatTile tint="rgba(255,255,255,0.72)" label="Peak today"    value={fmt(pvPeak)}    color={SOLAR}/>}
+          {d.inverter?.selfConsumptionPercent!=null&&<StatTile tint="rgba(255,255,255,0.72)" label="Self-consumed"  value={`${d.inverter.selfConsumptionPercent}%`} color={MUTED}/>}
+          {d.inverter?.selfSufficiencyPercent!=null&&<StatTile tint="rgba(255,255,255,0.72)" label="Self-sufficient" value={`${d.inverter.selfSufficiencyPercent}%`} color={MUTED}/>}
+          <StatTile tint="rgba(255,255,255,0.72)" icon="thermometer" label="Inverter temperature"  value={`${d.inverter?.temperature||0}°C`} color={TEXT}/>
         </div>
       </div>
 
       {/* Solar / PV */}
-      <SectionCard title="☀️ Solar">
+      <SectionCard icon="sun" title="Solar">
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:mppts.length?12:0}}>
-          <StatTile label="Total DC"   value={fmt(pvTotal,2)}  color={SOLAR}/>
+          <StatTile label="Total DC"   num={pvTotal} format={v=>fmt(v,2)}  color={SOLAR}/>
           {pvPeak>0&&<StatTile label="Peak today" value={fmt(pvPeak)}     color={SOLAR}/>}
           <StatTile label="Today"      value={fmtE(pvToday)}   color={TEXT}/>
           <StatTile label="Lifetime"   value={fmtE(pvLifetime)} color={TEXT}/>
         </div>
         {mppts.length>0&&(
           <div>
-            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Strings</div>
+            <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Strings</div>
             {mppts.map((m,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<mppts.length-1?`1px solid ${BORDER}`:"none"}}>
-                <span style={{fontSize:FS.caption,fontWeight:600,color:MUTED}}>MPPT {i+1}</span>
+                <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>MPPT {i+1}</span>
                 {m.power>0
-                  ? <span style={{fontSize:FS.caption,color:SOLAR,fontVariantNumeric:"tabular-nums"}}>{(m.voltage||0).toFixed(0)} V · {(m.current||0).toFixed(2)} A · {fmt(m.power)}</span>
-                  : <span style={{fontSize:FS.caption,color:MUTED}}>—</span>}
+                  ? <span style={{fontSize:FS.footnote,color:SOLAR_TEXT,fontVariantNumeric:"tabular-nums"}}>{(m.voltage||0).toFixed(0)} V · {(m.current||0).toFixed(2)} A · {fmt(m.power)}</span>
+                  : <span style={{fontSize:FS.footnote,color:MUTED}}>Off</span>}
               </div>
             ))}
           </div>
@@ -2336,26 +2339,24 @@ function InverterDetailPanel({inv, status}) {
       </SectionCard>
 
       {/* Battery */}
-      <SectionCard title="🔋 Battery">
+      <SectionCard icon="battery" title="Battery">
         <div style={{marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5}}>
-            <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>State of Charge{!bat.brand&&" (est.)"}</span>
-            <span style={{fontSize:FS.title2,fontWeight:800,color:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,fontVariantNumeric:"tabular-nums"}}>{(bat.soc||0).toFixed(0)}%</span>
+            <span style={{fontSize:FS.subhead,fontWeight:600,color:MUTED}}>Charge{!bat.brand&&" (estimated)"}</span>
+            <span style={{fontSize:FS.title2,fontWeight:800,color:textTone(bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN)}}><CountUp value={bat.soc||0} format={v=>`${Math.round(v)}%`}/></span>
           </div>
-          <div style={{height:8,background:"#F1F5F9",borderRadius:4,overflow:"hidden",marginBottom:10}}>
-            <div style={{width:`${bat.soc||0}%`,height:"100%",background:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,borderRadius:4,transition:"width 0.5s"}}/>
-          </div>
+          <div style={{marginBottom:10}}><Meter value={bat.soc||0} color={bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN} height={10} label="Battery state of charge"/></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <StatTile label="Voltage"     value={`${(bat.voltage||0).toFixed(1)} V`} color={TEXT}/>
             <StatTile label="Current"     value={`${(bat.current||0).toFixed(1)} A`} color={TEXT}/>
             <StatTile label="Charging"    value={fmt(bat.charge||0)}    color={(bat.charge||0)>20?BATTERY:MUTED}/>
             <StatTile label="Discharging" value={fmt(bat.discharge||0)} color={(bat.discharge||0)>20?SOLAR:MUTED}/>
             {bat.healthPercent>0&&<StatTile label="Health (SOH)" value={`${bat.healthPercent}%`} color={bat.healthPercent>80?BATTERY:bat.healthPercent>60?SOLAR:GRID_IN}/>}
-            {bat.temperature>0&&<StatTile label="Temp" value={`${bat.temperature}°C`} color={bat.temperature>45?GRID_IN:bat.temperature>35?SOLAR:TEXT}/>}
+            {bat.temperature>0&&<StatTile icon="thermometer" label="Temperature" value={`${bat.temperature}°C`} color={bat.temperature>45?GRID_IN:bat.temperature>35?SOLAR:TEXT}/>}
           </div>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Energy</div>
+          <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Energy</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <StatTile label="Charged today"    value={fmtE(bat.chargeIn?.today||0)}    color={BATTERY}/>
             <StatTile label="Discharged today" value={fmtE(bat.dischargeOut?.today||0)} color={SOLAR}/>
@@ -2373,11 +2374,11 @@ function InverterDetailPanel({inv, status}) {
       </SectionCard>
 
       {/* Grid */}
-      <SectionCard title="⚡ Grid">
+      <SectionCard icon="pylon" title="Grid">
         <div style={{marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:FS.body,fontWeight:700,color:isExporting?GRID_OUT:isImporting?GRID_IN:MUTED,fontVariantNumeric:"tabular-nums"}}>
-              {isExporting?"Exporting":isImporting?"Importing":"Balanced"} {fmt(Math.abs(gridNetW))}
+            <span style={{fontSize:FS.callout,fontWeight:700,color:textTone(isExporting?GRID_OUT:isImporting?GRID_IN:MUTED),fontVariantNumeric:"tabular-nums"}}>
+              {isExporting?"Exporting":isImporting?"Importing":"Balanced"} <CountUp value={Math.abs(gridNetW)} format={v=>fmt(v)}/>
             </span>
             {gridFreq>0&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:"auto"}}>{gridFreq.toFixed(2)} Hz</span>}
           </div>
@@ -2386,18 +2387,18 @@ function InverterDetailPanel({inv, status}) {
           ))}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <StatTile label="Feed-In Today"  value={fmtE(d.grid?.sold?.today||0)}        color={GRID_OUT}/>
-          <StatTile label="Total Feed-In"  value={fmtE(d.grid?.sold?.total||0)}        color={GRID_OUT}/>
+          <StatTile label="Exported today" value={fmtE(d.grid?.sold?.today||0)}        color={GRID_OUT}/>
+          <StatTile label="Total exported" value={fmtE(d.grid?.sold?.total||0)}        color={GRID_OUT}/>
           <StatTile label="Imported today" value={fmtE(d.grid?.consumption?.today||0)} color={GRID_IN}/>
           <StatTile label="Total imported" value={fmtE(d.grid?.consumption?.total||0)} color={GRID_IN}/>
         </div>
       </SectionCard>
 
       {/* Normal Load */}
-      <SectionCard title="🏠 Load">
+      <SectionCard icon="home" title="Home load">
         <div style={{marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:FS.body,fontWeight:700,color:LOAD_C,fontVariantNumeric:"tabular-nums"}}>{fmt(loadW)}</span>
+            <span style={{fontSize:FS.callout,fontWeight:700,color:LOAD_C,fontVariantNumeric:"tabular-nums"}}><CountUp value={loadW} format={v=>fmt(v)}/></span>
             {loadFreq>0&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:"auto"}}>{loadFreq.toFixed(2)} Hz</span>}
           </div>
           {loadLines.filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
@@ -2412,13 +2413,13 @@ function InverterDetailPanel({inv, status}) {
 
       {/* Smart Ports — full width if any active */}
       {smartPorts.length>0&&(
-        <SectionCard title="🔌 Smart ports" fullWidth>
+        <SectionCard icon="plug" title="Smart ports" fullWidth>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:16}}>
             {smartPorts.map(([key,port])=>{
               const portW=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
               return (
                 <div key={key}>
-                  <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Port {key}</div>
+                  <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Port {key}</div>
                   {(port.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
                     <PhaseRow key={i} label={`L${i+1}`} line={l}/>
                   ))}
@@ -2436,7 +2437,7 @@ function InverterDetailPanel({inv, status}) {
 
       {/* Generator — full width if active */}
       {hasGen&&(
-        <SectionCard title="⚙️ Generator" fullWidth>
+        <SectionCard icon="cog" title="Generator" fullWidth>
           <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"center"}}>
             {(d.gen.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
               <PhaseRow key={i} label={`L${i+1}`} line={l}/>
@@ -2447,10 +2448,10 @@ function InverterDetailPanel({inv, status}) {
       )}
 
       {/* Inverter details / firmware — collapsible, full width */}
-      <div style={{gridColumn:"1/-1",background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,overflow:"hidden",boxShadow:SHADOW_SM}}>
-        <button onClick={()=>setShowInfo(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
-          <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>Inverter Details &amp; Firmware</span>
-          <span style={{fontSize:FS.caption,color:MUTED}}>{showInfo?"▲":"▼"}</span>
+      <div className="ui-card" style={{gridColumn:"1/-1",overflow:"hidden"}}>
+        <button type="button" aria-expanded={showInfo} onClick={()=>setShowInfo(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:52,padding:"10px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
+          <span className="ui-card-title"><Icon name="info"/>Inverter details and firmware</span>
+          <span className="chev" data-open={showInfo?"true":"false"} style={{color:MUTED,fontSize:18,display:"inline-flex"}}><Icon name="chevron-down"/></span>
         </button>
         {showInfo&&(
           <div style={{borderTop:`1px solid ${BORDER}`,padding:"12px 16px"}}>
@@ -2599,13 +2600,32 @@ function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, 
 
 function ChartCard({children, loading, minHeight=300}) {
   return (
-    <div style={{background:CARD,borderRadius:16,padding:"16px 12px 12px",border:`1px solid ${BORDER}`,minHeight,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch",boxShadow:SHADOW_SM}}>
+    <div className="ui-card" style={{padding:"16px 12px 12px",minHeight,display:"flex",flexDirection:"column"}} aria-busy={loading||undefined}>
       {loading
-        ? <div style={{color:MUTED,fontSize:FS.subhead,fontWeight:500}}>Loading…</div>
+        ? <div className="ui-skel" role="status" aria-label="Loading chart" style={{flex:1,minHeight:minHeight-40,borderRadius:12}}/>
         : children}
     </div>
   );
 }
+
+// Header for the period views (Day, Month, Year, Explorer): a title and subtitle, then the period controls.
+// On phones the controls take the full width under the title.
+function PeriodHeader({title, subtitle, children, range=false}) {
+  return (
+    <div className="period-head">
+      <div style={{minWidth:0}}>
+        <h2 style={{fontSize:FS.title3,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>{title}</h2>
+        {subtitle&&<div style={{fontSize:FS.subhead,color:MUTED,marginTop:2}}>{subtitle}</div>}
+      </div>
+      <div className={`period-ctrls${range?" period-ctrls--range":""}`}>{children}</div>
+    </div>
+  );
+}
+const StepButton = ({dir, label, disabled, onClick}) => <IconButton icon={dir<0?"back":"chevron"} label={label} disabled={disabled} onClick={onClick} className="ui-iconbtn--bordered"/>;
+// Axis numbers: 950, 1.5k, 12k (one decimal below 10k so steps never repeat as "2k, 2k"). Signed values keep their sign.
+const kFmt = (v) => { const a=Math.abs(v); if(a<1000) return `${Math.round(v)}`; return `${parseFloat((v/1000).toFixed(a<10000?1:0))}k`; };
+// Round an axis extent up to a "nice" number (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8 x 10^n) so ticks land on round values.
+const niceCeil = (x) => { if(!(x>0)) return 0; const p=Math.pow(10,Math.floor(Math.log10(x))); for(const m of [1,1.2,1.5,2,2.5,3,4,5,6,8,10]) if(m*p>=x) return m*p; return 10*p; };
 
 const PROD_SHADES = ["#3B82F6","#60A5FA","#2563EB","#93C5FD","#1D4ED8","#BFDBFE"];
 const CONS_SHADES = ["#F97316","#FB923C","#EA580C","#FDBA74","#C2410C","#FED7AA"];
@@ -2633,11 +2653,11 @@ function DayTooltip({active, payload, label}) {
       <div style={{color:MUTED,fontSize:FS.caption,marginBottom:5}}>{label}</div>
       {prod.length>0&&<>
         {prod.map(p=><Row key={p.dataKey} c={p.color} l={p.name} v={fmt(p.value||0)}/>)}
-        {prod.length>1&&<Row l="Total Solar" v={fmt(prodTot)} bold/>}
+        {prod.length>1&&<Row l="Total solar" v={fmt(prodTot)} bold/>}
       </>}
       {cons.length>0&&<div style={{marginTop:prod.length?4:0}}>
         {cons.map(p=><Row key={p.dataKey} c={p.color} l={p.name} v={fmt(Math.abs(p.value||0))}/>)}
-        {cons.length>1&&<Row l="Total Load" v={fmt(consTot)} bold/>}
+        {cons.length>1&&<Row l="Total load" v={fmt(consTot)} bold/>}
       </div>}
       {(grid||bat||soc)&&<div style={{marginTop:4,borderTop:`1px solid ${BORDER}`,paddingTop:4}}>
         {grid&&grid.value!=null&&<Row c={GRID_LINE} l={grid.value>=0?"Grid import":"Grid export"} v={fmt(Math.abs(grid.value))}/>}
@@ -2683,8 +2703,8 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
     p=Math.max(p,g,b,0); n=Math.max(n,-g,-b,0);
     if(p>P)P=p; if(n>N)N=n;
   }
-  const yTop=Math.max(P,N,100);
-  const powerDomain=[-N*1.05, yTop*1.05];
+  const yTop=niceCeil(Math.max(P,N,100)*1.05);
+  const powerDomain=[-niceCeil(N*1.05), yTop];
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
@@ -2697,24 +2717,19 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
   const dayNext = () => { if(!dayAtMax){const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()+1); onDateChange(d.toISOString().split('T')[0]);} };
   return (
     <div style={{marginBottom:24}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <div>
-          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>Day</h2>
-          <div style={{fontSize:FS.caption,color:MUTED}}>{mpptActive?"Per-MPPT production · drag to zoom":"Power · drag the bar below to zoom"}</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <button onClick={dayNext} disabled={dayAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:dayAtMax?BG:CARD,color:dayAtMax?MUTED:TEXT,fontSize:FS.callout,lineHeight:1,cursor:dayAtMax?"default":"pointer",boxShadow:dayAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
-        </div>
-      </div>
+      <PeriodHeader title="Day" subtitle={mpptActive?"Production per MPPT string · drag the bar to zoom":"Power through the day · drag the bar to zoom"}>
+        <StepButton dir={-1} label="Previous day" onClick={dayPrev}/>
+        <input type="date" className="ui-field" aria-label="Date" value={date} max={today} onChange={e=>e.target.value&&onDateChange(e.target.value)}/>
+        <StepButton dir={1} label="Next day" disabled={dayAtMax} onClick={dayNext}/>
+        {date!==today&&<Button size="sm" variant="plain" onClick={()=>onDateChange(today)}>Today</Button>}
+      </PeriodHeader>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
       <ChartCard loading={loading} minHeight={360}>
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="time" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={44} tickFormatter={t=>typeof t==="string"?t.slice(0,5):t}/>
-            <YAxis yAxisId="power" domain={powerDomain} tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
+            <YAxis yAxisId="power" domain={powerDomain} tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={kFmt} width={38}/>
             <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
             <ReferenceLine yAxisId="power" y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip content={<DayTooltip/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
@@ -2734,8 +2749,9 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
       </ChartCard>
       {mpptHint&&(
         <div style={{display:"flex",justifyContent:"center",marginTop:10}}>
-          <div style={{fontSize:FS.caption,fontWeight:500,color:MUTED,background:BG,border:`1px solid ${BORDER}`,borderRadius:20,padding:"5px 12px"}}>
-            {mpptActive ? "📊 Showing per-MPPT (string) production for this inverter" : "💡 Select a single inverter to see production broken out per MPPT string"}
+          <div style={{fontSize:FS.footnote,fontWeight:500,color:MUTED,background:CARD,border:`1px solid ${BORDER}`,borderRadius:20,padding:"6px 14px",display:"inline-flex",alignItems:"center",gap:6}}>
+            <Icon name={mpptActive?"chart":"bulb"} style={{color:SOLAR}}/>
+            {mpptActive ? "Showing production per MPPT string for this inverter" : "Pick a single inverter to see production per MPPT string"}
           </div>
         </div>
       )}
@@ -2759,14 +2775,14 @@ function fmtMetric(v, unit){
   return `${Number(v).toFixed(METRIC_DEC(unit))}${unit==="%"?"":" "}${unit}`;
 }
 function axisFmt(unit){
-  if(unit==="W") return (v)=> Math.abs(v)>=1000 ? `${(v/1000).toFixed(0)}k` : `${v}`;
-  return (v)=>`${v}`;
+  if(unit==="W") return kFmt;
+  return (v)=>`${Math.round(v*100)/100}`;
 }
 function ExplorerTooltip({active, payload, label, byKey}){
   if(!active || !payload?.length) return null;
   return (
     <div style={TOOLTIP_S}>
-      <div style={{fontWeight:700,color:TEXT,marginBottom:6}}>🕐 {label}</div>
+      <div style={{fontWeight:700,color:TEXT,marginBottom:6,display:"flex",alignItems:"center",gap:5}}><Icon name="clock" style={{color:MUTED}}/>{label}</div>
       {payload.map(p=>{ const m=byKey[p.dataKey]; return (
         <div key={p.dataKey} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:FS.footnote,marginBottom:2}}>
           <span style={{color:p.color,fontWeight:600}}>{m?.label||p.dataKey}</span>
@@ -2813,39 +2829,33 @@ function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled
   const pairs = []; for(let i=0;i<unitsOrdered.length;i+=2) pairs.push(unitsOrdered.slice(i,i+2));
   return (
     <div style={{marginBottom:24}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <div>
-          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>Explorer</h2>
-          <div style={{fontSize:FS.caption,color:MUTED}}>{label?`${label} · `:""}Raw inverter parameters · 5-min resolution · up to 7 days</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          <button onClick={onPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <input type="date" value={start} max={today} onChange={e=>onStart(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <span style={{fontSize:FS.footnote,color:MUTED}}>to</span>
-          <input type="date" value={end} max={today} onChange={e=>onEnd(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <button onClick={onNext} disabled={nextDisabled} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:nextDisabled?BG:CARD,color:nextDisabled?MUTED:TEXT,fontSize:FS.callout,lineHeight:1,cursor:nextDisabled?"default":"pointer",boxShadow:nextDisabled?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
-        </div>
-      </div>
+      <PeriodHeader range title="Explorer" subtitle={`${label?`${label} · `:""}Any inverter reading at 5-minute resolution, up to 7 days`}>
+        <StepButton dir={-1} label="Earlier" onClick={onPrev}/>
+        <input type="date" className="ui-field" aria-label="From" value={start} max={today} onChange={e=>e.target.value&&onStart(e.target.value)}/>
+        <span style={{fontSize:FS.subhead,color:MUTED}}>to</span>
+        <input type="date" className="ui-field" aria-label="To" value={end} max={today} onChange={e=>e.target.value&&onEnd(e.target.value)}/>
+        <StepButton dir={1} label="Later" disabled={nextDisabled} onClick={onNext}/>
+      </PeriodHeader>
       {/* Parameter picker — grouped chips */}
       {!loading && metrics.length>0 && (
-        <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"10px 12px",marginBottom:12,boxShadow:SHADOW_SM}}>
-          <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:6}}>
-            <button onClick={()=>setSel(metrics.map(m=>m.key))} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Select all</button>
-            <button onClick={()=>setSel([])} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear</button>
+        <div className="ui-card" style={{padding:"12px 14px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}>
+            <span className="ui-card-title"><Icon name="sliders"/>Readings <span style={{fontWeight:500,color:MUTED}}>· {sel.length} selected</span></span>
+            <span style={{display:"flex",gap:4}}>
+              <Button size="sm" variant="plain" onClick={()=>setSel(metrics.map(m=>m.key))}>Select all</Button>
+              <Button size="sm" variant="plain" onClick={()=>setSel([])} disabled={!sel.length}>Clear</Button>
+            </span>
           </div>
           {groups.map(g=>(
-            <div key={g} style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:6}}>
-              <span style={{fontSize:FS.caption,color:MUTED,fontWeight:700,minWidth:74}}>{g}</span>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <div key={g} className="chip-group">
+              <span className="chip-group-label">{g}</span>
+              <div className="chip-scroll">
                 {metrics.filter(m=>m.group===g).map(m=>{
                   const on = sel.includes(m.key); const c = colorOf(m.key);
                   return (
-                    <button key={m.key} onClick={()=>toggle(m.key)} style={{
-                      display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:20,cursor:"pointer",
-                      border:`1px solid ${on?c:BORDER}`, background:on?c:"transparent", color:on?"#fff":MUTED,
-                      fontSize:FS.caption,fontWeight:600,fontFamily:SANS,WebkitTapHighlightColor:"transparent",
-                    }}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:on?"#fff":c,display:"inline-block"}}/>
+                    <button key={m.key} type="button" aria-pressed={on} className="ui-chip" onClick={()=>toggle(m.key)}
+                      style={on?{background:c,borderColor:c,color:"#fff"}:undefined}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:on?"#fff":c,flexShrink:0}}/>
                       {m.label}
                     </button>
                   );
@@ -2858,22 +2868,22 @@ function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled
       {loading
         ? <ChartCard loading minHeight={340}/>
         : metrics.length===0
-          ? <ChartCard loading={false} minHeight={200}><div style={{color:MUTED,fontSize:FS.subhead,textAlign:"center",padding:"40px 0"}}>No 5-minute data for this range.</div></ChartCard>
+          ? <ChartCard loading={false} minHeight={200}><EmptyState icon="calendar" title="No 5-minute data for these dates" hint="Try an earlier range; the inverter may not have reported."/></ChartCard>
           : pairs.length===0
-            ? <ChartCard loading={false} minHeight={160}><div style={{color:MUTED,fontSize:FS.subhead,textAlign:"center",padding:"32px 0"}}>Select one or more parameters above to chart.</div></ChartCard>
+            ? <ChartCard loading={false} minHeight={160}><EmptyState icon="chart" title="Nothing selected" hint="Pick one or more readings above to chart them."/></ChartCard>
             : pairs.map((pair, pi)=>{
                 const [lu, ru] = pair;
                 const keys = sel.filter(k=>{ const u=byKey[k]?.unit; return u===lu || u===ru; });
                 return (
                   <div key={pi} style={{marginBottom:14}}>
                     <ChartCard loading={false} minHeight={300}>
-                      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,padding:"0 4px 6px"}}>{lu}{ru?` · ${ru}`:""}</div>
+                      <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,padding:"0 4px 6px"}}>{lu}{ru?` · ${ru}`:""}</div>
                       <ResponsiveContainer width="100%" height={260}>
                         <ComposedChart data={data} margin={{top:4,right:8,left:0,bottom:0}}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
                           <XAxis dataKey="lbl" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={multi?70:44}/>
-                          <YAxis yAxisId="L" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(lu)} domain={["auto","auto"]} label={{value:lu,angle:-90,position:"insideLeft",fill:MUTED,fontSize:10}}/>
-                          {ru && <YAxis yAxisId="R" orientation="right" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(ru)} domain={["auto","auto"]} label={{value:ru,angle:90,position:"insideRight",fill:MUTED,fontSize:10}}/>}
+                          <YAxis yAxisId="L" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(lu)} domain={["auto","auto"]} label={{value:lu,angle:-90,position:"insideLeft",fill:MUTED,fontSize:11}}/>
+                          {ru && <YAxis yAxisId="R" orientation="right" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(ru)} domain={["auto","auto"]} label={{value:ru,angle:90,position:"insideRight",fill:MUTED,fontSize:11}}/>}
                           <Tooltip content={(props)=><ExplorerTooltip {...props} byKey={byKey}/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
                           {keys.map(k=>(
                             <Line key={k} yAxisId={byKey[k].unit===lu?"L":"R"} type="monotone" dataKey={k} stroke={colorOf(k)} strokeWidth={1.6} dot={false} name={k} isAnimationActive={false} connectNulls/>
@@ -2916,45 +2926,37 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
-    {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
-    {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
+    {key:"grid", label:"Grid", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
+    {key:"battery", label:"Battery", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
   const moAtMax = month >= thisMonth;
   const moPrev = () => { const [y,m]=month.split('-').map(Number); onMonthChange(`${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,'0')}`); };
   const moNext = () => { if(!moAtMax){const [y,m]=month.split('-').map(Number); onMonthChange(`${m===12?y+1:y}-${String(m===12?1:m+1).padStart(2,'0')}`);} };
-  const navBtn = {padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS};
-  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 8px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM};
   return (
     <div style={{marginBottom:24}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <div>
-          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>{rangeMode?"Custom Range":"Month"}</h2>
-          <div style={{fontSize:FS.caption,color:MUTED}}>{rangeMode?"Billing-period totals":"Daily totals"}</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          {rangeMode ? (
-            <>
-              <input type="date" value={rangeStart} max={rangeEnd} onChange={e=>onRangeStart(e.target.value)} style={inputS}/>
-              <span style={{fontSize:FS.footnote,color:MUTED}}>→</span>
-              <input type="date" value={rangeEnd} max={today} onChange={e=>onRangeEnd(e.target.value)} style={inputS}/>
-            </>
-          ) : (
-            <>
-              <button onClick={moPrev} style={navBtn}>‹</button>
-              <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={inputS}/>
-              <button onClick={moNext} disabled={moAtMax} style={{...navBtn,background:moAtMax?BG:CARD,color:moAtMax?MUTED:TEXT,cursor:moAtMax?"default":"pointer",boxShadow:moAtMax?"none":SHADOW_SM}}>›</button>
-            </>
-          )}
-          <button onClick={()=>onModeChange&&onModeChange(rangeMode?"month":"range")} style={{...inputS,fontWeight:700,color:SOLAR,border:`1px solid ${SOLAR}`,background:"#FFFBEB"}}>{rangeMode?"Monthly":"Custom"}</button>
-        </div>
-      </div>
+      <PeriodHeader range={rangeMode} title={rangeMode?"Custom range":"Month"} subtitle={rangeMode?"Totals for any date range, like a billing period":"Daily totals"}>
+        {onModeChange&&<Segmented size="sm" label="Period" value={rangeMode?"range":"month"} onChange={(v)=>onModeChange(v)} options={[{value:"month",label:"Month"},{value:"range",label:"Custom"}]}/>}
+        {rangeMode ? (
+          <>
+            <input type="date" className="ui-field" aria-label="From" value={rangeStart} max={rangeEnd} onChange={e=>e.target.value&&onRangeStart(e.target.value)}/>
+            <span style={{fontSize:FS.subhead,color:MUTED}}>to</span>
+            <input type="date" className="ui-field" aria-label="To" value={rangeEnd} max={today} onChange={e=>e.target.value&&onRangeEnd(e.target.value)}/>
+          </>
+        ) : (
+          <>
+            <StepButton dir={-1} label="Previous month" onClick={moPrev}/>
+            <input type="month" className="ui-field" aria-label="Month" value={month} max={thisMonth} onChange={e=>e.target.value&&onMonthChange(e.target.value)}/>
+            <StepButton dir={1} label="Next month" disabled={moAtMax} onClick={moNext}/>
+          </>
+        )}
+      </PeriodHeader>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
       <ChartCard loading={loading} minHeight={340}>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="day" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={rangeMode?22:6}/>
-            <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
+            <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={38} tickFormatter={kFmt}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>rangeMode?l:`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
@@ -2994,34 +2996,28 @@ function YearChart({year, onYearChange, data, loading}) {
   const toggleSeries = [
     {key:"produced", label:"Produced", color:CHART_PROD, active:showProduced, onToggle:setShowProduced},
     {key:"consumed", label:"Consumed", color:CHART_CONS, active:showConsumed, onToggle:setShowConsumed},
-    {key:"grid", label:"Imported/\nExported", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
-    {key:"battery", label:"Charged/\nDischarged", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
+    {key:"grid", label:"Grid", color:CHART_GRID, active:showGrid, onToggle:setShowGrid},
+    {key:"battery", label:"Battery", color:CHART_BAT, active:showBattery, onToggle:setShowBattery},
   ];
   const yrAtMax = year >= thisYear;
   const yrPrev = () => onYearChange(String(Number(year)-1));
   const yrNext = () => { if(!yrAtMax) onYearChange(String(Number(year)+1)); };
   return (
     <div style={{marginBottom:24}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <div>
-          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>Year</h2>
-          <div style={{fontSize:FS.caption,color:MUTED}}>Monthly totals</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={yrPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>
-            {["2024","2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
-          </select>
-          <button onClick={yrNext} disabled={yrAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:yrAtMax?BG:CARD,color:yrAtMax?MUTED:TEXT,fontSize:FS.callout,lineHeight:1,cursor:yrAtMax?"default":"pointer",boxShadow:yrAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
-        </div>
-      </div>
+      <PeriodHeader title="Year" subtitle="Monthly totals">
+        <StepButton dir={-1} label="Previous year" onClick={yrPrev}/>
+        <select className="ui-field" aria-label="Year" value={year} onChange={e=>onYearChange(e.target.value)}>
+          {Array.from({length:Number(thisYear)-2021},(_,i)=>String(2022+i)).map(y=><option key={y} value={y}>{y}</option>)}
+        </select>
+        <StepButton dir={1} label="Next year" disabled={yrAtMax} onClick={yrNext}/>
+      </PeriodHeader>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
       <ChartCard loading={loading} minHeight={320}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
             <XAxis dataKey="month" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false}/>
-            <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
+            <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={42} tickFormatter={kFmt}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
@@ -3039,18 +3035,29 @@ function YearChart({year, onYearChange, data, loading}) {
 }
 
 
+// Series on/off chips under a chart (multi-select). Each keeps its series color.
 function SeriesToggle({series}) {
   return (
-    <div style={{display:"flex",justifyContent:"center",gap:16,flexWrap:"wrap",paddingTop:12,borderTop:`1px solid ${BORDER}`,marginTop:10}}>
+    <div role="group" aria-label="Show series" style={{display:"flex",justifyContent:"center",gap:8,flexWrap:"wrap",paddingTop:12,borderTop:`1px solid ${BORDER}`,marginTop:10}}>
       {series.map(s=>(
-        <button key={s.key} onClick={()=>s.onToggle(!s.active)}
-          style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,border:"none",background:"transparent",cursor:"pointer",padding:"2px 6px",fontFamily:SANS,WebkitTapHighlightColor:"transparent"}}>
-          <div style={{position:"relative",width:40,height:22,borderRadius:11,background:s.active?s.color:"#D1D5DB",transition:"background 0.2s",flexShrink:0}}>
-            <div style={{position:"absolute",top:2,left:s.active?20:2,width:18,height:18,borderRadius:9,background:"#FFFFFF",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left 0.2s"}}/>
-          </div>
-          <span style={{fontSize:FS.caption,color:s.active?MUTED:MUTED,fontWeight:500,textAlign:"center",lineHeight:1.3,whiteSpace:"pre-line"}}>{s.label}</span>
+        <button key={s.key} type="button" aria-pressed={s.active} className="ui-chip" onClick={()=>s.onToggle(!s.active)}
+          style={s.active?{background:`color-mix(in srgb, ${s.color} 13%, white)`,borderColor:`color-mix(in srgb, ${s.color} 45%, white)`,color:TEXT}:undefined}>
+          <span style={{width:10,height:10,borderRadius:3,background:s.active?s.color:"transparent",border:`2px solid ${s.color}`,flexShrink:0,transition:"background-color .15s"}}/>
+          {s.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Empty state: an icon, a short title, and what to do next (HIG Writing: clear next steps on blank screens).
+function EmptyState({icon="info", title, hint, action=null}){
+  return (
+    <div style={{textAlign:"center",padding:"32px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+      <span style={{fontSize:28,color:FAINT}}><Icon name={icon}/></span>
+      <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>{title}</div>
+      {hint&&<div style={{fontSize:FS.subhead,color:MUTED,maxWidth:360}}>{hint}</div>}
+      {action}
     </div>
   );
 }

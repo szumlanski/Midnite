@@ -44,7 +44,7 @@ const VIEWPORTS = [
   { w: 390, h: 844, dsf: 2, mobile: true },
   { w: 1280, h: 800, dsf: 1, mobile: false },
 ];
-const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share"];
+const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter"];
 
 const log = (...m) => process.stderr.write(m.join(" ") + "\n");
 const summary = { screens: 0, errs: {}, blocked: 0, failedSteps: {} };
@@ -380,6 +380,14 @@ async function runViewport(browser, vp) {
     await page.getByText("Share site", { exact: true }).first().waitFor({ timeout: 10000 });
     await page.getByText("homeowner@example.com").first().waitFor({ timeout: 10000 });
   })) await shoot(page, idle, "share", { full: false });
+
+  // Single-inverter Live view (InverterDetailPanel): tap the first inverter pill.
+  screen = "inverter";
+  if (liveOk && await step("inverter", async () => {
+    await reloadSite();
+    await page.locator("button[aria-pressed]").filter({ hasText: /^INV-1/ }).first().click();
+    await page.getByText("Inverter details and firmware", { exact: true }).first().waitFor({ timeout: 10000 });
+  })) await shoot(page, idle, "inverter");
 
   await ctx.close();
 }
