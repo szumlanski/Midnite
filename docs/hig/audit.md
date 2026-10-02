@@ -22,7 +22,26 @@ Measured 2026-10-02 on `pages/index.jsx` (4,300 lines, 47 components, inline sty
 | Global CSS | n/a | n/a | `globals.css` paints body `#0a0a0a` + Arial in OS dark mode; font loaded 4 times | Fail |
 | Dead code | n/a | n/a | `AppLogin`, `Legend` unused | Fail |
 
-## Gaps ranked by impact
+## After the rollout (v1.0.0, 2026-10-02)
+
+| Measure | Before | After |
+|---|---|---|
+| Font sizes at 10px or less | 76 | 0 (chart axis ticks are 11px; everything else is on the FS scale, 295 uses) |
+| Text in the 2.5:1 gray | 194 | 0 (one decorative empty-state icon keeps it) |
+| Colored small text below 4.5:1 | amber/green everywhere | text-safe twins via `textTone()` |
+| Tap targets | 19 to 29px | 44px on phones, 28px on desktop (global rule + kit) |
+| Inputs under 16px on phones | all | none |
+| `outline: none` / focus rings | 6 / 0 | 0 / global `:focus-visible` |
+| Reduce Motion | not honored | CSS + every GSAP hook + Recharts |
+| Inline pop-up overlays | 5, no Escape or dialog role | 0; one `Sheet` (dialog role, Escape, focus trap, drag to dismiss) |
+| `confirm()` / `alert()` | 5 / 1 | 0 / 0; HIG `confirmAlert` + toasts |
+| Emoji used as icons | about 110 | 0 in the UI (emails keep emoji on purpose) |
+| ALL CAPS labels | 33 | 0 |
+| Phone tab bar | 6 tabs, header buttons scrolled | 5 tabs; extras in the "…" menu |
+| Logos | 2 different drawings | 1 shared component |
+| Long tasks during live polling | not measured | 0 in 25s (harness `--perf`) |
+
+## Gaps ranked by impact (before)
 1. Tiny, low-contrast text everywhere (284 small sizes, 194 `FAINT` text uses). Hard to read outdoors on a phone,
    which is where installers check sites.
 2. Tap targets of 19 to 29px and inputs that zoom on iOS. Every interaction on a phone is fiddly.
@@ -40,6 +59,6 @@ Measured 2026-10-02 on `pages/index.jsx` (4,300 lines, 47 components, inline sty
 - [x] 6. v0.7.0 Alerts + toasts: `confirmAlert` at every confirm site, toasts for completed actions
 - [x] 7. v0.8.0 Icons: emoji/glyphs to the SVG icon set (emails excluded)
 - [x] 8. v0.9.0 Remaining screens at 390px: landing, auth, FAQ, Terms, Admin, empty/loading/error states
-- [ ] 9. v1.0.0 Motion polish: GSAP pass across every screen, Reduce Motion pass, poll-time performance
+- [x] 9. v1.0.0 Motion polish: GSAP pass across every screen, Reduce Motion pass, poll-time performance
 
 Skipped: host-page breakout (not embedded), PWA shell (no manifest), dark mode (Jason's call, 2026-10-02).

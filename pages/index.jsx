@@ -11,7 +11,7 @@ import { Logo } from "@/components/ui/Logo";
 import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { confirmAlert, toast } from "@/components/ui/Alert";
-import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect } from "@/components/ui/motion";
+import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect, usePrefersReducedMotion } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
@@ -335,7 +335,7 @@ function LandingPage(){
           <text x="268" y="79" textAnchor="middle" fill={CHART_PROD} fontSize="14" fontFamily="system-ui" fontWeight="700">187 kWh</text>
           <rect x="324" y="48" width="124" height="40" rx="8" fill="#FEF3C7" stroke="#FCD34D"/>
           <text x="386" y="63" textAnchor="middle" fill="#92400E" fontSize="8" fontFamily="system-ui">Need Attention</text>
-          <text x="386" y="79" textAnchor="middle" fill="#D97706" fontSize="14" fontFamily="system-ui" fontWeight="700">1 site ⚠</text>
+          <text x="380" y="79" textAnchor="middle" fill="#D97706" fontSize="14" fontFamily="system-ui" fontWeight="700">1 site</text>{svgIcon("alert",412,74,13,"#D97706",2.2)}
           <rect x="12" y="100" width="436" height="20" rx="4" fill="#F1EDE8"/>
           <text x="52" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">SITE</text>
           <text x="148" y="114" fill={MUTED} fontSize="8" fontFamily="system-ui" fontWeight="600">STATUS</text>
@@ -1575,16 +1575,16 @@ function StatTile({label, value, color=MUTED, sub=null, icon=null, num, format, 
 function SummaryStrip({produced, consumed, imported, exported, charged, discharged, netExported}) {
   const [openTip, setOpenTip] = useState(null);
   const items = [
-    {label:"Produced", value:fmtE(produced), color:CHART_PROD},
-    {label:"Consumed", value:fmtE(consumed), color:CHART_CONS},
-    {label:"Imported", value:fmtE(imported), color:GRID_IN},
-    {label:"Exported", value:fmtE(exported), color:GRID_OUT},
-    ...(netExported!=null?[{label: netExported>=0?"Net exported":"Net imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN, tip:`Exported ${fmtE(exported)} − Imported ${fmtE(imported)} = ${netExported<0?"−":""}${fmtE(Math.abs(netExported))}`}]:[]),
+    {label:"Produced", num:produced, color:CHART_PROD},
+    {label:"Consumed", num:consumed, color:CHART_CONS},
+    {label:"Imported", num:imported, color:GRID_IN},
+    {label:"Exported", num:exported, color:GRID_OUT},
+    ...(netExported!=null?[{label: netExported>=0?"Net exported":"Net imported", num:Math.abs(netExported), color: netExported>=0?GRID_OUT:GRID_IN, tip:`Exported ${fmtE(exported)} − Imported ${fmtE(imported)} = ${netExported<0?"−":""}${fmtE(Math.abs(netExported))}`}]:[]),
     // Show the battery pair together whenever there's any battery activity, so Discharged never
     // silently drops out when its (often under-reported) energy register rounds to 0.
     ...((charged>0||discharged>0)?[
-      {label:"Charged", value:fmtE(charged), color:BATTERY},
-      {label:"Discharged", value:fmtE(discharged), color:SOLAR},
+      {label:"Charged", num:charged, color:BATTERY},
+      {label:"Discharged", num:discharged, color:SOLAR},
     ]:[]),
   ];
   return (
@@ -1597,7 +1597,7 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
               {it.tip&&<button type="button" data-compact aria-label={`How ${it.label.toLowerCase()} is calculated`} aria-expanded={openTip===it.label} onClick={()=>setOpenTip(t=>t===it.label?null:it.label)}
                 style={{border:"none",background:"none",padding:2,margin:-2,color:MUTED,cursor:"pointer",display:"inline-flex"}}><Icon name="info"/></button>}
             </div>
-            <div style={{fontSize:FS.headline,fontWeight:700,color:textTone(it.color),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{it.value}</div>
+            <div style={{fontSize:FS.headline,fontWeight:700,color:textTone(it.color),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}><CountUp value={it.num} format={fmtE}/></div>
             {it.tip&&openTip===it.label&&<div style={{fontSize:FS.caption,color:MUTED,fontWeight:500,marginTop:3}}>{it.tip}</div>}
           </div>
         ))}
@@ -2892,6 +2892,7 @@ function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled
 
 function MonthChart({month, onMonthChange, data, loading, mode="month", onModeChange, rangeStart, rangeEnd, onRangeStart, onRangeEnd}) {
   const rangeMode = mode==="range";
+  const motionOK = !usePrefersReducedMotion();
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -2947,12 +2948,12 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
             <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={38} tickFormatter={kFmt}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>rangeMode?l:`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false}/>}
-            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="a" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="a" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="a" activeBar={false}/>}
+            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
           </BarChart>
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
@@ -2962,6 +2963,7 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
 }
 
 function YearChart({year, onYearChange, data, loading}) {
+  const motionOK = !usePrefersReducedMotion();
   const [showProduced, setShowProduced] = useState(true);
   const [showConsumed, setShowConsumed] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -3008,12 +3010,12 @@ function YearChart({year, onYearChange, data, loading}) {
             <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={42} tickFormatter={kFmt}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
-            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false}/>}
-            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="a" activeBar={false}/>}
-            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="a" activeBar={false}/>}
-            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="a" activeBar={false}/>}
+            {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showGrid&&<Bar dataKey="fromGridPos" fill={CHART_GRID} fillOpacity={0.85} name="Grid Import" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showBattery&&<Bar dataKey="batDischargePos" fill={CHART_BAT} fillOpacity={0.85} name="Bat Discharge" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showConsumed&&<Bar dataKey="consumptionNeg" fill={CHART_CONS} fillOpacity={0.85} name="Load" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showGrid&&<Bar dataKey="toGridNeg" fill={CHART_GRID} fillOpacity={0.85} name="Grid Export" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
+            {showBattery&&<Bar dataKey="batChargeNeg" fill={CHART_BAT} fillOpacity={0.85} name="Bat Charge" stackId="a" activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out"/>}
           </BarChart>
         </ResponsiveContainer>
         <SeriesToggle series={toggleSeries}/>
@@ -4203,6 +4205,8 @@ export default function Dashboard() {
   const liveRef = useRef(null);
   const titlePast = useScrolledPast(largeTitleRef, [authState, site?.name]);
   useStaggerIn(liveRef, [authState, tab, site?.name, liveLoading]);
+  const tabRef = useRef(null);
+  useStaggerIn(tabRef, [authState, tab, site?.name], {y:6, stagger:0.03, duration:0.28});
 
   if(authState==="loading") return (<><PageHead/><div role="status" aria-label="Loading" style={{minHeight:"100vh",background:BG,display:"flex",flexDirection:"column",gap:14,alignItems:"center",justifyContent:"center",color:MUTED,fontSize:FS.subhead,fontFamily:SANS}}><span className="splash-logo"><Logo size={56}/></span>Loading your sites…</div></>);
   if(authState==="appauth") return <LandingPage/>;
@@ -4292,6 +4296,7 @@ export default function Dashboard() {
               }
             </>
           )}
+          <div ref={tabRef}>
           {tab==="day"&&(()=>{
             let prodSeries, consSeries;
             if(dayMode.type==="mppt"){
@@ -4312,6 +4317,7 @@ export default function Dashboard() {
               : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:FS.subhead}}>No inverter selected.</div>
           )}
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
+          </div>
         </main>
 
         {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout} readOnly={activeIsShared}/>}

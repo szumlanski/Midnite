@@ -8,7 +8,7 @@
 ## Architecture
 
 - `pages/index.jsx` — React frontend dashboard (screens and feature components inline)
-- `components/ui/` — shared UI kit (tokens, icons, buttons, "…" menu, segmented control, GSAP motion hooks); see Frontend Design System
+- `components/ui/` — shared UI kit: `tokens.js`, `Icon.jsx`, `Logo.jsx`, `Button.jsx` (Button, IconButton, MoreMenu, Segmented, Switch), `Sheet.jsx`, `Alert.jsx` (confirmAlert, toast, AlertHost), `motion.jsx` (GSAP hooks); see Frontend Design System
 - `styles/globals.css` — tokens as CSS variables, type scale, 44px phone targets, focus rings, Reduce Motion, `ui-*` classes
 - `pages/api/midnite.js` — Next.js serverless proxy (handles auth + API signing)
 - `public/favicon.svg` — Bold amber sun + sentinel eye icon
@@ -199,7 +199,7 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
   positions** (Work Mode 0=Self-Consumption/3=Off-Grid; Power Control 0=Disable/3=Smart Meter; Battery Brand
   17=MidNite/33=Lithium-No-BMS; Meter Type 2=DTSU666) — each mapped only from a value confirmed on a real inverter;
   unknown values render `(raw)`. Toggles (`bool:true`) → On/Off.
-- **`SettingsCompareModal`** (standalone **⚙ Compare all inverter settings** button under the inverter selector):
+- **`SettingsCompareModal`** (the **Compare settings** button beside the Live tab's "Inverters" heading):
   reads `SETTINGS_MAP` for **every** inverter at the site and renders a table (settings = rows grouped by section,
   inverters = columns). Rows whose formatted values differ across inverters are **highlighted amber with a ⚠**;
   a "Differences only" filter collapses to just those. The per-card **Settings ›** modal stays for single-inverter view.
@@ -267,9 +267,9 @@ The `status` action calls `normalizeDetail(raw, sn)` before returning. Key logic
 ### HIG rollout (2026-10)
 The app is being brought in line with Apple's Human Interface Guidelines, one version per phase. Rules that apply
 to this app: `docs/hig/notes.md` (source pages in `docs/hig/apple/`). Measured gaps + phase checklist:
-`docs/hig/audit.md`. Version history: `CHANGELOG.md` (version shows in the Admin build marker). Ship flow: build
-the phase on the feature branch, check the Vercel preview, merge to master on Jason's OK. Screenshot harness:
-`scripts/ui-check/` (fake data, no network). Dark mode is deliberately skipped.
+`docs/hig/audit.md` (all 9 phases shipped, v1.0.0, 2026-10-02). Version history: `CHANGELOG.md` (version shows in the
+Admin build marker; bump it with each user-visible change). Screenshot harness: `scripts/ui-check/` (fake data, no
+network). Dark mode is deliberately skipped.
 
 ### Design Tokens (`components/ui/tokens.js`, mirrored as CSS variables in `styles/globals.css`)
 ```js
@@ -286,8 +286,19 @@ FS.caption/footnote/subhead/body/callout/headline/title3/title2/title1/large  //
 - Targets: `var(--tap)` = 28px desktop / 44px phone. Phone inputs are forced to 16px (no iOS zoom).
 - Icons: `<Icon name="…"/>` from `components/ui/Icon.jsx` (one stroke set); inside SVG use `svgIcon(name,cx,cy)`.
   No emoji as icons in the UI (emails are the exception: Gmail strips SVG).
-- Buttons: `Button` (primary/secondary/plain/destructive), `IconButton`, `MoreMenu` (the "…" menu; destructive
-  items red, last, after a divider), `Segmented`.
+- Buttons: `Button` (primary/secondary/plain/destructive), `IconButton`, `MoreMenu` (the "…" menu, rendered in a
+  portal; destructive items red, last, after a divider), `Segmented`, `Switch` (role="switch").
+- Pop-ups: always `<Sheet title subtitle onClose footer toolbar flush>` (bottom sheet + drag-to-dismiss on phones,
+  centered dialog on desktop, Escape, focus trap). Never hand-roll a `position:fixed` overlay.
+- Confirmations: `if(!await confirmAlert("Delete this alert?", {message, action:"Delete", destructive:true})) return;`
+  and `toast("Alert deleted")` for finished actions. Never use `window.confirm`/`alert`. `<AlertHost/>` lives in
+  `pages/_app.js`.
+- Lists: `.ui-group` + `.ui-row` (grouped inset rows), `.ui-section-label`; empty states via `EmptyState`;
+  loading via `.ui-skel` skeletons, never bare "Loading…".
+- Logo: `components/ui/Logo.jsx` is the only drawing (index, faq, terms import it).
+- Codemods (acorn AST, re-runnable): `scripts/hig/codemod-foundation.mjs` (FAINT text → MUTED, fontSize → FS,
+  drop uppercase) and `scripts/hig/codemod-icons.mjs` (emoji → `<Icon/>`). Harness: `bash scripts/ui-check/run.sh`
+  (`--only`, `--reduced`, `--perf`); keep it at 0 console errors.
 - Motion (GSAP 3.15 + @gsap/react): `CountUp` (numbers glide between readings, equal values never animate),
   `Meter` (bars), `useStaggerIn` (cards ease in on tab/site change only), `useSlidingIndicator` (tab pills).
   Everything is off under `prefers-reduced-motion`. Keep tweens under 0.5s, transform/opacity only, and never
@@ -467,7 +478,7 @@ joined sns). (Explorer uses `InverterSelector single` → `onPick`, unaffected.)
 ## Fleet View (`FleetView`, multi-site accounts only)
 A fleet-management page that **replaces the Sites picker** for multi-site accounts (`authState==="fleet"`; the
 `"sites"` route also aliases to it; `SiteSelector` is retained but unused). Routing lands multi-site accounts here;
-a **⊞ Fleet** header button (and `openFleet()`) returns to it; the back arrow shows only when a site is selected.
+the header's **‹ Fleet** back link (and `openFleet()`) returns to it; Fleet's own back link ("‹ Site") shows only when a site is selected.
 Per site it fetches **both** `status` (5-min: SOC, energy-today, freshness, online-detection) **and** `flow` (live
 5s power — the only feed that captures EPS/generator pass-through load) in parallel; first-load skeletons only,
 background refresh keeps data. **Online = the live `flow` per-inverter `online` flag** (the API returns stale cached
@@ -490,7 +501,7 @@ a viewer may call and `assertSharedScope` rejects serials/sites outside the shar
 Actions: **`share_create`** (looks up recipient by email → active share + `buildShareMessage` email, or pending
 invite + `buildShareInviteMessage` via Resend), **`share_list`** (outgoing+incoming), **`share_revoke`**; the
 `accounts` action **claims pending invites** for this email on load and returns `sharedAccounts`. **UI:** a per-site
-**↗ Share** header button (`ShareModal`) + a central **Settings → Sharing** tab (`SharingSettings`: share any site,
+**Share** header button (`ShareModal`, a Sheet) + a central **Settings → Sharing** tab (`SharingSettings`: share any site,
 manage/revoke, see incoming). Shared accounts appear in the **account switcher** (shown when own+shared > 1);
 selecting one loads its shared sites; a **SHARED · view-only** badge shows and the Admin tab + Share button hide.
 `loadContext`/`reloadAccounts` consider shared accounts so a recipient with no linked account of their own lands on

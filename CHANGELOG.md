@@ -2,6 +2,19 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.0.0 (2026-10-02): Motion polish, HIG rollout complete
+
+- Charts: Month and Year bars grow in over 0.45s instead of Recharts' default 1.5s, and not at all under
+  Reduce Motion (bar layout rules unchanged). Day and Explorer lines stay static.
+- Day / Month / Year / Explorer / Admin content eases in when you switch tabs (0.28s, 6px), the Live tab
+  keeps its card stagger; nothing animates on data polls.
+- Chart summary totals (Produced, Consumed, Exported, …) glide to the new value when you change the
+  day, month or year.
+- `usePrefersReducedMotion()` hook for libraries that take an animate flag.
+- Verified: 25 seconds of live polling on the Live tab produced zero long main-thread tasks (phone and
+  desktop); the full Reduce Motion pass renders every screen with final values and no motion.
+- Harness: `--perf` measures long tasks on the Live tab.
+
 ## 0.9.0 (2026-10-02): Remaining screens
 
 - Landing page on phones: the nav shows the logo, name and Sign in only (FAQ, Terms and Sign up move out

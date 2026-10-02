@@ -1,7 +1,7 @@
 // GSAP setup and the small set of motion hooks the app uses.
 // Rules (docs/hig/notes.md, Motion): every tween is short, transform/opacity only, never blocks input,
 // and nothing moves when the OS asks for reduced motion.
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { Flip } from "gsap/Flip";
 import { useGSAP } from "@gsap/react";
@@ -102,4 +102,18 @@ export function useSlidingIndicator(container, indicator, activeKey, { axisY = f
     ro?.observe(box);
     return () => ro?.disconnect();
   }, [activeKey]);
+}
+
+// React state for the OS Reduce Motion setting (for libraries that take an animate flag, e.g. Recharts).
+export function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mq) return;
+    const on = () => setReduced(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  return reduced;
 }

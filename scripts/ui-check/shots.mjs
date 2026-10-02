@@ -28,7 +28,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith("--")) continue;
     const [k, inline] = a.slice(2).split("=", 2);
-    if (k === "reduced") { o.reduced = true; continue; }
+    if (k === "reduced" || k === "perf") { o[k] = true; continue; }
     o[k] = inline !== undefined ? inline : argv[++i];
   }
   return o;
@@ -328,6 +328,18 @@ async function runViewport(browser, vp) {
     }
   });
   if (liveOk) await shoot(page, idle, "live");
+
+  // --perf: count main-thread long tasks (>50ms) on the Live tab during 25s of live polling + animation.
+  if (args.perf && liveOk) {
+    const res = await page.evaluate(() => new Promise((r) => {
+      const out = [];
+      const po = new PerformanceObserver((l) => { for (const e of l.getEntries()) out.push(Math.round(e.duration)); });
+      po.observe({ type: "longtask", buffered: false });
+      setTimeout(() => { po.disconnect(); r(out); }, 25000);
+    }));
+    summary.perf = summary.perf || {};
+    summary.perf[`live-${vp.w}`] = { longTasks: res.length, maxMs: res.length ? Math.max(...res) : 0, totalMs: res.reduce((a, b) => a + b, 0) };
+  }
 
   screen = "live-scrolled";
   if (liveOk && await step("live-scrolled", async () => {
