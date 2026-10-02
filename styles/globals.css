@@ -236,3 +236,32 @@ button, input, select, textarea { font-family: inherit; }
   .live-top > .ui-card { margin-bottom: 0 !important; }
   .live-top > div > :last-child { margin-bottom: 0 !important; }
 }
+
+/* Switch (on/off) */
+.ui-switch {
+  position: relative; flex-shrink: 0; width: 44px; height: 26px; border-radius: 13px; border: none; padding: 0;
+  background: #D6D3D1; cursor: pointer; transition: background-color 0.2s;
+}
+.ui-switch[data-on="true"] { background: #16A34A; }
+.ui-switch[disabled] { opacity: 0.5; cursor: default; }
+.ui-switch-knob {
+  position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.22s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.ui-switch[data-on="true"] .ui-switch-knob { transform: translateX(18px); }
+@media (max-width: 768px) {
+  .ui-switch { width: 51px; height: 31px; border-radius: 16px; }
+  .ui-switch-knob { width: 25px; height: 25px; }
+  .ui-switch[data-on="true"] .ui-switch-knob { transform: translateX(20px); }
+}
+
+/* Phone tap targets: every plain button and field is at least 44px tall (HIG 44x44). Kit controls, switches
+   and the tab bar size themselves. */
+@media (max-width: 768px) {
+  button:not(.ui-switch):not(.ui-tab):not(.ui-seg-btn):not(.ui-menu-item):not([data-compact]) { min-height: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: 44px; }
+}
+/* Desktop: 28px minimum (HIG macOS). */
+@media (min-width: 769px) {
+  button:not(.ui-switch):not(.ui-tab):not(.ui-seg-btn):not(.ui-menu-item):not([data-compact]) { min-height: 28px; }
+}

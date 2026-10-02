@@ -2,6 +2,20 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.3.0 (2026-10-02): Foundation, app wide
+
+- Readable text everywhere: 156 text colors moved from the 2.5:1 gray to the 5.3:1 gray (including chart
+  axis labels); 359 font sizes moved onto the type scale, so phone text is one step larger (minimum 12px on
+  phones, 11px on desktop); chart axis labels raised from 10px to 11px.
+- Sentence case: ALL CAPS styling removed from 28 labels; Title Case labels rewritten ("Peak today",
+  "Inverter temperature", "Net exported").
+- Touch targets: every button and field is at least 44px tall on phones and 28px on desktop; switches are
+  real on/off switches (51x31 on phones) with a springy knob.
+- Keyboard focus is visible everywhere (the six `outline: none` overrides are gone).
+- Plus Jakarta Sans loads once for every page instead of four times.
+- Removed dead code (`AppLogin`, `Legend`).
+- Tooling: `scripts/hig/codemod-foundation.mjs` (AST codemod: text contrast, sentence case, type scale).
+
 ## 0.2.0 (2026-10-02): Showcase, header and Live tab
 
 - New navigation bar. Desktop: "‹ Fleet" back link, site name, section tabs as a segmented control whose

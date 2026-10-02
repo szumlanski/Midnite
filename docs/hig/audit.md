@@ -30,9 +30,9 @@ Measured 2026-10-02 on `pages/index.jsx` (4,300 lines, 47 components, inline sty
 4. Header on phones: a sideways-scrolling strip of buttons, 6 tabs for admins.
 5. Emoji as icons render differently per device and cannot be colored or sized consistently.
 
-## Checklist (one version per phase; preview, then merge on Jason's OK)
+## Checklist (one version per phase; merged to master once the harness passes, per Jason 2026-10-02)
 - [x] 1. v0.2.0 Showcase: header + Live tab (plus setup: HIG docs, UI kit, GSAP, screenshot harness)
-- [ ] 2. v0.3.0 Foundation: contrast tokens, type scale, focus rings, 44px phone targets, 16px inputs,
+- [x] 2. v0.3.0 Foundation: contrast tokens, type scale, focus rings, 44px phone targets, 16px inputs,
       sentence case, 768 breakpoint, 5-tab bar, globals.css + font cleanup, Reduce Motion, dead code
 - [ ] 3. v0.4.0 Other detail views: inverter detail, battery/lifetime/fault, Day/Month/Year/Explorer headers
 - [ ] 4. v0.5.0 Lists: Fleet (table kept on phones), alert rules, shares, linked accounts with "…" menus

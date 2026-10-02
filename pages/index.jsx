@@ -7,7 +7,7 @@ import { summarizeRule } from "@/lib/notifications/engine";
 import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
 import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT, LOAD_C, SOLAR_TEXT, BATTERY_TEXT, GRID_OUT_TEXT, GRID_IN_TEXT, SHADOW, SHADOW_SM, SANS, CHART_PROD, CHART_CONS, CHART_BAT, CHART_GRID, FS, textTone } from "@/components/ui/tokens";
 import { Icon, svgIcon } from "@/components/ui/Icon";
-import { Button, IconButton, MoreMenu, Segmented } from "@/components/ui/Button";
+import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
@@ -183,7 +183,7 @@ function aggregateRange(perMonth, start, end){
 // DO NOT split pos/neg into separate stackIds (that puts them in side-by-side groups → misaligned).
 const BAR_MONTH = { barCategoryGap: "20%", maxBarSize: 22 };
 const BAR_YEAR  = { barCategoryGap: "20%", maxBarSize: 44 };
-const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:12, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
+const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 14px", fontSize:FS.footnote, color:TEXT, boxShadow:"0 4px 20px rgba(0,0,0,0.12)", fontFamily:SANS };
 
 const WORK_MODE_LABELS = {0:"Self Consumption",1:"Feed-In Priority",2:"Backup Priority",3:"Time of Use",4:"Peak Shaving",5:"Off Grid"};
 const INV_STATE_LABELS  = {0:"Standby",1:"Normal",2:"Checking",3:"On Grid",4:"Off Grid",5:"Fault"};
@@ -212,9 +212,6 @@ const PageHead = ({title}) => (
     <title>{title||"Midnite Sentinel"}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
-    <link rel="preconnect" href="https://fonts.googleapis.com"/>
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
     <style>{`
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
       body{background:${BG};color:${TEXT};font-family:${SANS};-webkit-font-smoothing:antialiased}
@@ -225,7 +222,6 @@ const PageHead = ({title}) => (
       @keyframes flowdash{to{stroke-dashoffset:-16}}
       .flow-anim{animation:flowdash 0.8s linear infinite}
       .flow-rev{animation:flowdash 0.8s linear infinite reverse}
-      .tab-btn{transition:all 0.15s ease}
       .site-card{transition:box-shadow 0.2s,transform 0.2s}
       .site-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.1)!important}
       .inv-card{transition:box-shadow 0.2s}
@@ -240,11 +236,11 @@ const PageHead = ({title}) => (
   </Head>
 );
 
-const authInput = {width:"100%",padding:"11px 14px",background:BG,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:14,fontFamily:SANS,outline:"none",boxSizing:"border-box"};
-const lblS = {fontSize:12,color:MUTED,fontWeight:600,display:"block",marginBottom:6};
-const errBox = {background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:GRID_IN};
-const okBox = {background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:BATTERY};
-const authBtn = (disabled)=>({width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:disabled?"#E5E7EB":"linear-gradient(135deg,#FCD34D,#D97706)",color:disabled?FAINT:"#7C2D12",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:disabled?"wait":"pointer",boxShadow:disabled?"none":"0 4px 16px rgba(217,119,6,0.3)"});
+const authInput = {width:"100%",padding:"11px 14px",background:BG,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:FS.body,fontFamily:SANS,boxSizing:"border-box"};
+const lblS = {fontSize:FS.footnote,color:MUTED,fontWeight:600,display:"block",marginBottom:6};
+const errBox = {background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:FS.subhead,color:GRID_IN};
+const okBox = {background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:FS.subhead,color:BATTERY};
+const authBtn = (disabled)=>({width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:disabled?"#E5E7EB":"linear-gradient(135deg,#FCD34D,#D97706)",color:disabled?MUTED:"#7C2D12",fontSize:FS.body,fontWeight:700,fontFamily:SANS,cursor:disabled?"wait":"pointer",boxShadow:disabled?"none":"0 4px 16px rgba(217,119,6,0.3)"});
 const GOOGLE_ON = process.env.NEXT_PUBLIC_GOOGLE_AUTH === "1" || process.env.NEXT_PUBLIC_GOOGLE_AUTH === "true";
 const GoogleG = ()=>(<svg width="16" height="16" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/><path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/><path fill="#EA4335" d="M24 9.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 2.97 29.93 1 24 1 15.4 1 7.96 5.93 4.34 14.12l7.35 5.7C13.42 13.62 18.27 9.75 24 9.75z"/></svg>);
 function AuthShell({children, subtitle}){
@@ -252,52 +248,13 @@ function AuthShell({children, subtitle}){
     <div style={{width:"100%",maxWidth:380,animation:"fadeUp 0.4s ease"}}>
       <div style={{textAlign:"center",marginBottom:28}}>
         <div style={{marginBottom:14,display:"inline-block"}}><Logo size={60}/></div>
-        <div style={{fontSize:22,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Midnite Sentinel</div>
-        {subtitle&&<div style={{fontSize:13,color:MUTED,marginTop:4}}>{subtitle}</div>}
+        <div style={{fontSize:FS.title2,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Midnite Sentinel</div>
+        {subtitle&&<div style={{fontSize:FS.subhead,color:MUTED,marginTop:4}}>{subtitle}</div>}
       </div>
       {children}
     </div>
   </div></>);
 }
-// App account login (Supabase): Google OAuth + email/password (no email confirmation).
-function AppLogin(){
-  const [mode,setMode]=useState("signin");
-  const [email,setEmail]=useState(""); const [pw,setPw]=useState("");
-  const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
-  if(!supabaseReady) return <AuthShell subtitle="Configuration needed"><div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW,fontSize:13,color:MUTED,lineHeight:1.7}}>Sign-in isn’t configured yet. Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in the environment and redeploy.</div></AuthShell>;
-  const submit=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null); setMsg(null);
-    try{
-      const { data, error } = mode==="signup"
-        ? await supabase.auth.signUp({email,password:pw})
-        : await supabase.auth.signInWithPassword({email,password:pw});
-      if(error) throw error;
-      if(mode==="signup" && !data.session) setMsg("Account created — sign in to continue.");
-    }catch(e){ setErr(e.message||String(e)); } finally{ setBusy(false); }
-  };
-  const google=async()=>{ setErr(null); const { error } = await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:typeof window!=="undefined"?window.location.origin:undefined}}); if(error) setErr(error.message); };
-  return (
-    <AuthShell subtitle={mode==="signup"?"Create your account":"Sign in to your portal"}>
-      <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
-        {err&&<div style={errBox}>{err}</div>}
-        {msg&&<div style={okBox}>{msg}</div>}
-        {GOOGLE_ON && <>
-          <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:14,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:16}}><GoogleG/> Continue with Google</button>
-          <div style={{display:"flex",alignItems:"center",gap:10,margin:"4px 0 16px",color:FAINT,fontSize:12}}><div style={{flex:1,height:1,background:BORDER}}/>or<div style={{flex:1,height:1,background:BORDER}}/></div>
-        </>}
-        <form onSubmit={submit}>
-          <div style={{marginBottom:14}}><label style={lblS}>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" style={authInput}/></div>
-          <div style={{marginBottom:20}}><label style={lblS}>Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} autoComplete={mode==="signup"?"new-password":"current-password"} style={authInput}/></div>
-          <button type="submit" disabled={busy||!email||!pw} style={authBtn(busy||!email||!pw)}>{busy?"Please wait…":mode==="signup"?"Create account":"Sign in"}</button>
-        </form>
-        <div style={{textAlign:"center",marginTop:16,fontSize:13,color:MUTED}}>
-          {mode==="signup"?"Already have an account? ":"New here? "}
-          <button onClick={()=>{setMode(mode==="signup"?"signin":"signup");setErr(null);setMsg(null);}} style={{border:"none",background:"none",color:SOLAR,fontWeight:700,cursor:"pointer",fontFamily:SANS,fontSize:13}}>{mode==="signup"?"Sign in":"Create one"}</button>
-        </div>
-      </div>
-    </AuthShell>
-  );
-}
-// ── Landing / marketing page (shown when logged out) ────────────────────────
 function LandingPage(){
   const [mode,setMode]=useState("signup");
   const [email,setEmail]=useState(""); const [pw,setPw]=useState(""); const [tc,setTc]=useState(false);
@@ -425,7 +382,7 @@ function LandingPage(){
           <text x="272" y="205" fill={MUTED} fontSize="9" fontFamily="system-ui">—</text>
           <text x="342" y="205" fill={MUTED} fontSize="9" fontFamily="system-ui">—</text>
           <text x="410" y="205" fill={GRID_IN} fontSize="8" fontFamily="system-ui">47m ago</text>
-          <text x="230" y="242" textAnchor="middle" fill={FAINT} fontSize="8" fontFamily="system-ui">+ 5 more sites</text>
+          <text x="230" y="242" textAnchor="middle" fill={MUTED} fontSize="8" fontFamily="system-ui">+ 5 more sites</text>
         </svg>
       ),
     },
@@ -518,7 +475,6 @@ function LandingPage(){
   return (<>
     <PageHead title="Midnite Sentinel — Solar Monitoring Platform"/>
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
       *{box-sizing:border-box;}
       .lp-hero{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
       .lp-feat{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
@@ -547,13 +503,13 @@ function LandingPage(){
       <div style={{maxWidth:1100,margin:"0 auto",height:60,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <a href="/" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
           <Logo size={32}/>
-          <span style={{fontWeight:800,fontSize:16,color:TEXT,letterSpacing:"-0.5px"}}>Midnite Sentinel</span>
+          <span style={{fontWeight:800,fontSize:FS.callout,color:TEXT,letterSpacing:"-0.5px"}}>Midnite Sentinel</span>
         </a>
         <div style={{display:"flex",alignItems:"center",gap:20}}>
           <a href="/faq" className="lp-nav-link">FAQ</a>
           <a href="/terms" className="lp-nav-link">Terms</a>
-          <button className="lp-obtn" style={{padding:"7px 18px",fontSize:13}} onClick={()=>scrollToAuth("signin")}>Sign in</button>
-          <button className="lp-pbtn" style={{padding:"9px 20px",fontSize:13}} onClick={()=>scrollToAuth("signup")}>Sign up</button>
+          <button className="lp-obtn" style={{padding:"7px 18px",fontSize:FS.subhead}} onClick={()=>scrollToAuth("signin")}>Sign in</button>
+          <button className="lp-pbtn" style={{padding:"9px 20px",fontSize:FS.subhead}} onClick={()=>scrollToAuth("signup")}>Sign up</button>
         </div>
       </div>
     </nav>
@@ -562,18 +518,18 @@ function LandingPage(){
     <section style={{background:`linear-gradient(160deg,#FFFBF0 0%,${BG} 60%)`,padding:"72px 24px 80px"}}>
       <div style={{maxWidth:1100,margin:"0 auto"}} className="lp-hero">
         <div>
-          <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:700,color:"#92400E",marginBottom:20}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"4px 12px",fontSize:FS.footnote,fontWeight:700,color:"#92400E",marginBottom:20}}>
             ✦ Pre-launch — all features free
           </div>
           <h1 style={{fontSize:"clamp(32px,5vw,52px)",fontWeight:800,lineHeight:1.15,letterSpacing:"-1.5px",color:TEXT,marginBottom:20}}>
             Monitor Your Solar<br/><span style={{color:SOLAR}}>In Real Time</span>
           </h1>
-          <p style={{fontSize:17,lineHeight:1.7,color:MUTED,marginBottom:32,maxWidth:480}}>
+          <p style={{fontSize:FS.headline,lineHeight:1.7,color:MUTED,marginBottom:32,maxWidth:480}}>
             Midnite Sentinel gives solar owners and installers a live window into every watt — power flow, battery state, grid interaction, and fleet health — all in one clean dashboard.
           </p>
           <div style={{display:"flex",flexWrap:"wrap",gap:16}}>
             {["Live 5-sec updates","Email alerts","Fleet management","Site sharing"].map(f=>(
-              <span key={f} style={{fontSize:13,color:MUTED,display:"flex",alignItems:"center",gap:6}}>
+              <span key={f} style={{fontSize:FS.subhead,color:MUTED,display:"flex",alignItems:"center",gap:6}}>
                 <span style={{color:BATTERY,fontWeight:700}}>✓</span>{f}
               </span>
             ))}
@@ -582,14 +538,14 @@ function LandingPage(){
         <div id="lp-auth">
           <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW,border:`1px solid ${BORDER}`}}>
             <div style={{textAlign:"center",marginBottom:20}}>
-              <div style={{fontWeight:800,fontSize:18,color:TEXT,marginBottom:4}}>{mode==="signup"?"Start monitoring free":"Welcome back"}</div>
-              <div style={{fontSize:13,color:MUTED}}>{mode==="signup"?"No credit card required.":"Sign in to your portal."}</div>
+              <div style={{fontWeight:800,fontSize:FS.headline,color:TEXT,marginBottom:4}}>{mode==="signup"?"Start monitoring free":"Welcome back"}</div>
+              <div style={{fontSize:FS.subhead,color:MUTED}}>{mode==="signup"?"No credit card required.":"Sign in to your portal."}</div>
             </div>
             {err&&<div style={errBox}>{err}</div>}
             {msg&&<div style={okBox}>{msg}</div>}
             {GOOGLE_ON&&<>
-              <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:14,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:14}}><GoogleG/> Continue with Google</button>
-              <div style={{display:"flex",alignItems:"center",gap:10,margin:"0 0 14px",color:FAINT,fontSize:12}}>
+              <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.body,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:14}}><GoogleG/> Continue with Google</button>
+              <div style={{display:"flex",alignItems:"center",gap:10,margin:"0 0 14px",color:MUTED,fontSize:FS.footnote}}>
                 <div style={{flex:1,height:1,background:BORDER}}/>or<div style={{flex:1,height:1,background:BORDER}}/>
               </div>
             </>}
@@ -597,7 +553,7 @@ function LandingPage(){
               <div style={{marginBottom:12}}><label style={lblS}>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" style={authInput}/></div>
               <div style={{marginBottom:14}}><label style={lblS}>Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} autoComplete={mode==="signup"?"new-password":"current-password"} placeholder={mode==="signup"?"Choose a password":"Your password"} style={authInput}/></div>
               {mode==="signup"&&(
-                <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",fontSize:12,color:MUTED,marginBottom:16,lineHeight:1.5}}>
+                <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",fontSize:FS.footnote,color:MUTED,marginBottom:16,lineHeight:1.5}}>
                   <input type="checkbox" checked={tc} onChange={e=>setTc(e.target.checked)} style={{marginTop:2,accentColor:SOLAR,cursor:"pointer",flexShrink:0}}/>
                   <span>I agree to the <a href="/terms" target="_blank" style={{color:SOLAR,fontWeight:600}}>Terms &amp; Conditions</a>. During pre-launch, all features are free — pricing TBD.</span>
                 </label>
@@ -606,9 +562,9 @@ function LandingPage(){
                 {busy?"Please wait…":mode==="signup"?"Create free account":"Sign in"}
               </button>
             </form>
-            <div style={{textAlign:"center",marginTop:14,fontSize:13,color:MUTED}}>
+            <div style={{textAlign:"center",marginTop:14,fontSize:FS.subhead,color:MUTED}}>
               {mode==="signup"?"Already have an account? ":"New here? "}
-              <button onClick={()=>{setMode(mode==="signup"?"signin":"signup");setErr(null);setMsg(null);setTc(false);}} style={{border:"none",background:"none",color:SOLAR,fontWeight:700,cursor:"pointer",fontFamily:SANS,fontSize:13}}>
+              <button onClick={()=>{setMode(mode==="signup"?"signin":"signup");setErr(null);setMsg(null);setTc(false);}} style={{border:"none",background:"none",color:SOLAR,fontWeight:700,cursor:"pointer",fontFamily:SANS,fontSize:FS.subhead}}>
                 {mode==="signup"?"Sign in":"Create free account"}
               </button>
             </div>
@@ -622,16 +578,16 @@ function LandingPage(){
       <div style={{maxWidth:1100,margin:"0 auto"}}>
         <div style={{textAlign:"center",marginBottom:64}}>
           <h2 style={{fontSize:"clamp(26px,4vw,40px)",fontWeight:800,letterSpacing:"-1px",color:TEXT,marginBottom:12}}>Everything your system needs</h2>
-          <p style={{fontSize:16,color:MUTED,maxWidth:540,margin:"0 auto"}}>Built for Midnite solar systems — from a single home installation to a full installer fleet.</p>
+          <p style={{fontSize:FS.callout,color:MUTED,maxWidth:540,margin:"0 auto"}}>Built for Midnite solar systems — from a single home installation to a full installer fleet.</p>
         </div>
         {features.map((f,i)=>(
           <div key={i} className={`lp-feat${i%2===1?" rev":""}`} style={{marginBottom:i<features.length-1?80:0}}>
             <div>
-              <div style={{display:"inline-block",background:"#FEF3C7",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700,color:"#92400E",marginBottom:14}}>{f.tag}</div>
+              <div style={{display:"inline-block",background:"#FEF3C7",borderRadius:8,padding:"3px 10px",fontSize:FS.caption,fontWeight:700,color:"#92400E",marginBottom:14}}>{f.tag}</div>
               <h3 style={{fontSize:"clamp(22px,3vw,32px)",fontWeight:800,letterSpacing:"-0.5px",color:TEXT,marginBottom:14}}>{f.title}</h3>
-              <p style={{fontSize:15,lineHeight:1.7,color:MUTED,marginBottom:20}}>{f.desc}</p>
+              <p style={{fontSize:FS.callout,lineHeight:1.7,color:MUTED,marginBottom:20}}>{f.desc}</p>
               <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:8,padding:0}}>
-                {f.bullets.map(b=><li key={b} className="lp-chk" style={{fontSize:14,color:TEXT}}>{b}</li>)}
+                {f.bullets.map(b=><li key={b} className="lp-chk" style={{fontSize:FS.body,color:TEXT}}>{b}</li>)}
               </ul>
             </div>
             <div>{f.mockup}</div>
@@ -649,9 +605,9 @@ function LandingPage(){
         <div className="lp-steps">
           {steps.map((s,i)=>(
             <div key={i} style={{background:BG,borderRadius:16,padding:28,border:`1px solid ${BORDER}`}}>
-              <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:20,color:"#7C2D12",marginBottom:16}}>{s.n}</div>
-              <h4 style={{fontWeight:700,fontSize:16,color:TEXT,marginBottom:8}}>{s.title}</h4>
-              <p style={{fontSize:14,color:MUTED,lineHeight:1.6}}>{s.body}</p>
+              <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#FCD34D,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:FS.title3,color:"#7C2D12",marginBottom:16}}>{s.n}</div>
+              <h4 style={{fontWeight:700,fontSize:FS.callout,color:TEXT,marginBottom:8}}>{s.title}</h4>
+              <p style={{fontSize:FS.body,color:MUTED,lineHeight:1.6}}>{s.body}</p>
             </div>
           ))}
         </div>
@@ -663,27 +619,27 @@ function LandingPage(){
       <div style={{maxWidth:1100,margin:"0 auto"}}>
         <div style={{textAlign:"center",marginBottom:32}}>
           <h2 style={{fontSize:"clamp(26px,4vw,40px)",fontWeight:800,letterSpacing:"-1px",color:TEXT,marginBottom:16}}>Simple pricing</h2>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"6px 16px",fontSize:13,fontWeight:700,color:"#92400E"}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"6px 16px",fontSize:FS.subhead,fontWeight:700,color:"#92400E"}}>
             ✦ Pre-launch: Pro features free for all users — pricing TBD
           </div>
         </div>
         <div className="lp-price">
           <div style={{background:CARD,borderRadius:20,padding:32,border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM}}>
-            <div style={{fontWeight:700,fontSize:11,color:MUTED,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Free</div>
-            <div style={{fontSize:36,fontWeight:800,color:TEXT,marginBottom:4}}>$0<span style={{fontSize:14,fontWeight:500,color:MUTED}}>/mo</span></div>
-            <div style={{fontSize:13,color:MUTED,marginBottom:24}}>Forever free for individual owners</div>
+            <div style={{fontWeight:700,fontSize:FS.caption,color:MUTED,letterSpacing:1,marginBottom:8}}>Free</div>
+            <div style={{fontSize:36,fontWeight:800,color:TEXT,marginBottom:4}}>$0<span style={{fontSize:FS.body,fontWeight:500,color:MUTED}}>/mo</span></div>
+            <div style={{fontSize:FS.subhead,color:MUTED,marginBottom:24}}>Forever free for individual owners</div>
             <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
-              {freeFt.map(f=><li key={f} className="lp-chk" style={{fontSize:13,color:TEXT}}>{f}</li>)}
+              {freeFt.map(f=><li key={f} className="lp-chk" style={{fontSize:FS.subhead,color:TEXT}}>{f}</li>)}
             </ul>
             <button className="lp-obtn" style={{width:"100%"}} onClick={()=>scrollToAuth("signup")}>Get started free</button>
           </div>
           <div style={{background:"#0D1F33",borderRadius:20,padding:32,border:"2px solid #F59E0B",boxShadow:"0 8px 32px rgba(217,119,6,0.2)",position:"relative"}}>
-            <div style={{position:"absolute",top:16,right:16,background:"#F59E0B",borderRadius:12,padding:"3px 10px",fontSize:11,fontWeight:700,color:"#7C2D12"}}>Pre-launch: FREE</div>
-            <div style={{fontWeight:700,fontSize:11,color:"#F59E0B",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Pro</div>
-            <div style={{fontSize:36,fontWeight:800,color:"white",marginBottom:4}}>TBD<span style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,0.5)"}}>/mo</span></div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginBottom:24}}>For installers managing a fleet</div>
+            <div style={{position:"absolute",top:16,right:16,background:"#F59E0B",borderRadius:12,padding:"3px 10px",fontSize:FS.caption,fontWeight:700,color:"#7C2D12"}}>Pre-launch: FREE</div>
+            <div style={{fontWeight:700,fontSize:FS.caption,color:"#F59E0B",letterSpacing:1,marginBottom:8}}>Pro</div>
+            <div style={{fontSize:36,fontWeight:800,color:"white",marginBottom:4}}>TBD<span style={{fontSize:FS.body,fontWeight:500,color:"rgba(255,255,255,0.5)"}}>/mo</span></div>
+            <div style={{fontSize:FS.subhead,color:"rgba(255,255,255,0.5)",marginBottom:24}}>For installers managing a fleet</div>
             <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
-              {proFt.map(f=><li key={f} style={{fontSize:13,color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:8}}><span style={{color:"#F59E0B",fontWeight:700}}>✓</span>{f}</li>)}
+              {proFt.map(f=><li key={f} style={{fontSize:FS.subhead,color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:8}}><span style={{color:"#F59E0B",fontWeight:700}}>✓</span>{f}</li>)}
             </ul>
             <button className="lp-pbtn" style={{width:"100%"}} onClick={()=>scrollToAuth("signup")}>Start free during pre-launch</button>
           </div>
@@ -695,7 +651,7 @@ function LandingPage(){
     <section style={{padding:"60px 24px",background:CARD,borderTop:`1px solid ${BORDER}`}}>
       <div style={{maxWidth:700,margin:"0 auto",textAlign:"center"}}>
         <h2 style={{fontSize:"clamp(22px,3vw,32px)",fontWeight:800,color:TEXT,marginBottom:12}}>Questions?</h2>
-        <p style={{fontSize:15,color:MUTED,marginBottom:28,lineHeight:1.6}}>Our FAQ covers everything from getting started to advanced fleet features. Or email us directly.</p>
+        <p style={{fontSize:FS.callout,color:MUTED,marginBottom:28,lineHeight:1.6}}>Our FAQ covers everything from getting started to advanced fleet features. Or email us directly.</p>
         <div style={{display:"flex",justifyContent:"center",gap:16,flexWrap:"wrap"}}>
           <a href="/faq" style={{textDecoration:"none"}}><button className="lp-pbtn">Read the FAQ</button></a>
           <a href={"mailto:"+contactEmail()} style={{textDecoration:"none"}}><button className="lp-obtn">Email us</button></a>
@@ -704,13 +660,13 @@ function LandingPage(){
     </section>
 
     {/* FOOTER */}
-    <footer style={{background:"#0D1F33",padding:"40px 24px",color:"rgba(255,255,255,0.5)",fontSize:13,fontFamily:SANS}}>
+    <footer style={{background:"#0D1F33",padding:"40px 24px",color:"rgba(255,255,255,0.5)",fontSize:FS.subhead,fontFamily:SANS}}>
       <div style={{maxWidth:1100,margin:"0 auto",display:"flex",flexWrap:"wrap",gap:24,justifyContent:"space-between",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <Logo size={28}/>
           <div>
-            <div style={{fontWeight:700,color:"white",fontSize:14}}>Midnite Sentinel</div>
-            <div style={{fontSize:11}}>{`© ${new Date().getFullYear()} Second Stream LLC. All rights reserved.`}</div>
+            <div style={{fontWeight:700,color:"white",fontSize:FS.body}}>Midnite Sentinel</div>
+            <div style={{fontSize:FS.caption}}>{`© ${new Date().getFullYear()} Second Stream LLC. All rights reserved.`}</div>
           </div>
         </div>
         <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
@@ -726,7 +682,7 @@ function LandingPage(){
 function ResetPasswordPage({onDone}){
   const [pw,setPw]=useState(""); const [pw2,setPw2]=useState("");
   const [busy,setBusy]=useState(false); const [err,setErr]=useState(null); const [done,setDone]=useState(false);
-  const inputS={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${BORDER}`,fontSize:14,fontFamily:SANS,color:TEXT,background:CARD,outline:"none",boxSizing:"border-box"};
+  const inputS={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${BORDER}`,fontSize:FS.body,fontFamily:SANS,color:TEXT,background:CARD,boxSizing:"border-box"};
   const submit=async(e)=>{
     e.preventDefault(); setErr(null);
     if(pw.length<6){setErr("Password must be at least 6 characters");return;}
@@ -742,16 +698,16 @@ function ResetPasswordPage({onDone}){
     <div style={{minHeight:"100vh",background:BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:SANS}}>
       <PageHead title="Set new password — Midnite Sentinel"/>
       <Logo size={44} style={{marginBottom:20}}/>
-      <div style={{fontSize:22,fontWeight:700,color:TEXT,marginBottom:4}}>Set new password</div>
-      <div style={{fontSize:13,color:MUTED,marginBottom:28,textAlign:"center"}}>Enter a new password for your Midnite Sentinel account.</div>
+      <div style={{fontSize:FS.title2,fontWeight:700,color:TEXT,marginBottom:4}}>Set new password</div>
+      <div style={{fontSize:FS.subhead,color:MUTED,marginBottom:28,textAlign:"center"}}>Enter a new password for your Midnite Sentinel account.</div>
       <div style={{width:"100%",maxWidth:360}}>
         {done
-          ? <div style={{background:"#D1FAE5",border:"1px solid #6EE7B7",borderRadius:12,padding:"14px 20px",color:BATTERY,fontWeight:600,fontSize:14,textAlign:"center"}}>✓ Password updated — signing you in…</div>
+          ? <div style={{background:"#D1FAE5",border:"1px solid #6EE7B7",borderRadius:12,padding:"14px 20px",color:BATTERY,fontWeight:600,fontSize:FS.body,textAlign:"center"}}>✓ Password updated — signing you in…</div>
           : <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:12}}>
               <input type="password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)} autoFocus required minLength={6} style={inputS}/>
               <input type="password" placeholder="Confirm new password" value={pw2} onChange={e=>setPw2(e.target.value)} required style={inputS}/>
-              {err&&<div style={{color:GRID_IN,fontSize:12}}>{err}</div>}
-              <button type="submit" disabled={busy} style={{padding:"11px",borderRadius:10,border:"none",background:SOLAR,color:"#fff",fontSize:14,fontWeight:700,fontFamily:SANS,cursor:busy?"default":"pointer",marginTop:4}}>
+              {err&&<div style={{color:GRID_IN,fontSize:FS.footnote}}>{err}</div>}
+              <button type="submit" disabled={busy} style={{padding:"11px",borderRadius:10,border:"none",background:SOLAR,color:"#fff",fontSize:FS.body,fontWeight:700,fontFamily:SANS,cursor:busy?"default":"pointer",marginTop:4}}>
                 {busy?"Updating…":"Update password"}
               </button>
             </form>
@@ -770,14 +726,14 @@ function LinkMidnite({email,onLinked,onSignOut,initErr=null}){
   return (
     <AuthShell subtitle="Link your Midnite account">
       <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
-        <div style={{fontSize:13,color:MUTED,lineHeight:1.6,marginBottom:18}}>Signed in as <b style={{color:TEXT}}>{email}</b>. Connect your Midnite login to pull in your system’s data — your credentials are encrypted and never shown again.</div>
+        <div style={{fontSize:FS.subhead,color:MUTED,lineHeight:1.6,marginBottom:18}}>Signed in as <b style={{color:TEXT}}>{email}</b>. Connect your Midnite login to pull in your system’s data — your credentials are encrypted and never shown again.</div>
         {err&&<div style={errBox}>{err}</div>}
         <form onSubmit={submit}>
           <div style={{marginBottom:14}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
           <div style={{marginBottom:20}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
           <button type="submit" disabled={busy||!u||!p} style={authBtn(busy||!u||!p)}>{busy?"Linking…":"Link account"}</button>
         </form>
-        <div style={{textAlign:"center",marginTop:16}}><button onClick={onSignOut} style={{border:"none",background:"none",color:MUTED,fontWeight:600,cursor:"pointer",fontFamily:SANS,fontSize:13}}>Sign out</button></div>
+        <div style={{textAlign:"center",marginTop:16}}><button onClick={onSignOut} style={{border:"none",background:"none",color:MUTED,fontWeight:600,cursor:"pointer",fontFamily:SANS,fontSize:FS.subhead}}>Sign out</button></div>
       </div>
     </AuthShell>
   );
@@ -844,23 +800,21 @@ function DigestSettings({activeId, site=null}){
     }catch(e){ setErr(e.message); } finally{ setTesting(false); }
   };
 
-  const selS={...authInput,padding:"9px 12px",fontSize:13,cursor:"pointer",width:"auto"};
-  if(loading) return <div style={{fontSize:13,color:FAINT,padding:"4px 0 14px"}}>Loading digest…</div>;
+  const selS={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer",width:"auto"};
+  if(loading) return <div style={{fontSize:FS.subhead,color:MUTED,padding:"4px 0 14px"}}>Loading digest…</div>;
   return (
     <div style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"14px 16px",marginBottom:18,background:"#FFFDF8"}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
         <div>
-          <div style={{fontSize:14,fontWeight:800,color:TEXT,display:"flex",alignItems:"center",gap:7}}>☀ Daily digest</div>
-          <div style={{fontSize:12,color:MUTED,marginTop:3,lineHeight:1.5,maxWidth:380}}>A morning recap email of yesterday’s production, consumption, battery, and a 7-day trend — with charts.</div>
+          <div style={{fontSize:FS.body,fontWeight:800,color:TEXT,display:"flex",alignItems:"center",gap:7}}>☀ Daily digest</div>
+          <div style={{fontSize:FS.footnote,color:MUTED,marginTop:3,lineHeight:1.5,maxWidth:380}}>A morning recap email of yesterday’s production, consumption, battery, and a 7-day trend — with charts.</div>
         </div>
-        <button onClick={()=>save(!enabled)} disabled={busy} title={enabled?"On — click to turn off":"Off — click to turn on"} style={{width:42,height:24,borderRadius:12,border:"none",background:enabled?BATTERY:"#D6D3D1",position:"relative",cursor:"pointer",flexShrink:0}}>
-          <span style={{position:"absolute",top:2,left:enabled?20:2,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
-        </button>
+        <Switch checked={enabled} disabled={busy} label="Daily digest" onChange={(v)=>save(v)}/>
       </div>
       {err&&<div style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {!emailOk &&
-        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11.5,color:"#92400E"}}>
+        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:FS.caption,color:"#92400E"}}>
           Email delivery isn’t configured yet (<code style={{fontFamily:"monospace"}}>RESEND_API_KEY</code>). You can still save settings — they’ll send once it’s set.
         </div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:14,alignItems:"flex-end"}}>
@@ -887,10 +841,10 @@ function DigestSettings({activeId, site=null}){
         )}
       </div>
       <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
-        <button onClick={()=>save()} disabled={busy} style={{padding:"8px 16px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#FCD34D,#D97706)",color:"#7C2D12",fontSize:13,fontWeight:700,fontFamily:SANS,cursor:busy?"wait":"pointer"}}>{busy?"Saving…":"Save"}</button>
-        <button onClick={sendTest} disabled={testing||!emailOk} style={{padding:"8px 16px",borderRadius:9,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:testing?"wait":"pointer"}}>{testing?"Sending…":"Send test digest"}</button>
+        <button onClick={()=>save()} disabled={busy} style={{padding:"8px 16px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#FCD34D,#D97706)",color:"#7C2D12",fontSize:FS.subhead,fontWeight:700,fontFamily:SANS,cursor:busy?"wait":"pointer"}}>{busy?"Saving…":"Save"}</button>
+        <button onClick={sendTest} disabled={testing||!emailOk} style={{padding:"8px 16px",borderRadius:9,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:testing?"wait":"pointer"}}>{testing?"Sending…":"Send test digest"}</button>
       </div>
-      {enabled && <div style={{fontSize:11,color:FAINT,marginTop:10}}>Next digest ~{hourLabel12(hour)} {DIGEST_TZS.find(([z])=>z===tz)?.[1]||tz}{cfg?.last_sent_at?` · last sent ${new Date(cfg.last_sent_at).toLocaleDateString()}`:""}</div>}
+      {enabled && <div style={{fontSize:FS.caption,color:MUTED,marginTop:10}}>Next digest ~{hourLabel12(hour)} {DIGEST_TZS.find(([z])=>z===tz)?.[1]||tz}{cfg?.last_sent_at?` · last sent ${new Date(cfg.last_sent_at).toLocaleDateString()}`:""}</div>}
     </div>
   );
 }
@@ -920,54 +874,52 @@ function NotificationsSettings({activeId, site=null}){
   const delRule = async (id)=>{ if(typeof window!=="undefined"&&!window.confirm("Delete this alert rule?")) return; try{ await api("alertrule_delete",{id}); await load(); }catch(e){ setErr(e.message); } };
   const sendTest = async (dev)=>{ setErr(null); setMsg(null); setTesting(dev.sn); try{ const r=await api("alerttest",{ site_name:dev.siteName, device_label:dev.label, device_id:dev.sn }); setMsg(`Test email sent to ${r.to}.`); }catch(e){ setErr(e.message); } finally{ setTesting(null); } };
 
-  if(loading) return <div style={{fontSize:13,color:FAINT,padding:"8px 0"}}>Loading alerts…</div>;
+  if(loading) return <div style={{fontSize:FS.subhead,color:MUTED,padding:"8px 0"}}>Loading alerts…</div>;
   return (
     <>
       <DigestSettings activeId={activeId} site={site}/>
-      <div style={{fontSize:13,fontWeight:800,color:TEXT,margin:"4px 0 10px"}}>Threshold alerts</div>
+      <div style={{fontSize:FS.subhead,fontWeight:800,color:TEXT,margin:"4px 0 10px"}}>Threshold alerts</div>
       {err&&<div style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {data && !data.emailConfigured &&
-        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#92400E"}}>
+        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:FS.footnote,color:"#92400E"}}>
           Email delivery isn’t configured yet. Rules still save and evaluate every cycle — they just can’t send until <code style={{fontFamily:"monospace"}}>RESEND_API_KEY</code> is set in the environment.
         </div>}
       {data &&
-        <div style={{fontSize:11,color:FAINT,marginBottom:12}}>
+        <div style={{fontSize:FS.caption,color:MUTED,marginBottom:12}}>
           Alerts for <strong style={{color:MUTED}}>{site?.name||"this system"}</strong> go to your account email. Today: <strong style={{color:MUTED}}>{data.dailyUsed}</strong> / {data.dailyCap} sent.
         </div>}
-      {!site && <div style={{fontSize:13,color:FAINT}}>Select a system to manage its alerts.</div>}
-      {site && devices.length===0 && <div style={{fontSize:13,color:FAINT}}>No devices on this system.</div>}
+      {!site && <div style={{fontSize:FS.subhead,color:MUTED}}>Select a system to manage its alerts.</div>}
+      {site && devices.length===0 && <div style={{fontSize:FS.subhead,color:MUTED}}>No devices on this system.</div>}
       {devices.map(dev=>(
         <div key={dev.sn} style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:TEXT}}>{dev.label}</div>
-              <div style={{fontSize:11,color:FAINT,fontFamily:"monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dev.siteName} · {dev.sn}</div>
+              <div style={{fontSize:FS.subhead,fontWeight:700,color:TEXT}}>{dev.label}</div>
+              <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dev.siteName} · {dev.sn}</div>
             </div>
-            <button onClick={()=>sendTest(dev)} disabled={testing===dev.sn} style={{padding:"5px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",whiteSpace:"nowrap"}}>{testing===dev.sn?"Sending…":"Send test"}</button>
+            <button onClick={()=>sendTest(dev)} disabled={testing===dev.sn} style={{padding:"5px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer",whiteSpace:"nowrap"}}>{testing===dev.sn?"Sending…":"Send test"}</button>
           </div>
-          {rulesFor(dev.sn).length===0 && addingFor!==dev.sn && <div style={{fontSize:12,color:FAINT,marginBottom:8}}>No alerts on this device.</div>}
+          {rulesFor(dev.sn).length===0 && addingFor!==dev.sn && <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:8}}>No alerts on this device.</div>}
           {rulesFor(dev.sn).map(rule=>{
             const t=getTrigger(rule.trigger_type);
             return (
               <div key={rule.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:`1px solid ${BORDER}`}}>
-                <button onClick={()=>toggleRule(rule)} title={rule.enabled?"Enabled — click to disable":"Disabled — click to enable"} style={{width:34,height:20,borderRadius:10,border:"none",background:rule.enabled?BATTERY:"#D6D3D1",position:"relative",cursor:"pointer",flexShrink:0}}>
-                  <span style={{position:"absolute",top:2,left:rule.enabled?16:2,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
-                </button>
+                <Switch checked={rule.enabled} label={rule.enabled?"Alert on":"Alert off"} onChange={()=>toggleRule(rule)}/>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12.5,fontWeight:600,color:rule.enabled?TEXT:FAINT}}>{summarizeRule(rule)}{t?.group&&<span style={{marginLeft:6,fontSize:10,color:FAINT,fontWeight:500}}>{t.group}</span>}</div>
-                  <div style={{fontSize:10.5,color:FAINT}}>
+                  <div style={{fontSize:FS.footnote,fontWeight:600,color:rule.enabled?TEXT:MUTED}}>{summarizeRule(rule)}{t?.group&&<span style={{marginLeft:6,fontSize:FS.caption,color:MUTED,fontWeight:500}}>{t.group}</span>}</div>
+                  <div style={{fontSize:FS.caption,color:MUTED}}>
                     cooldown {rule.cooldown_minutes}m{rule.trigger_after_time?` · after ${rule.trigger_after_time}`:""}
                     {rule.last_triggered_at?` · last sent ${new Date(rule.last_triggered_at).toLocaleString()}`:""}
                   </div>
                 </div>
-                <button onClick={()=>delRule(rule.id)} style={{padding:"3px 8px",borderRadius:7,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>Delete</button>
+                <button onClick={()=>delRule(rule.id)} style={{padding:"3px 8px",borderRadius:7,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>Delete</button>
               </div>
             );
           })}
           {addingFor===dev.sn
             ? <RuleForm onCancel={()=>setAddingFor(null)} onSave={(form)=>saveRule(dev,form)}/>
-            : <button onClick={()=>{setAddingFor(dev.sn);setErr(null);setMsg(null);}} style={{marginTop:8,padding:"6px 12px",borderRadius:8,border:`1px dashed ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>+ Add alert</button>}
+            : <button onClick={()=>{setAddingFor(dev.sn);setErr(null);setMsg(null);}} style={{marginTop:8,padding:"6px 12px",borderRadius:8,border:`1px dashed ${BORDER}`,background:"transparent",color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>+ Add alert</button>}
         </div>
       ))}
     </>
@@ -984,8 +936,8 @@ function RuleForm({onSave,onCancel}){
   const [cooldown,setCooldown]=useState("60");
   const [afterTime,setAfterTime]=useState(first.defaultAfterTime||"18:00");
   const onType=(v)=>{ const nt=getTrigger(v); setType(v); setThreshold(String(nt.defaultThreshold)); if(nt.timeGate) setAfterTime(nt.defaultAfterTime||"18:00"); };
-  const selStyle={...authInput,padding:"9px 12px",fontSize:13,cursor:"pointer"};
-  const numStyle={...authInput,padding:"9px 12px",fontSize:13};
+  const selStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer"};
+  const numStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead};
   return (
     <div style={{marginTop:10,padding:12,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
       <div style={{marginBottom:10}}>
@@ -1014,8 +966,8 @@ function RuleForm({onSave,onCancel}){
           </div>}
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>onSave({trigger_type:type,threshold,cooldown,afterTime:t.timeGate?afterTime:null})} disabled={threshold===""} style={{...authBtn(threshold===""),width:"auto",padding:"8px 18px",fontSize:13}}>Add alert</button>
-        <button onClick={onCancel} style={{padding:"8px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+        <button onClick={()=>onSave({trigger_type:type,threshold,cooldown,afterTime:t.timeGate?afterTime:null})} disabled={threshold===""} style={{...authBtn(threshold===""),width:"auto",padding:"8px 18px",fontSize:FS.subhead}}>Add alert</button>
+        <button onClick={onCancel} style={{padding:"8px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
       </div>
     </div>
   );
@@ -1037,27 +989,27 @@ function ShareModal({ site, accountId, onClose }){
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:460,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`}}>
-          <div><div style={{fontSize:15,fontWeight:700,color:TEXT}}>Share site</div><div style={{fontSize:11,color:FAINT}}>{site.name}</div></div>
-          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+          <div><div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Share site</div><div style={{fontSize:FS.caption,color:MUTED}}>{site.name}</div></div>
+          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
         </div>
         <div style={{padding:"14px 18px"}}>
           {err&&<div style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
-          <div style={{fontSize:12,color:MUTED,marginBottom:12,lineHeight:1.5}}>Give someone <strong>view-only</strong> access to this site. They'll get an email; if they don't have an account yet, they'll be invited to create one with that address and the site appears automatically. No equipment control — viewing only. Revoke anytime.</div>
+          <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:12,lineHeight:1.5}}>Give someone <strong>view-only</strong> access to this site. They'll get an email; if they don't have an account yet, they'll be invited to create one with that address and the site appears automatically. No equipment control — viewing only. Revoke anytime.</div>
           <form onSubmit={submit} style={{display:"flex",gap:8,marginBottom:18}}>
             <input type="email" required placeholder="person@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={{...authInput,flex:1}}/>
             <button type="submit" disabled={busy||!email} style={{...authBtn(busy||!email),width:"auto",padding:"0 18px"}}>{busy?"…":"Share"}</button>
           </form>
-          <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Shared with</div>
-          {shares===null&&<div style={{fontSize:13,color:FAINT}}>Loading…</div>}
-          {shares&&shares.length===0&&<div style={{fontSize:13,color:FAINT}}>Not shared with anyone yet.</div>}
+          <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:8}}>Shared with</div>
+          {shares===null&&<div style={{fontSize:FS.subhead,color:MUTED}}>Loading…</div>}
+          {shares&&shares.length===0&&<div style={{fontSize:FS.subhead,color:MUTED}}>Not shared with anyone yet.</div>}
           {shares&&shares.map(s=>(
             <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.shared_with_email}</div>
-                <div style={{fontSize:11,color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending — awaiting signup"}</div>
+                <div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.shared_with_email}</div>
+                <div style={{fontSize:FS.caption,color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending — awaiting signup"}</div>
               </div>
-              <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
+              <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
             </div>
           ))}
         </div>
@@ -1081,13 +1033,13 @@ function SharingSettings({ activeId, sites=[] }){
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
   const revoke=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Stop sharing this site with them?")) return; try{ await api("share_revoke",{id}); load(); }catch(e){ setErr(e.message); } };
   const out = data?.outgoing||[]; const inc = data?.incoming||[];
-  const selStyle={...authInput,padding:"9px 12px",fontSize:13,cursor:"pointer"};
+  const selStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer"};
   return (
     <>
       {err&&<div style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
-      {data?.error&&<div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#92400E"}}>Sharing isn’t set up on the database yet (run <code style={{fontFamily:"monospace"}}>supabase/schema.sql</code>).</div>}
-      <div style={{fontSize:12,color:MUTED,marginBottom:12,lineHeight:1.5}}>Share <strong>view-only</strong> access to a site. Recipients get an email; if they don’t have an account, they’re invited to make one with that address and the site appears automatically. No equipment control. Revoke anytime.</div>
+      {data?.error&&<div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:FS.footnote,color:"#92400E"}}>Sharing isn’t set up on the database yet (run <code style={{fontFamily:"monospace"}}>supabase/schema.sql</code>).</div>}
+      <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:12,lineHeight:1.5}}>Share <strong>view-only</strong> access to a site. Recipients get an email; if they don’t have an account, they’re invited to make one with that address and the site appears automatically. No equipment control. Revoke anytime.</div>
       <form onSubmit={share} style={{padding:12,background:BG,borderRadius:10,border:`1px solid ${BORDER}`,marginBottom:16}}>
         <div style={{marginBottom:10}}><label style={lblS}>Site</label>
           <select value={site} onChange={e=>setSite(e.target.value)} style={selStyle}>
@@ -1098,24 +1050,24 @@ function SharingSettings({ activeId, sites=[] }){
         <div style={{marginBottom:12}}><label style={lblS}>Recipient email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="person@email.com" style={authInput}/></div>
         <button type="submit" disabled={busy||!site||!email} style={{...authBtn(busy||!site||!email),width:"auto",padding:"9px 18px"}}>{busy?"Sharing…":"Share site"}</button>
       </form>
-      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Shared by you</div>
-      {data===null&&<div style={{fontSize:13,color:FAINT,marginBottom:6}}>Loading…</div>}
-      {data&&out.length===0&&<div style={{fontSize:13,color:FAINT,marginBottom:6}}>You haven’t shared any sites yet.</div>}
+      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:8}}>Shared by you</div>
+      {data===null&&<div style={{fontSize:FS.subhead,color:MUTED,marginBottom:6}}>Loading…</div>}
+      {data&&out.length===0&&<div style={{fontSize:FS.subhead,color:MUTED,marginBottom:6}}>You haven’t shared any sites yet.</div>}
       {out.map(s=>(
         <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{s.site_name}</div>
-            <div style={{fontSize:11,color:FAINT}}>{s.shared_with_email} · <span style={{color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending signup"}</span></div>
+            <div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT}}>{s.site_name}</div>
+            <div style={{fontSize:FS.caption,color:MUTED}}>{s.shared_with_email} · <span style={{color:s.status==="active"?BATTERY:SOLAR,fontWeight:600}}>{s.status==="active"?"Active":"Pending signup"}</span></div>
           </div>
-          <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
+          <button onClick={()=>revoke(s.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Revoke</button>
         </div>
       ))}
       {inc.length>0&&<>
-        <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",margin:"16px 0 8px"}}>Shared with you</div>
+        <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,margin:"16px 0 8px"}}>Shared with you</div>
         {inc.map(s=>(
           <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:TEXT}}>{s.site_name}</div><div style={{fontSize:11,color:FAINT}}>view-only · switch to it from the account selector</div></div>
-            <span style={{fontSize:11,color:BATTERY,fontWeight:700}}>Active</span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT}}>{s.site_name}</div><div style={{fontSize:FS.caption,color:MUTED}}>view-only · switch to it from the account selector</div></div>
+            <span style={{fontSize:FS.caption,color:BATTERY,fontWeight:700}}>Active</span>
           </div>
         ))}
       </>}
@@ -1150,8 +1102,8 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
     catch(e){setErr(e.message);} finally{setBusy(false);} };
   const removeSitePhoto=async(siteName)=>{ setBusy(true); try{ await api("setsitephoto",{site:siteName,url:null}); onChanged(); }finally{setBusy(false);} };
 
-  const tabBtn=(id,label)=><button onClick={()=>{setSec(id);setErr(null);setMsg(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:sec===id?BG:"transparent",color:sec===id?TEXT:MUTED,fontSize:12,fontWeight:sec===id?700:500,cursor:"pointer",fontFamily:SANS}}>{label}</button>;
-  const fileBtn=(label,onChange)=>(<label style={{display:"inline-block",padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
+  const tabBtn=(id,label)=><button onClick={()=>{setSec(id);setErr(null);setMsg(null);}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:sec===id?BG:"transparent",color:sec===id?TEXT:MUTED,fontSize:FS.footnote,fontWeight:sec===id?700:500,cursor:"pointer",fontFamily:SANS}}>{label}</button>;
+  const fileBtn=(label,onChange)=>(<label style={{display:"inline-block",padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.footnote,fontWeight:600,cursor:"pointer"}}>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -1160,13 +1112,13 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {profile.avatar_url
               ? <img src={profile.avatar_url} alt="" style={{width:34,height:34,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`}}/>
-              : <div style={{width:34,height:34,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:MUTED}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
+              : <div style={{width:34,height:34,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.body,fontWeight:700,color:MUTED}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
             <div>
-              <div style={{fontSize:15,fontWeight:700,color:TEXT}}>{profile.display_name||"Account Settings"}</div>
-              <div style={{fontSize:11,color:FAINT}}>{email}{isAdmin&&<span style={{marginLeft:6,color:SOLAR,fontWeight:700}}>ADMIN</span>}</div>
+              <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>{profile.display_name||"Account Settings"}</div>
+              <div style={{fontSize:FS.caption,color:MUTED}}>{email}{isAdmin&&<span style={{marginLeft:6,color:SOLAR,fontWeight:700}}>ADMIN</span>}</div>
             </div>
           </div>
-          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
         </div>
         <div style={{display:"flex",gap:4,padding:"10px 14px 0",flexWrap:"wrap"}}>{tabBtn("accounts","Midnite")}{tabBtn("profile","Profile")}{tabBtn("security","Security")}{tabBtn("sites","Site Photos")}{tabBtn("alerts","Notifications")}{tabBtn("sharing","Sharing")}</div>
         <div style={{padding:"14px 18px"}}>
@@ -1174,27 +1126,27 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {msg&&<div style={okBox}>{msg}</div>}
 
           {sec==="accounts" && <>
-            <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Linked Midnite accounts</div>
-            {accounts.length===0 && <div style={{fontSize:13,color:FAINT,marginBottom:12}}>None linked yet.</div>}
+            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:8}}>Linked Midnite accounts</div>
+            {accounts.length===0 && <div style={{fontSize:FS.subhead,color:MUTED,marginBottom:12}}>None linked yet.</div>}
             {accounts.map(a=>(
               <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
                 {isAdmin && <input type="radio" name="activeacct" checked={activeId===a.id} onChange={()=>onSetActive(a.id)} style={{cursor:"pointer"}}/>}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{a.label||a.midnite_username}{activeId===a.id&&<span style={{marginLeft:6,fontSize:9,color:BATTERY,fontWeight:800}}>ACTIVE</span>}</div>
-                  <div style={{fontSize:11,color:FAINT,fontFamily:"monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
+                  <div style={{fontSize:FS.subhead,fontWeight:600,color:TEXT}}>{a.label||a.midnite_username}{activeId===a.id&&<span style={{marginLeft:6,fontSize:FS.caption,color:BATTERY,fontWeight:800}}>ACTIVE</span>}</div>
+                  <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace"}}>{a.midnite_username}{a.account_type?` · ${a.account_type}`:""}</div>
                 </div>
-                <button onClick={()=>unlink(a.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Unlink</button>
+                <button onClick={()=>unlink(a.id)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Unlink</button>
               </div>
             ))}
-            {canAdd && !adding && <button onClick={()=>setAdding(true)} style={{marginTop:14,padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{accounts.length===0?"Link a Midnite account":"+ Add Midnite account"}</button>}
-            {!canAdd && accounts.length>0 && <div style={{marginTop:12,fontSize:11,color:FAINT}}>Your plan allows one linked Midnite account. Unlink the current one to connect a different system.</div>}
+            {canAdd && !adding && <button onClick={()=>setAdding(true)} style={{marginTop:14,padding:"8px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{accounts.length===0?"Link a Midnite account":"+ Add Midnite account"}</button>}
+            {!canAdd && accounts.length>0 && <div style={{marginTop:12,fontSize:FS.caption,color:MUTED}}>Your plan allows one linked Midnite account. Unlink the current one to connect a different system.</div>}
             {adding && (
               <form onSubmit={addAcct} style={{marginTop:14,padding:14,background:BG,borderRadius:10,border:`1px solid ${BORDER}`}}>
                 <div style={{marginBottom:10}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
                 <div style={{marginBottom:14}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
                 <div style={{display:"flex",gap:8}}>
                   <button type="submit" disabled={busy||!u||!p} style={{...authBtn(busy||!u||!p),width:"auto",padding:"9px 18px"}}>{busy?"Linking…":"Link"}</button>
-                  <button type="button" onClick={()=>{setAdding(false);setErr(null);}} style={{padding:"9px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
+                  <button type="button" onClick={()=>{setAdding(false);setErr(null);}} style={{padding:"9px 16px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Cancel</button>
                 </div>
               </form>
             )}
@@ -1204,7 +1156,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
             <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
               {profile.avatar_url
                 ? <img src={profile.avatar_url} alt="" style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`}}/>
-                : <div style={{width:64,height:64,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:MUTED}}>{(name||email||"?").slice(0,1).toUpperCase()}</div>}
+                : <div style={{width:64,height:64,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.title2,fontWeight:700,color:MUTED}}>{(name||email||"?").slice(0,1).toUpperCase()}</div>}
               {fileBtn(busy?"Uploading…":"Upload photo", onAvatar)}
             </div>
             <div style={{marginBottom:14}}><label style={lblS}>Display Name</label><input value={name} onChange={e=>setName(e.target.value)} style={authInput}/></div>
@@ -1223,16 +1175,16 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           </>}
 
           {sec==="sites" && <>
-            <div style={{fontSize:11,color:FAINT,marginBottom:12}}>{readOnly?"These sites are shared with you view-only — photos are set by the owner.":"Add a photo for each site. These show here and may be used elsewhere later."}</div>
-            {sites.length===0 && <div style={{fontSize:13,color:FAINT}}>No sites yet — link a Midnite account first.</div>}
+            <div style={{fontSize:FS.caption,color:MUTED,marginBottom:12}}>{readOnly?"These sites are shared with you view-only — photos are set by the owner.":"Add a photo for each site. These show here and may be used elsewhere later."}</div>
+            {sites.length===0 && <div style={{fontSize:FS.subhead,color:MUTED}}>No sites yet — link a Midnite account first.</div>}
             {sites.map(s=>(
               <div key={s.name} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${BORDER}`}}>
                 {sitePhotos[s.name]
                   ? <img src={sitePhotos[s.name]} alt="" style={{width:56,height:56,borderRadius:10,objectFit:"cover",border:`1px solid ${BORDER}`}}/>
-                  : <div style={{width:56,height:56,borderRadius:10,background:BG,border:`1px dashed ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🏠</div>}
-                <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                  : <div style={{width:56,height:56,borderRadius:10,background:BG,border:`1px dashed ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.headline}}>🏠</div>}
+                <div style={{flex:1,minWidth:0,fontSize:FS.subhead,fontWeight:600,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
                 {!readOnly && fileBtn(sitePhotos[s.name]?"Replace":"Upload", e=>onSitePhoto(s.name,e))}
-                {!readOnly && sitePhotos[s.name] && <button onClick={()=>removeSitePhoto(s.name)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Remove</button>}
+                {!readOnly && sitePhotos[s.name] && <button onClick={()=>removeSitePhoto(s.name)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Remove</button>}
               </div>
             ))}
           </>}
@@ -1241,11 +1193,11 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderTop:`1px solid ${BORDER}`}}>
-          <a href="/faq" target="_blank" rel="noopener" style={{fontSize:13,fontWeight:600,color:MUTED,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:15}}>❓</span> Help &amp; FAQ
+          <a href="/faq" target="_blank" rel="noopener" style={{fontSize:FS.subhead,fontWeight:600,color:MUTED,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:FS.callout}}>❓</span> Help &amp; FAQ
           </a>
           {onLogout && (
-            <button onClick={onLogout} style={{padding:"9px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+            <button onClick={onLogout} style={{padding:"9px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:GRID_IN,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
           )}
         </div>
       </div>
@@ -1265,13 +1217,13 @@ function SiteSelector({sites, onSelect, onLogout, onFleet}) {
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <Logo size={32}/>
             <div>
-              <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Select a Site</div>
-              <div style={{fontSize:11,color:FAINT}}>{filtered.length} of {sites.length} site{sites.length!==1?"s":""}</div>
+              <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Select a Site</div>
+              <div style={{fontSize:FS.caption,color:MUTED}}>{filtered.length} of {sites.length} site{sites.length!==1?"s":""}</div>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {onFleet&&<button onClick={onFleet} style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#FCD34D,#D97706)",color:"#7C2D12",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:"pointer",boxShadow:"0 2px 8px rgba(217,119,6,0.25)"}}>⊞ Fleet View</button>}
-            <button onClick={onLogout} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+            {onFleet&&<button onClick={onFleet} style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#FCD34D,#D97706)",color:"#7C2D12",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:"pointer",boxShadow:"0 2px 8px rgba(217,119,6,0.25)"}}>⊞ Fleet View</button>}
+            <button onClick={onLogout} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
           </div>
         </div>
         <div style={{maxWidth:900,margin:"0 auto",padding:"20px 16px",animation:"fadeUp 0.4s ease"}}>
@@ -1283,11 +1235,11 @@ function SiteSelector({sites, onSelect, onLogout, onFleet}) {
               placeholder="Search sites…"
               value={query}
               onChange={e=>setQuery(e.target.value)}
-              style={{width:"100%",padding:"11px 14px 11px 38px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,color:TEXT,fontSize:14,fontFamily:SANS,outline:"none",boxShadow:SHADOW_SM,boxSizing:"border-box"}}
+              style={{width:"100%",padding:"11px 14px 11px 38px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,color:TEXT,fontSize:FS.body,fontFamily:SANS,boxShadow:SHADOW_SM,boxSizing:"border-box"}}
             />
-            {query&&<button onClick={()=>setQuery("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",border:"none",background:"transparent",color:FAINT,cursor:"pointer",fontSize:18,lineHeight:1,padding:0}}>×</button>}
+            {query&&<button onClick={()=>setQuery("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",border:"none",background:"transparent",color:MUTED,cursor:"pointer",fontSize:FS.headline,lineHeight:1,padding:0}}>×</button>}
           </div>
-          {filtered.length===0&&<div style={{textAlign:"center",color:FAINT,fontSize:13,padding:"48px 0"}}>No sites match "{query}"</div>}
+          {filtered.length===0&&<div style={{textAlign:"center",color:MUTED,fontSize:FS.subhead,padding:"48px 0"}}>No sites match "{query}"</div>}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
             {filtered.map(s=>{
               const [on,alarm,off,disc]=s.statusCounts;
@@ -1295,18 +1247,18 @@ function SiteSelector({sites, onSelect, onLogout, onFleet}) {
               return (
                 <button key={s.name} onClick={()=>onSelect(s)} className="site-card" style={{textAlign:"left",padding:"20px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,cursor:"pointer",display:"flex",flexDirection:"column",gap:10,boxShadow:SHADOW_SM}}>
                   <div>
-                    <div style={{fontSize:16,fontWeight:700,color:TEXT}}>{s.name}</div>
-                    <div style={{fontSize:12,color:FAINT,marginTop:2}}>{total} inverter{total!==1?"s":""}</div>
+                    <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>{s.name}</div>
+                    <div style={{fontSize:FS.footnote,color:MUTED,marginTop:2}}>{total} inverter{total!==1?"s":""}</div>
                   </div>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {on>0&&<span style={{fontSize:11,color:BATTERY,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:BATTERY,display:"inline-block"}}/>{on} online</span>}
-                    {alarm>0&&<span style={{fontSize:11,color:SOLAR,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:SOLAR,display:"inline-block"}}/>{alarm} alarm</span>}
-                    {off>0&&<span style={{fontSize:11,color:GRID_IN,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:GRID_IN,display:"inline-block"}}/>{off} offline</span>}
-                    {disc>0&&<span style={{fontSize:11,color:FAINT,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:FAINT,display:"inline-block"}}/>{disc} disconnected</span>}
-                    {total===0&&<span style={{fontSize:11,color:FAINT}}>No inverters</span>}
+                    {on>0&&<span style={{fontSize:FS.caption,color:BATTERY,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:BATTERY,display:"inline-block"}}/>{on} online</span>}
+                    {alarm>0&&<span style={{fontSize:FS.caption,color:SOLAR,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:SOLAR,display:"inline-block"}}/>{alarm} alarm</span>}
+                    {off>0&&<span style={{fontSize:FS.caption,color:GRID_IN,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:GRID_IN,display:"inline-block"}}/>{off} offline</span>}
+                    {disc>0&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:"50%",background:FAINT,display:"inline-block"}}/>{disc} disconnected</span>}
+                    {total===0&&<span style={{fontSize:FS.caption,color:MUTED}}>No inverters</span>}
                   </div>
-                  {s.installer&&<div style={{fontSize:11,color:FAINT}}>{s.installer}</div>}
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",color:SOLAR,fontSize:12,fontWeight:700,gap:4,marginTop:2}}>View →</div>
+                  {s.installer&&<div style={{fontSize:FS.caption,color:MUTED}}>{s.installer}</div>}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",color:SOLAR,fontSize:FS.footnote,fontWeight:700,gap:4,marginTop:2}}>View →</div>
                 </button>
               );
             })}
@@ -1384,7 +1336,7 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
     let status;
     if(v||fl) status = onlineN===0 ? {label:"Offline",color:GRID_IN,rank:0} : onlineN<total ? {label:"Partial",color:SOLAR,rank:2} : {label:"Online",color:BATTERY,rank:3};
     else if(row?.error) status={label:"Offline",color:GRID_IN,rank:0};
-    else status={label:"Checking…",color:FAINT,rank:5};
+    else status={label:"Checking…",color:MUTED,rank:5};
     const m={ site, status, total, invOnline: onlineN, error: row?.error, loading: !v && !fl && !row?.error };
     if(fl){                        // flow feed present → trust it; power only from ONLINE inverters (offline → blank)
       if(flUp.length){
@@ -1449,15 +1401,15 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
     {k:"updated",label:"Updated",a:"right",nosort:true},
   ];
   const Sk=()=> <span style={{display:"inline-block",width:46,height:11,borderRadius:4,background:"#ECE7E0",animation:"pulse 1.4s infinite"}}/>;
-  const th={padding:"9px 12px",fontSize:10.5,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",userSelect:"none",position:"sticky",top:0,background:CARD,borderBottom:`1px solid ${BORDER}`,zIndex:1};
-  const td={padding:"11px 12px",fontSize:13,color:TEXT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",borderBottom:`1px solid ${BORDER}`};
+  const th={padding:"9px 12px",fontSize:FS.caption,color:MUTED,fontWeight:700,whiteSpace:"nowrap",userSelect:"none",position:"sticky",top:0,background:CARD,borderBottom:`1px solid ${BORDER}`,zIndex:1};
+  const td={padding:"11px 12px",fontSize:FS.subhead,color:TEXT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",borderBottom:`1px solid ${BORDER}`};
   const kpi=(label,value,color,onClick,active)=>(
     <div onClick={onClick} style={{background:active?"#FFFBEB":CARD,border:`1px solid ${active?SOLAR:BORDER}`,borderRadius:12,padding:"12px 14px",boxShadow:SHADOW_SM,cursor:onClick?"pointer":"default"}}>
-      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
-      <div style={{fontSize:20,fontWeight:800,color:color||TEXT,marginTop:3,fontVariantNumeric:"tabular-nums"}}>{value}</div>
+      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700}}>{label}</div>
+      <div style={{fontSize:FS.title3,fontWeight:800,color:color||TEXT,marginTop:3,fontVariantNumeric:"tabular-nums"}}>{value}</div>
     </div>
   );
-  const fchip=(id,label)=> <button onClick={()=>setFilter(id)} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${filter===id?SOLAR:BORDER}`,background:filter===id?"#FFFBEB":CARD,color:filter===id?"#92400E":MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{label}</button>;
+  const fchip=(id,label)=> <button onClick={()=>setFilter(id)} style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${filter===id?SOLAR:BORDER}`,background:filter===id?"#FFFBEB":CARD,color:filter===id?"#92400E":MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{label}</button>;
 
   return (
     <>
@@ -1465,17 +1417,17 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
         <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:CARD,position:"sticky",top:0,zIndex:100,flexWrap:"wrap"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {onBack&&<button onClick={onBack} title="Back" style={{border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16,lineHeight:1}}>‹</button>}
+            {onBack&&<button onClick={onBack} title="Back" style={{border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:FS.callout,lineHeight:1}}>‹</button>}
             <Logo size={30}/>
             <div>
-              <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Fleet View</div>
-              <div style={{fontSize:11,color:FAINT}}>{sites.length} sites · <span style={{color:BATTERY,fontWeight:600}}>{onlineCount} online</span>{issueCount>0&&<> · <span style={{color:SOLAR,fontWeight:600}}>{issueCount} need attention</span></>}</div>
+              <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Fleet View</div>
+              <div style={{fontSize:FS.caption,color:MUTED}}>{sites.length} sites · <span style={{color:BATTERY,fontWeight:600}}>{onlineCount} online</span>{issueCount>0&&<> · <span style={{color:SOLAR,fontWeight:600}}>{issueCount} need attention</span></>}</div>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button onClick={exportCsv} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⬇ CSV</button>
-            <button onClick={load} disabled={busy} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:busy?"default":"pointer"}}>{busy?"Refreshing…":"↻ Refresh"}</button>
-            <button onClick={onLogout} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
+            <button onClick={exportCsv} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>⬇ CSV</button>
+            <button onClick={load} disabled={busy} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:busy?"default":"pointer"}}>{busy?"Refreshing…":"↻ Refresh"}</button>
+            <button onClick={onLogout} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:FS.footnote,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Sign out</button>
           </div>
         </div>
 
@@ -1491,10 +1443,10 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
             <div style={{position:"relative",flex:"1 1 200px",maxWidth:300}}>
               <svg style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" placeholder="Search sites…" value={query} onChange={e=>setQuery(e.target.value)} style={{width:"100%",padding:"9px 12px 9px 34px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:13,fontFamily:SANS,outline:"none",boxSizing:"border-box"}}/>
+              <input type="text" placeholder="Search sites…" value={query} onChange={e=>setQuery(e.target.value)} style={{width:"100%",padding:"9px 12px 9px 34px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,color:TEXT,fontSize:FS.subhead,fontFamily:SANS,boxSizing:"border-box"}}/>
             </div>
             {fchip("all","All")}{fchip("online","Online")}{fchip("issues","Issues")}
-            {lastRefresh&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>as of {lastRefresh.toLocaleTimeString()}</span>}
+            {lastRefresh&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:"auto"}}>as of {lastRefresh.toLocaleTimeString()}</span>}
           </div>
 
           <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,overflow:"hidden",boxShadow:SHADOW_SM}}>
@@ -1502,13 +1454,13 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
               <table style={{borderCollapse:"collapse",width:"100%",minWidth:864}}>
                 <thead><tr>
                   {cols.map(c=>(
-                    <th key={c.k} onClick={()=>!c.nosort&&setSort(c.k)} style={{...th,textAlign:c.a,cursor:c.nosort?"default":"pointer",color:sortKey===c.k?TEXT:FAINT}}>
+                    <th key={c.k} onClick={()=>!c.nosort&&setSort(c.k)} style={{...th,textAlign:c.a,cursor:c.nosort?"default":"pointer",color:sortKey===c.k?TEXT:MUTED}}>
                       {c.label}{sortKey===c.k&&!c.nosort&&<span style={{marginLeft:3}}>{sortDir>0?"▲":"▼"}</span>}
                     </th>
                   ))}
                 </tr></thead>
                 <tbody>
-                  {rows.length===0&&<tr><td colSpan={cols.length} style={{...td,textAlign:"center",color:FAINT,padding:"32px 0"}}>No sites match.</td></tr>}
+                  {rows.length===0&&<tr><td colSpan={cols.length} style={{...td,textAlign:"center",color:MUTED,padding:"32px 0"}}>No sites match.</td></tr>}
                   {rows.map(m=>{
                     const imp=m.gridNet>50, exp=m.gridNet<-50;
                     const chg=m.batNet>20, dis=m.batNet<-20;
@@ -1521,24 +1473,24 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
                         </td>
                         <td style={{...td,maxWidth:240}}>
                           <div style={{fontWeight:700,color:TEXT,whiteSpace:"normal"}}>{m.site.name}</div>
-                          <div style={{fontSize:11,color:FAINT}}>{m.site.installer||`${m.total} inverter${m.total!==1?"s":""}`}</div>
+                          <div style={{fontSize:FS.caption,color:MUTED}}>{m.site.installer||`${m.total} inverter${m.total!==1?"s":""}`}</div>
                         </td>
                         <td style={td}>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:m.status.color,flexShrink:0}}/>
                             <div>
                               <div style={{fontWeight:600,color:m.status.color}}>{m.status.label}</div>
-                              <div style={{fontSize:10.5,color:FAINT}}>{(m.invOnline??m.on)}/{m.total} online</div>
+                              <div style={{fontSize:FS.caption,color:MUTED}}>{(m.invOnline??m.on)}/{m.total} online</div>
                             </div>
                           </div>
                         </td>
                         <td style={{...td,textAlign:"right",fontWeight:600,color:m.pv>0?SOLAR:TEXT}}>{m.loading?<Sk/>:fmt(m.pv,1)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmt(m.load,1)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.soc==null?<span style={{color:FAINT}}>—</span>:<span style={{fontWeight:600,color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?<span style={{color:BATTERY}}> ↑</span>:dis?<span style={{color:SOLAR}}> ↓</span>:""}</span>)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT,fontWeight:600}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN,fontWeight:600}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:FAINT}}>—</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.soc==null?<span style={{color:MUTED}}>—</span>:<span style={{fontWeight:600,color:m.soc>60?BATTERY:m.soc>30?SOLAR:GRID_IN}}>{Math.round(m.soc)}%{chg?<span style={{color:BATTERY}}> ↑</span>:dis?<span style={{color:SOLAR}}> ↓</span>:""}</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(exp?<span style={{color:GRID_OUT,fontWeight:600}}>↑ {fmt(-m.gridNet,1)}</span>:imp?<span style={{color:GRID_IN,fontWeight:600}}>↓ {fmt(m.gridNet,1)}</span>:<span style={{color:MUTED}}>—</span>)}</td>
                         <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:fmtE(m.pvToday)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.expToday>0?fmtE(m.expToday):<span style={{color:FAINT}}>—</span>)}</td>
-                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.error?<span style={{color:GRID_IN,fontSize:11}}>error</span>:(m.updated?<UpdatedChip time={m.updated}/>:<span style={{color:FAINT}}>—</span>))}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.expToday>0?fmtE(m.expToday):<span style={{color:MUTED}}>—</span>)}</td>
+                        <td style={{...td,textAlign:"right"}}>{m.loading?<Sk/>:(m.error?<span style={{color:GRID_IN,fontSize:FS.caption}}>error</span>:(m.updated?<UpdatedChip time={m.updated}/>:<span style={{color:MUTED}}>—</span>))}</td>
                       </tr>
                     );
                   })}
@@ -1561,7 +1513,7 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
             </div>
           </div>
 
-          <div style={{fontSize:11,color:FAINT,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status is the live fleet fetch; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
+          <div style={{fontSize:FS.caption,color:MUTED,marginTop:10,textAlign:"center"}}>Tap a row to open that site. Status is the live fleet fetch; metrics are the latest 5-min report, auto-refreshing every 2 minutes.</div>
         </div>
       </div>
       {preview && (
@@ -1569,13 +1521,13 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
           <img src={preview.url} alt="" style={{width:200,height:200,objectFit:"cover",borderRadius:12,border:`3px solid ${CARD}`,boxShadow:"0 16px 44px rgba(0,0,0,0.34)"}}/>
         </div>
       )}
-      {photoModal && (()=>{ const upBtn={display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:13,fontWeight:600,fontFamily:SANS,cursor:uploading?"default":"pointer",opacity:uploading?0.6:1};
+      {photoModal && (()=>{ const upBtn={display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px 18px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.subhead,fontWeight:600,fontFamily:SANS,cursor:uploading?"default":"pointer",opacity:uploading?0.6:1};
         return (
         <div onClick={()=>!uploading&&setPhotoModal(null)} style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:440,width:"100%",boxShadow:"0 16px 56px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:SANS,animation:"fadeUp 0.2s ease"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px 16px",borderBottom:`1px solid ${BORDER}`}}>
-              <div style={{fontSize:14,fontWeight:700,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{photoModal.site}</div>
-              <button onClick={()=>!uploading&&setPhotoModal(null)} style={{border:"none",background:"transparent",fontSize:22,lineHeight:1,color:MUTED,cursor:"pointer",flexShrink:0}}>×</button>
+              <div style={{fontSize:FS.body,fontWeight:700,color:TEXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{photoModal.site}</div>
+              <button onClick={()=>!uploading&&setPhotoModal(null)} style={{border:"none",background:"transparent",fontSize:FS.title2,lineHeight:1,color:MUTED,cursor:"pointer",flexShrink:0}}>×</button>
             </div>
             <div style={{padding:16}}>
               {uploadErr&&<div style={errBox}>{uploadErr}</div>}
@@ -1583,10 +1535,10 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
                 ? <img src={photoModal.url} alt="" style={{width:"100%",maxHeight:"60vh",objectFit:"contain",borderRadius:12,background:"#000",display:"block"}}/>
                 : <div style={{padding:"26px 12px",textAlign:"center"}}>
                     <div style={{fontSize:42,marginBottom:8}}>🏠</div>
-                    <div style={{fontSize:13,color:MUTED}}>{readOnly?"No photo set by the site owner.":"No photo for this site yet — add one below."}</div>
+                    <div style={{fontSize:FS.subhead,color:MUTED}}>{readOnly?"No photo set by the site owner.":"No photo for this site yet — add one below."}</div>
                   </div>}
               {readOnly
-                ? <div style={{marginTop:14,textAlign:"center",fontSize:11,color:FAINT}}>Shared with you · view-only</div>
+                ? <div style={{marginTop:14,textAlign:"center",fontSize:FS.caption,color:MUTED}}>Shared with you · view-only</div>
                 : <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center",flexWrap:"wrap"}}>
                     <label style={upBtn}>{uploading?"Uploading…":"📷 Take photo"}<input type="file" accept="image/*" capture="environment" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
                     <label style={upBtn}>{uploading?"Uploading…":(photoModal.url?"🖼 Replace":"🖼 Choose file")}<input type="file" accept="image/*" disabled={uploading} onChange={e=>uploadPhoto(photoModal.site,e.target.files?.[0])} style={{display:"none"}}/></label>
@@ -1632,7 +1584,7 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
     {label:"Consumed", value:fmtE(consumed), color:CHART_CONS},
     {label:"Imported", value:fmtE(imported), color:GRID_IN},
     {label:"Exported", value:fmtE(exported), color:GRID_OUT},
-    ...(netExported!=null?[{label: netExported>=0?"Net Exported":"Net Imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN, tip:`Exported ${fmtE(exported)} − Imported ${fmtE(imported)} = ${netExported<0?"−":""}${fmtE(Math.abs(netExported))}`}]:[]),
+    ...(netExported!=null?[{label: netExported>=0?"Net exported":"Net imported", value:fmtE(Math.abs(netExported)), color: netExported>=0?GRID_OUT:GRID_IN, tip:`Exported ${fmtE(exported)} − Imported ${fmtE(imported)} = ${netExported<0?"−":""}${fmtE(Math.abs(netExported))}`}]:[]),
     // Show the battery pair together whenever there's any battery activity, so Discharged never
     // silently drops out when its (often under-reported) energy register rounds to 0.
     ...((charged>0||discharged>0)?[
@@ -1645,9 +1597,9 @@ function SummaryStrip({produced, consumed, imported, exported, charged, discharg
       <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
         {items.map(it=>(
           <div key={it.label} onClick={it.tip?()=>setOpenTip(t=>t===it.label?null:it.label):undefined} title={it.tip||undefined} style={{cursor:it.tip?"pointer":"default"}}>
-            <div style={{fontSize:11,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{it.label}{it.tip&&<span style={{marginLeft:4,color:FAINT,fontWeight:700}}>ⓘ</span>}</div>
-            <div style={{fontSize:15,fontWeight:700,color:it.color,fontVariantNumeric:"tabular-nums"}}>{it.value}</div>
-            {it.tip&&openTip===it.label&&<div style={{fontSize:10,color:MUTED,fontWeight:500,marginTop:3,whiteSpace:"nowrap"}}>{it.tip}</div>}
+            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:600,marginBottom:2}}>{it.label}{it.tip&&<span style={{marginLeft:4,color:MUTED,fontWeight:700}}>ⓘ</span>}</div>
+            <div style={{fontSize:FS.callout,fontWeight:700,color:it.color,fontVariantNumeric:"tabular-nums"}}>{it.value}</div>
+            {it.tip&&openTip===it.label&&<div style={{fontSize:FS.caption,color:MUTED,fontWeight:500,marginTop:3,whiteSpace:"nowrap"}}>{it.tip}</div>}
           </div>
         ))}
       </div>
@@ -1760,7 +1712,7 @@ function BatteryPanel({statuses}) {
     <div className="ui-card" style={{padding:"16px 18px",marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-          <div style={{width:36,height:36,borderRadius:10,background:closedLoop?"#DCFCE7":"#F1F5F9",color:closedLoop?BATTERY_TEXT:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}><Icon name={isCharging?"battery-charging":"battery"}/></div>
+          <div style={{width:36,height:36,borderRadius:10,background:closedLoop?"#DCFCE7":"#F1F5F9",color:closedLoop?BATTERY_TEXT:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.title3,flexShrink:0}}><Icon name={isCharging?"battery-charging":"battery"}/></div>
           <div style={{minWidth:0}}>
             <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>{closedLoop ? brand : "Battery bank"}</div>
             <div style={{fontSize:FS.footnote,color:MUTED}}>
@@ -1781,7 +1733,7 @@ function BatteryPanel({statuses}) {
       <div style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
           <span style={{fontSize:FS.subhead,fontWeight:600,color:MUTED}}>Charge{!closedLoop && " (estimated)"}</span>
-          <span style={{fontSize:28,fontWeight:800,color:textTone(socColor),letterSpacing:"-0.5px"}}><CountUp value={avgSoc} format={v=>`${Math.round(v)}%`}/></span>
+          <span style={{fontSize:FS.title1,fontWeight:800,color:textTone(socColor),letterSpacing:"-0.5px"}}><CountUp value={avgSoc} format={v=>`${Math.round(v)}%`}/></span>
         </div>
         <Meter value={avgSoc} color={`linear-gradient(90deg,${socColor},${socColor}CC)`} height={12} label="Battery state of charge"/>
         {rate
@@ -1851,40 +1803,40 @@ function FaultPanel({site}) {
       .finally(()=>setLoading(false));
   },[site,startDate,endDate]);
   const activeCount = events?.filter(e=>e.status==="1").length||0;
-  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"4px 8px",fontSize:11,fontFamily:SANS,cursor:"pointer"};
+  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"4px 8px",fontSize:FS.caption,fontFamily:SANS,cursor:"pointer"};
   return (
     <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,overflow:"hidden",boxShadow:SHADOW_SM,marginBottom:16}}>
       <button onClick={()=>setExpanded(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:12,color:FAINT}}>⚡</span>
-          <span style={{fontSize:12,fontWeight:600,color:MUTED}}>Fault Log</span>
-          {!loading&&events&&<span style={{fontSize:11,color:FAINT}}>— {events.length} events · {activeCount} active</span>}
-          {!loading&&!events&&<span style={{fontSize:11,color:FAINT}}>— pick a range & search</span>}
-          {loading&&<span style={{fontSize:11,color:FAINT}}>Loading…</span>}
+          <span style={{fontSize:FS.footnote,color:MUTED}}>⚡</span>
+          <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>Fault Log</span>
+          {!loading&&events&&<span style={{fontSize:FS.caption,color:MUTED}}>— {events.length} events · {activeCount} active</span>}
+          {!loading&&!events&&<span style={{fontSize:FS.caption,color:MUTED}}>— pick a range & search</span>}
+          {loading&&<span style={{fontSize:FS.caption,color:MUTED}}>Loading…</span>}
         </div>
-        <span style={{fontSize:11,color:FAINT}}>{expanded?"▲":"▼"}</span>
+        <span style={{fontSize:FS.caption,color:MUTED}}>{expanded?"▲":"▼"}</span>
       </button>
       {expanded&&(
         <>
           <div style={{borderTop:`1px solid ${BORDER}`,padding:"10px 16px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:11,color:FAINT}}>From</span>
+            <span style={{fontSize:FS.caption,color:MUTED}}>From</span>
             <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inputS}/>
-            <span style={{fontSize:11,color:FAINT}}>to</span>
+            <span style={{fontSize:FS.caption,color:MUTED}}>to</span>
             <input type="date" value={endDate} max={today} onChange={e=>setEndDate(e.target.value)} style={inputS}/>
             <button onClick={load} disabled={loading||!startDate||!endDate} style={{...inputS,background:SOLAR,color:"#fff",border:"none",fontWeight:700,cursor:loading?"default":"pointer"}}>{loading?"…":"Search"}</button>
           </div>
           <div style={{borderTop:`1px solid ${BORDER}`,overflowY:"auto",maxHeight:320,padding:"4px 0"}}>
-            {loading&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>Loading…</div>}
-            {!loading&&!events&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>Pick a date range and press Search.</div>}
-            {!loading&&events?.length===0&&<div style={{color:FAINT,fontSize:12,textAlign:"center",padding:"16px 0"}}>No fault events in this range</div>}
+            {loading&&<div style={{color:MUTED,fontSize:FS.footnote,textAlign:"center",padding:"16px 0"}}>Loading…</div>}
+            {!loading&&!events&&<div style={{color:MUTED,fontSize:FS.footnote,textAlign:"center",padding:"16px 0"}}>Pick a date range and press Search.</div>}
+            {!loading&&events?.length===0&&<div style={{color:MUTED,fontSize:FS.footnote,textAlign:"center",padding:"16px 0"}}>No fault events in this range</div>}
             {!loading&&events?.map((e,i)=>(
               <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto",gap:10,padding:"7px 16px",borderBottom:i<events.length-1?`1px solid ${BORDER}`:"none",alignItems:"start"}}>
-                <span style={{fontSize:10,fontWeight:700,color:e.status==="1"?GRID_IN:BATTERY,padding:"2px 6px",borderRadius:4,background:e.status==="1"?"#FEF2F2":"#DCFCE7",whiteSpace:"nowrap"}}>{e.status==="1"?"ACTIVE":"CLEARED"}</span>
+                <span style={{fontSize:FS.caption,fontWeight:700,color:e.status==="1"?GRID_IN:BATTERY,padding:"2px 6px",borderRadius:4,background:e.status==="1"?"#FEF2F2":"#DCFCE7",whiteSpace:"nowrap"}}>{e.status==="1"?"ACTIVE":"CLEARED"}</span>
                 <div>
-                  <div style={{fontSize:12,fontWeight:600,color:TEXT}}>Code {e.ErrorCode}: {FAULT_DESC[e.ErrorCode]||"Unrecognized code"}</div>
-                  <div style={{fontSize:10,color:FAINT}}>{e.GoodsID}</div>
+                  <div style={{fontSize:FS.footnote,fontWeight:600,color:TEXT}}>Code {e.ErrorCode}: {FAULT_DESC[e.ErrorCode]||"Unrecognized code"}</div>
+                  <div style={{fontSize:FS.caption,color:MUTED}}>{e.GoodsID}</div>
                 </div>
-                <span style={{fontSize:10,color:FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{(e.Time||"").slice(5,16)}</span>
+                <span style={{fontSize:FS.caption,color:MUTED,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{(e.Time||"").slice(5,16)}</span>
               </div>
             ))}
           </div>
@@ -2022,31 +1974,31 @@ function SettingsModal({inv, onClose}){
       <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:560,width:"100%",maxHeight:"85vh",overflow:"auto",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"16px 18px",borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,background:CARD}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Inverter Settings</div>
-            <div style={{fontSize:11,color:FAINT,fontFamily:"monospace"}}>{inv.label} · {inv.sn}</div>
+            <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Inverter Settings</div>
+            <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace"}}>{inv.label} · {inv.sn}</div>
           </div>
-          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+          <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
         </div>
         <div style={{padding:"14px 18px"}}>
-          {err && <div style={{fontSize:12,color:GRID_IN,padding:"8px 10px",background:"#FEF2F2",borderRadius:8}}>{err}</div>}
-          {!err && !data && <div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"24px 0"}}>Reading live settings from the inverter…</div>}
+          {err && <div style={{fontSize:FS.footnote,color:GRID_IN,padding:"8px 10px",background:"#FEF2F2",borderRadius:8}}>{err}</div>}
+          {!err && !data && <div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"24px 0"}}>Reading live settings from the inverter…</div>}
           {!err && data && groups.map(g=>{
             const rows = shown(g);
             if(!rows.length) return null;
             return (
               <div key={g} style={{marginBottom:14}}>
-                <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{g}</div>
+                <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>{g}</div>
                 {rows.map(s=>(
                   <div key={s.code} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",borderBottom:`1px solid ${BORDER}`,gap:12}}>
-                    <span style={{fontSize:13,color:TEXT}}>{s.label}</span>
-                    <span style={{fontSize:13,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtSetting(s, data[s.code])}</span>
+                    <span style={{fontSize:FS.subhead,color:TEXT}}>{s.label}</span>
+                    <span style={{fontSize:FS.subhead,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtSetting(s, data[s.code])}</span>
                   </div>
                 ))}
               </div>
             );
           })}
           {!err && data && (
-            <div style={{fontSize:11,color:FAINT,marginTop:8,lineHeight:1.5}}>Only settings we've confidently mapped from the register set are shown ({SETTINGS_MAP.length} so far). The list grows as more registers are correlated to the Remote-Setting screens.</div>
+            <div style={{fontSize:FS.caption,color:MUTED,marginTop:8,lineHeight:1.5}}>Only settings we've confidently mapped from the register set are shown ({SETTINGS_MAP.length} so far). The list grows as more registers are correlated to the Remote-Setting screens.</div>
           )}
         </div>
       </div>
@@ -2098,36 +2050,36 @@ function SettingsCompareModal({inverters, onClose}){
       <div onClick={e=>e.stopPropagation()} style={{background:CARD,borderRadius:16,maxWidth:1100,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 12px 48px rgba(0,0,0,0.25)",fontFamily:SANS}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",borderBottom:`1px solid ${BORDER}`,gap:8,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:TEXT}}>Compare Inverter Settings</div>
-            <div style={{fontSize:11,color:FAINT}}>{data ? `${cols.length} inverters · ${diffCount} setting${diffCount===1?"":"s"} differ` : `Reading… ${done}/${cols.length}`}</div>
+            <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>Compare Inverter Settings</div>
+            <div style={{fontSize:FS.caption,color:MUTED}}>{data ? `${cols.length} inverters · ${diffCount} setting${diffCount===1?"":"s"} differ` : `Reading… ${done}/${cols.length}`}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            {data && <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}><input type="checkbox" checked={diffOnly} onChange={e=>setDiffOnly(e.target.checked)} style={{cursor:"pointer"}}/>Differences only</label>}
-            {data && rows.length>0 && <button onClick={exportCsv} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Export CSV</button>}
-            <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:20,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
+            {data && <label style={{display:"flex",alignItems:"center",gap:5,fontSize:FS.caption,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}><input type="checkbox" checked={diffOnly} onChange={e=>setDiffOnly(e.target.checked)} style={{cursor:"pointer"}}/>Differences only</label>}
+            {data && rows.length>0 && <button onClick={exportCsv} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Export CSV</button>}
+            <button onClick={onClose} style={{border:"none",background:"transparent",fontSize:FS.title3,lineHeight:1,color:MUTED,cursor:"pointer"}}>×</button>
           </div>
         </div>
         <div style={{overflow:"auto",padding:"4px 0"}}>
-          {!data && <div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"32px 0"}}>Reading live settings from {cols.length} inverters…</div>}
-          {data && cols.length===0 && <div style={{fontSize:13,color:FAINT,textAlign:"center",padding:"32px 0"}}>No inverters with installer access.</div>}
+          {!data && <div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"32px 0"}}>Reading live settings from {cols.length} inverters…</div>}
+          {data && cols.length===0 && <div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"32px 0"}}>No inverters with installer access.</div>}
           {data && cols.length>0 && (
-            <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+            <table style={{borderCollapse:"collapse",width:"100%",fontSize:FS.footnote}}>
               <thead><tr style={{position:"sticky",top:0,background:CARD,zIndex:1}}>
-                <th style={{textAlign:"left",padding:"8px 14px",fontSize:11,color:FAINT,fontWeight:700,position:"sticky",left:0,background:CARD,minWidth:200}}>Setting</th>
-                {cols.map(inv=><th key={inv.sn} style={{textAlign:"right",padding:"8px 14px",fontSize:11,color:TEXT,fontWeight:700,whiteSpace:"nowrap"}}>{inv.label}</th>)}
+                <th style={{textAlign:"left",padding:"8px 14px",fontSize:FS.caption,color:MUTED,fontWeight:700,position:"sticky",left:0,background:CARD,minWidth:200}}>Setting</th>
+                {cols.map(inv=><th key={inv.sn} style={{textAlign:"right",padding:"8px 14px",fontSize:FS.caption,color:TEXT,fontWeight:700,whiteSpace:"nowrap"}}>{inv.label}</th>)}
               </tr></thead>
               <tbody>
                 {groups.flatMap(g=>{
                   const grows = rows.filter(r=>r.s.group===g);
                   if(!grows.length) return [];
                   return [
-                    <tr key={"h-"+g}><td colSpan={cols.length+1} style={{padding:"10px 14px 4px",fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{g}</td></tr>,
+                    <tr key={"h-"+g}><td colSpan={cols.length+1} style={{padding:"10px 14px 4px",fontSize:FS.caption,color:MUTED,fontWeight:700}}>{g}</td></tr>,
                     ...grows.map(({s,vals})=>{
                       const diff = isDiff(vals);
                       return (
                         <tr key={s.code} style={{background:diff?"#FEF3C7":"transparent",borderTop:`1px solid ${BORDER}`}}>
                           <td style={{textAlign:"left",padding:"6px 14px",color:TEXT,position:"sticky",left:0,background:diff?"#FEF3C7":CARD,whiteSpace:"nowrap"}}>{diff&&<span style={{color:SOLAR,fontWeight:800,marginRight:4}}>⚠</span>}{s.label}</td>
-                          {vals.map((v,i)=><td key={i} style={{textAlign:"right",padding:"6px 14px",color:v==null?FAINT:TEXT,fontWeight:diff?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v==null?"—":v}</td>)}
+                          {vals.map((v,i)=><td key={i} style={{textAlign:"right",padding:"6px 14px",color:v==null?MUTED:TEXT,fontWeight:diff?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v==null?"—":v}</td>)}
                         </tr>
                       );
                     })
@@ -2181,7 +2133,7 @@ function InverterCard({inv, status, live}) {
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:12}}>
           <div style={{display:"flex",gap:10,minWidth:0}}>
-            <div style={{width:36,height:36,borderRadius:10,background:"#F5F1EB",color:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}><Icon name="inverter"/></div>
+            <div style={{width:36,height:36,borderRadius:10,background:"#F5F1EB",color:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.title3,flexShrink:0}}><Icon name="inverter"/></div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:FS.headline,fontWeight:700,color:TEXT,lineHeight:1.2}}>{inv.label}</div>
               {model&&<div style={{fontSize:FS.footnote,color:MUTED,marginTop:1}}>{model}</div>}
@@ -2283,7 +2235,7 @@ function InverterCard({inv, status, live}) {
 function SectionCard({title, children, fullWidth}) {
   return (
     <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"16px 18px",boxShadow:SHADOW_SM,...(fullWidth?{gridColumn:"1/-1"}:{})}}>
-      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>{title}</div>
+      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:12}}>{title}</div>
       {children}
     </div>
   );
@@ -2294,9 +2246,9 @@ function PhaseRow({label, line, exportWhenNegative}) {
   const exporting = exportWhenNegative && (line.current||0) < 0;
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${BORDER}`}}>
-      <span style={{fontSize:11,fontWeight:600,color:MUTED,minWidth:22}}>{label}</span>
-      <div style={{display:"flex",gap:14,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
-        <span style={{color:FAINT}}>{(line.voltage||0).toFixed(1)} V</span>
+      <span style={{fontSize:FS.caption,fontWeight:600,color:MUTED,minWidth:22}}>{label}</span>
+      <div style={{display:"flex",gap:14,fontSize:FS.caption,fontVariantNumeric:"tabular-nums"}}>
+        <span style={{color:MUTED}}>{(line.voltage||0).toFixed(1)} V</span>
         <span style={{color:MUTED}}>{Math.abs(line.current||0).toFixed(1)} A</span>
         <span style={{fontWeight:700,color:exporting?GRID_OUT:LOAD_C}}>{fmt(Math.abs(line.power||0))}</span>
       </div>
@@ -2308,7 +2260,7 @@ function InverterDetailPanel({inv, status}) {
   const [showInfo, setShowInfo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
-  if(!d) return <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting…</div>;
+  if(!d) return <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:FS.subhead}}>Connecting…</div>;
 
   const stateLabel   = d.inverter?.state  != null ? (INV_STATE_LABELS[d.inverter.state]  || `State ${d.inverter.state}`)  : null;
   const workLabel    = d.inverter?.workMode != null ? (WORK_MODE_LABELS[d.inverter.workMode] || `Mode ${d.inverter.workMode}`) : null;
@@ -2337,26 +2289,26 @@ function InverterDetailPanel({inv, status}) {
       <div style={{gridColumn:"1/-1",background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"18px 20px",border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
           <div>
-            <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2}}>
+            <div style={{fontSize:FS.caption,color:"#92400E",fontWeight:700,marginBottom:2}}>
               {d.inverter?.model||inv.label} · <span style={{fontFamily:"monospace",fontWeight:400}}>{inv.sn}</span>
             </div>
             <div style={{fontSize:32,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-0.5px",fontVariantNumeric:"tabular-nums"}}>{fmt(pvTotal,2)}</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
-            {stateLabel&&<span style={{fontSize:11,fontWeight:700,color:stateColor,padding:"3px 10px",borderRadius:12,background:stateColor===BATTERY?"#DCFCE7":"#F1F5F9"}}>{stateLabel}</span>}
-            {workLabel&&<span style={{fontSize:10,color:MUTED,fontWeight:500}}>{workLabel}</span>}
+            {stateLabel&&<span style={{fontSize:FS.caption,fontWeight:700,color:stateColor,padding:"3px 10px",borderRadius:12,background:stateColor===BATTERY?"#DCFCE7":"#F1F5F9"}}>{stateLabel}</span>}
+            {workLabel&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:500}}>{workLabel}</span>}
             <UpdatedChip time={d.inverter?.lastUpdateTime}/>
-            {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid #FDE68A`,background:"#FFFBEB",color:"#92400E",fontSize:10,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
+            {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid #FDE68A`,background:"#FFFBEB",color:"#92400E",fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
           </div>
         </div>
         {showSettings&&<SettingsModal inv={inv} onClose={()=>setShowSettings(false)}/>}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
-          <StatTile label="PV Today"       value={fmtE(pvToday)}   color={TEXT}/>
-          <StatTile label="PV Lifetime"    value={fmtE(pvLifetime)} color={TEXT}/>
-          {pvPeak>0&&<StatTile label="Peak Today"    value={fmt(pvPeak)}    color={SOLAR}/>}
+          <StatTile label="PV today"       value={fmtE(pvToday)}   color={TEXT}/>
+          <StatTile label="PV lifetime"    value={fmtE(pvLifetime)} color={TEXT}/>
+          {pvPeak>0&&<StatTile label="Peak today"    value={fmt(pvPeak)}    color={SOLAR}/>}
           {d.inverter?.selfConsumptionPercent!=null&&<StatTile label="Self-Consumed"  value={`${d.inverter.selfConsumptionPercent}%`} color={MUTED}/>}
           {d.inverter?.selfSufficiencyPercent!=null&&<StatTile label="Self-Sufficient" value={`${d.inverter.selfSufficiencyPercent}%`} color={MUTED}/>}
-          <StatTile label="Inverter Temp"  value={`${d.inverter?.temperature||0}°C`} color={TEXT}/>
+          <StatTile label="Inverter temperature"  value={`${d.inverter?.temperature||0}°C`} color={TEXT}/>
         </div>
       </div>
 
@@ -2364,19 +2316,19 @@ function InverterDetailPanel({inv, status}) {
       <SectionCard title="☀️ Solar">
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:mppts.length?12:0}}>
           <StatTile label="Total DC"   value={fmt(pvTotal,2)}  color={SOLAR}/>
-          {pvPeak>0&&<StatTile label="Peak Today" value={fmt(pvPeak)}     color={SOLAR}/>}
+          {pvPeak>0&&<StatTile label="Peak today" value={fmt(pvPeak)}     color={SOLAR}/>}
           <StatTile label="Today"      value={fmtE(pvToday)}   color={TEXT}/>
           <StatTile label="Lifetime"   value={fmtE(pvLifetime)} color={TEXT}/>
         </div>
         {mppts.length>0&&(
           <div>
-            <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Strings</div>
+            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Strings</div>
             {mppts.map((m,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<mppts.length-1?`1px solid ${BORDER}`:"none"}}>
-                <span style={{fontSize:11,fontWeight:600,color:MUTED}}>MPPT {i+1}</span>
+                <span style={{fontSize:FS.caption,fontWeight:600,color:MUTED}}>MPPT {i+1}</span>
                 {m.power>0
-                  ? <span style={{fontSize:11,color:SOLAR,fontVariantNumeric:"tabular-nums"}}>{(m.voltage||0).toFixed(0)} V · {(m.current||0).toFixed(2)} A · {fmt(m.power)}</span>
-                  : <span style={{fontSize:11,color:FAINT}}>—</span>}
+                  ? <span style={{fontSize:FS.caption,color:SOLAR,fontVariantNumeric:"tabular-nums"}}>{(m.voltage||0).toFixed(0)} V · {(m.current||0).toFixed(2)} A · {fmt(m.power)}</span>
+                  : <span style={{fontSize:FS.caption,color:MUTED}}>—</span>}
               </div>
             ))}
           </div>
@@ -2387,8 +2339,8 @@ function InverterDetailPanel({inv, status}) {
       <SectionCard title="🔋 Battery">
         <div style={{marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5}}>
-            <span style={{fontSize:12,fontWeight:600,color:MUTED}}>State of Charge{!bat.brand&&" (est.)"}</span>
-            <span style={{fontSize:22,fontWeight:800,color:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,fontVariantNumeric:"tabular-nums"}}>{(bat.soc||0).toFixed(0)}%</span>
+            <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>State of Charge{!bat.brand&&" (est.)"}</span>
+            <span style={{fontSize:FS.title2,fontWeight:800,color:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,fontVariantNumeric:"tabular-nums"}}>{(bat.soc||0).toFixed(0)}%</span>
           </div>
           <div style={{height:8,background:"#F1F5F9",borderRadius:4,overflow:"hidden",marginBottom:10}}>
             <div style={{width:`${bat.soc||0}%`,height:"100%",background:bat.soc>60?BATTERY:bat.soc>30?SOLAR:GRID_IN,borderRadius:4,transition:"width 0.5s"}}/>
@@ -2396,26 +2348,26 @@ function InverterDetailPanel({inv, status}) {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <StatTile label="Voltage"     value={`${(bat.voltage||0).toFixed(1)} V`} color={TEXT}/>
             <StatTile label="Current"     value={`${(bat.current||0).toFixed(1)} A`} color={TEXT}/>
-            <StatTile label="Charging"    value={fmt(bat.charge||0)}    color={(bat.charge||0)>20?BATTERY:FAINT}/>
-            <StatTile label="Discharging" value={fmt(bat.discharge||0)} color={(bat.discharge||0)>20?SOLAR:FAINT}/>
+            <StatTile label="Charging"    value={fmt(bat.charge||0)}    color={(bat.charge||0)>20?BATTERY:MUTED}/>
+            <StatTile label="Discharging" value={fmt(bat.discharge||0)} color={(bat.discharge||0)>20?SOLAR:MUTED}/>
             {bat.healthPercent>0&&<StatTile label="Health (SOH)" value={`${bat.healthPercent}%`} color={bat.healthPercent>80?BATTERY:bat.healthPercent>60?SOLAR:GRID_IN}/>}
             {bat.temperature>0&&<StatTile label="Temp" value={`${bat.temperature}°C`} color={bat.temperature>45?GRID_IN:bat.temperature>35?SOLAR:TEXT}/>}
           </div>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Energy</div>
+          <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Energy</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <StatTile label="Charged Today"    value={fmtE(bat.chargeIn?.today||0)}    color={BATTERY}/>
-            <StatTile label="Discharged Today" value={fmtE(bat.dischargeOut?.today||0)} color={SOLAR}/>
-            {(bat.chargeIn?.total||0)>0&&<StatTile label="Total Charged"    value={fmtE(bat.chargeIn.total)}    color={MUTED}/>}
-            {(bat.dischargeOut?.total||0)>0&&<StatTile label="Total Discharged" value={fmtE(bat.dischargeOut.total)} color={MUTED}/>}
+            <StatTile label="Charged today"    value={fmtE(bat.chargeIn?.today||0)}    color={BATTERY}/>
+            <StatTile label="Discharged today" value={fmtE(bat.dischargeOut?.today||0)} color={SOLAR}/>
+            {(bat.chargeIn?.total||0)>0&&<StatTile label="Total charged"    value={fmtE(bat.chargeIn.total)}    color={MUTED}/>}
+            {(bat.dischargeOut?.total||0)>0&&<StatTile label="Total discharged" value={fmtE(bat.dischargeOut.total)} color={MUTED}/>}
           </div>
         </div>
         {(bat.brand||bat.capacityAh>0)&&(
           <div style={{paddingTop:10,borderTop:`1px solid ${BORDER}`,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            {bat.brand&&<span style={{fontSize:11,color:MUTED,fontWeight:600}}>{bat.brand}</span>}
-            {bat.capacityAh>0&&<span style={{fontSize:11,color:FAINT}}>{bat.capacityAh} Ah</span>}
-            {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<span style={{fontSize:10,color:FAINT}}>BMS v{bat.bmsFWVer}</span>}
+            {bat.brand&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:600}}>{bat.brand}</span>}
+            {bat.capacityAh>0&&<span style={{fontSize:FS.caption,color:MUTED}}>{bat.capacityAh} Ah</span>}
+            {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<span style={{fontSize:FS.caption,color:MUTED}}>BMS v{bat.bmsFWVer}</span>}
           </div>
         )}
       </SectionCard>
@@ -2424,10 +2376,10 @@ function InverterDetailPanel({inv, status}) {
       <SectionCard title="⚡ Grid">
         <div style={{marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:14,fontWeight:700,color:isExporting?GRID_OUT:isImporting?GRID_IN:MUTED,fontVariantNumeric:"tabular-nums"}}>
+            <span style={{fontSize:FS.body,fontWeight:700,color:isExporting?GRID_OUT:isImporting?GRID_IN:MUTED,fontVariantNumeric:"tabular-nums"}}>
               {isExporting?"Exporting":isImporting?"Importing":"Balanced"} {fmt(Math.abs(gridNetW))}
             </span>
-            {gridFreq>0&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>{gridFreq.toFixed(2)} Hz</span>}
+            {gridFreq>0&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:"auto"}}>{gridFreq.toFixed(2)} Hz</span>}
           </div>
           {gridLines.filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
             <PhaseRow key={i} label={`L${i+1}`} line={l} exportWhenNegative/>
@@ -2436,8 +2388,8 @@ function InverterDetailPanel({inv, status}) {
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <StatTile label="Feed-In Today"  value={fmtE(d.grid?.sold?.today||0)}        color={GRID_OUT}/>
           <StatTile label="Total Feed-In"  value={fmtE(d.grid?.sold?.total||0)}        color={GRID_OUT}/>
-          <StatTile label="Imported Today" value={fmtE(d.grid?.consumption?.today||0)} color={GRID_IN}/>
-          <StatTile label="Total Imported" value={fmtE(d.grid?.consumption?.total||0)} color={GRID_IN}/>
+          <StatTile label="Imported today" value={fmtE(d.grid?.consumption?.today||0)} color={GRID_IN}/>
+          <StatTile label="Total imported" value={fmtE(d.grid?.consumption?.total||0)} color={GRID_IN}/>
         </div>
       </SectionCard>
 
@@ -2445,33 +2397,33 @@ function InverterDetailPanel({inv, status}) {
       <SectionCard title="🏠 Load">
         <div style={{marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:14,fontWeight:700,color:LOAD_C,fontVariantNumeric:"tabular-nums"}}>{fmt(loadW)}</span>
-            {loadFreq>0&&<span style={{fontSize:11,color:FAINT,marginLeft:"auto"}}>{loadFreq.toFixed(2)} Hz</span>}
+            <span style={{fontSize:FS.body,fontWeight:700,color:LOAD_C,fontVariantNumeric:"tabular-nums"}}>{fmt(loadW)}</span>
+            {loadFreq>0&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:"auto"}}>{loadFreq.toFixed(2)} Hz</span>}
           </div>
           {loadLines.filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
             <PhaseRow key={i} label={`L${i+1}`} line={l}/>
           ))}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <StatTile label="Consumed Today" value={fmtE(d.load?.power?.today||0)}    color={LOAD_C}/>
-          <StatTile label="Total Consumed" value={fmtE(d.load?.power?.total||0)}    color={MUTED}/>
+          <StatTile label="Consumed today" value={fmtE(d.load?.power?.today||0)}    color={LOAD_C}/>
+          <StatTile label="Total consumed" value={fmtE(d.load?.power?.total||0)}    color={MUTED}/>
         </div>
       </SectionCard>
 
       {/* Smart Ports — full width if any active */}
       {smartPorts.length>0&&(
-        <SectionCard title="🔌 Smart Ports" fullWidth>
+        <SectionCard title="🔌 Smart ports" fullWidth>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:16}}>
             {smartPorts.map(([key,port])=>{
               const portW=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
               return (
                 <div key={key}>
-                  <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Port {key}</div>
+                  <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Port {key}</div>
                   {(port.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
                     <PhaseRow key={i} label={`L${i+1}`} line={l}/>
                   ))}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginTop:8}}>
-                    <StatTile label="Live"  value={fmt(portW)}                     color={portW>0?BATTERY:FAINT}/>
+                    <StatTile label="Live"  value={fmt(portW)}                     color={portW>0?BATTERY:MUTED}/>
                     <StatTile label="Today" value={fmtE(port.power?.today||0)}     color={MUTED}/>
                     {(port.power?.total||0)>0&&<StatTile label="Lifetime" value={fmtE(port.power.total)} color={MUTED}/>}
                   </div>
@@ -2489,7 +2441,7 @@ function InverterDetailPanel({inv, status}) {
             {(d.gen.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
               <PhaseRow key={i} label={`L${i+1}`} line={l}/>
             ))}
-            {d.gen.frequency>0&&<span style={{fontSize:11,color:FAINT}}>{d.gen.frequency.toFixed(1)} Hz</span>}
+            {d.gen.frequency>0&&<span style={{fontSize:FS.caption,color:MUTED}}>{d.gen.frequency.toFixed(1)} Hz</span>}
           </div>
         </SectionCard>
       )}
@@ -2497,21 +2449,21 @@ function InverterDetailPanel({inv, status}) {
       {/* Inverter details / firmware — collapsible, full width */}
       <div style={{gridColumn:"1/-1",background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,overflow:"hidden",boxShadow:SHADOW_SM}}>
         <button onClick={()=>setShowInfo(x=>!x)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"transparent",border:"none",cursor:"pointer",fontFamily:SANS,textAlign:"left"}}>
-          <span style={{fontSize:12,fontWeight:600,color:MUTED}}>Inverter Details &amp; Firmware</span>
-          <span style={{fontSize:11,color:FAINT}}>{showInfo?"▲":"▼"}</span>
+          <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>Inverter Details &amp; Firmware</span>
+          <span style={{fontSize:FS.caption,color:MUTED}}>{showInfo?"▲":"▼"}</span>
         </button>
         {showInfo&&(
           <div style={{borderTop:`1px solid ${BORDER}`,padding:"12px 16px"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}}>
               {d.inverter?.model&&<StatTile label="Model"        value={d.inverter.model}       color={TEXT}/>}
               {stateLabel        &&<StatTile label="Status"       value={stateLabel}              color={stateColor}/>}
-              {workLabel         &&<StatTile label="Work Mode"    value={workLabel}               color={MUTED}/>}
+              {workLabel         &&<StatTile label="Work mode"    value={workLabel}               color={MUTED}/>}
               {d.inverter?.dspVer     &&<StatTile label="DSP"        value={d.inverter.dspVer}      color={MUTED}/>}
               {d.inverter?.slaveDspVer&&<StatTile label="Slave DSP"  value={d.inverter.slaveDspVer} color={MUTED}/>}
               {d.inverter?.csbVer     &&<StatTile label="CSB"         value={d.inverter.csbVer}      color={MUTED}/>}
-              {d.inverter?.wifiSignal!=null&&<StatTile label="WiFi Signal" value={`${d.inverter.wifiSignal}`} color={MUTED}/>}
-              {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<StatTile label="BMS FW"     value={bat.bmsFWVer}           color={MUTED}/>}
-              {d.inverter?.lastUpdateTime&&<StatTile label="Last Update" value={fmtAge(ageMin(d.inverter.lastUpdateTime))||d.inverter.lastUpdateTime.slice(11,16)} sub={d.inverter.lastUpdateTime.slice(0,16)} color={FAINT}/>}
+              {d.inverter?.wifiSignal!=null&&<StatTile label="Wi-Fi signal" value={`${d.inverter.wifiSignal}`} color={MUTED}/>}
+              {bat.bmsFWVer&&bat.bmsFWVer!=="0"&&<StatTile label="BMS firmware"     value={bat.bmsFWVer}           color={MUTED}/>}
+              {d.inverter?.lastUpdateTime&&<StatTile label="Last update" value={fmtAge(ageMin(d.inverter.lastUpdateTime))||d.inverter.lastUpdateTime.slice(11,16)} sub={d.inverter.lastUpdateTime.slice(0,16)} color={MUTED}/>}
             </div>
           </div>
         )}
@@ -2649,7 +2601,7 @@ function ChartCard({children, loading, minHeight=300}) {
   return (
     <div style={{background:CARD,borderRadius:16,padding:"16px 12px 12px",border:`1px solid ${BORDER}`,minHeight,display:"flex",flexDirection:"column",justifyContent:loading?"center":"flex-start",alignItems:loading?"center":"stretch",boxShadow:SHADOW_SM}}>
       {loading
-        ? <div style={{color:FAINT,fontSize:13,fontWeight:500}}>Loading…</div>
+        ? <div style={{color:MUTED,fontSize:FS.subhead,fontWeight:500}}>Loading…</div>
         : children}
     </div>
   );
@@ -2671,14 +2623,14 @@ function DayTooltip({active, payload, label}) {
   const prodTot = prod.reduce((s,p)=>s+(p.value||0),0);
   const consTot = cons.reduce((s,p)=>s+Math.abs(p.value||0),0);
   const Row = ({c,l,v,bold}) => (
-    <div style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:11,fontWeight:bold?700:500,padding:"1px 0"}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:FS.caption,fontWeight:bold?700:500,padding:"1px 0"}}>
       <span style={{color:bold?TEXT:MUTED,display:"flex",alignItems:"center",gap:5}}>{c&&<span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>}{l}</span>
       <span style={{color:bold?TEXT:MUTED,fontVariantNumeric:"tabular-nums"}}>{v}</span>
     </div>
   );
   return (
     <div style={{...TOOLTIP_S, padding:"8px 10px", minWidth:150}}>
-      <div style={{color:MUTED,fontSize:10,marginBottom:5}}>{label}</div>
+      <div style={{color:MUTED,fontSize:FS.caption,marginBottom:5}}>{label}</div>
       {prod.length>0&&<>
         {prod.map(p=><Row key={p.dataKey} c={p.color} l={p.name} v={fmt(p.value||0)}/>)}
         {prod.length>1&&<Row l="Total Solar" v={fmt(prodTot)} bold/>}
@@ -2747,13 +2699,13 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Day</h2>
-          <div style={{fontSize:11,color:FAINT}}>{mpptActive?"Per-MPPT production · drag to zoom":"Power · drag the bar below to zoom"}</div>
+          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>Day</h2>
+          <div style={{fontSize:FS.caption,color:MUTED}}>{mpptActive?"Per-MPPT production · drag to zoom":"Power · drag the bar below to zoom"}</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <button onClick={dayNext} disabled={dayAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:dayAtMax?BG:CARD,color:dayAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:dayAtMax?"default":"pointer",boxShadow:dayAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+          <button onClick={dayPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <input type="date" value={date} onChange={e=>onDateChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <button onClick={dayNext} disabled={dayAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:dayAtMax?BG:CARD,color:dayAtMax?MUTED:TEXT,fontSize:FS.callout,lineHeight:1,cursor:dayAtMax?"default":"pointer",boxShadow:dayAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
         </div>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
@@ -2761,9 +2713,9 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-            <XAxis dataKey="time" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={44} tickFormatter={t=>typeof t==="string"?t.slice(0,5):t}/>
-            <YAxis yAxisId="power" domain={powerDomain} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
-            <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
+            <XAxis dataKey="time" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={44} tickFormatter={t=>typeof t==="string"?t.slice(0,5):t}/>
+            <YAxis yAxisId="power" domain={powerDomain} tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} width={34}/>
+            <YAxis yAxisId="soc" orientation="right" domain={[0,100]} tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}`}/>
             <ReferenceLine yAxisId="power" y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip content={<DayTooltip/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
             {showProduced&&prodSeries.map((s)=>(
@@ -2782,7 +2734,7 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
       </ChartCard>
       {mpptHint&&(
         <div style={{display:"flex",justifyContent:"center",marginTop:10}}>
-          <div style={{fontSize:11.5,fontWeight:500,color:MUTED,background:BG,border:`1px solid ${BORDER}`,borderRadius:20,padding:"5px 12px"}}>
+          <div style={{fontSize:FS.caption,fontWeight:500,color:MUTED,background:BG,border:`1px solid ${BORDER}`,borderRadius:20,padding:"5px 12px"}}>
             {mpptActive ? "📊 Showing per-MPPT (string) production for this inverter" : "💡 Select a single inverter to see production broken out per MPPT string"}
           </div>
         </div>
@@ -2792,7 +2744,7 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
 }
 
 function LegendSwatch({color,label}){
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:MUTED}}><span style={{width:14,height:3,borderRadius:2,background:color}}/>{label}</span>;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:FS.caption,fontWeight:600,color:MUTED}}><span style={{width:14,height:3,borderRadius:2,background:color}}/>{label}</span>;
 }
 
 // Explorer — chart any raw inverter parameter(s) over a date range (up to a week) at 5-min
@@ -2816,7 +2768,7 @@ function ExplorerTooltip({active, payload, label, byKey}){
     <div style={TOOLTIP_S}>
       <div style={{fontWeight:700,color:TEXT,marginBottom:6}}>🕐 {label}</div>
       {payload.map(p=>{ const m=byKey[p.dataKey]; return (
-        <div key={p.dataKey} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:12,marginBottom:2}}>
+        <div key={p.dataKey} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:FS.footnote,marginBottom:2}}>
           <span style={{color:p.color,fontWeight:600}}>{m?.label||p.dataKey}</span>
           <span style={{color:TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtMetric(p.value, m?.unit||"")}</span>
         </div>
@@ -2863,27 +2815,27 @@ function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Explorer</h2>
-          <div style={{fontSize:11,color:FAINT}}>{label?`${label} · `:""}Raw inverter parameters · 5-min resolution · up to 7 days</div>
+          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>Explorer</h2>
+          <div style={{fontSize:FS.caption,color:MUTED}}>{label?`${label} · `:""}Raw inverter parameters · 5-min resolution · up to 7 days</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          <button onClick={onPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <input type="date" value={start} max={today} onChange={e=>onStart(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <span style={{fontSize:12,color:FAINT}}>to</span>
-          <input type="date" value={end} max={today} onChange={e=>onEnd(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
-          <button onClick={onNext} disabled={nextDisabled} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:nextDisabled?BG:CARD,color:nextDisabled?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:nextDisabled?"default":"pointer",boxShadow:nextDisabled?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+          <button onClick={onPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <input type="date" value={start} max={today} onChange={e=>onStart(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <span style={{fontSize:FS.footnote,color:MUTED}}>to</span>
+          <input type="date" value={end} max={today} onChange={e=>onEnd(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}/>
+          <button onClick={onNext} disabled={nextDisabled} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:nextDisabled?BG:CARD,color:nextDisabled?MUTED:TEXT,fontSize:FS.callout,lineHeight:1,cursor:nextDisabled?"default":"pointer",boxShadow:nextDisabled?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
         </div>
       </div>
       {/* Parameter picker — grouped chips */}
       {!loading && metrics.length>0 && (
         <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"10px 12px",marginBottom:12,boxShadow:SHADOW_SM}}>
           <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:6}}>
-            <button onClick={()=>setSel(metrics.map(m=>m.key))} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Select all</button>
-            <button onClick={()=>setSel([])} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear</button>
+            <button onClick={()=>setSel(metrics.map(m=>m.key))} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Select all</button>
+            <button onClick={()=>setSel([])} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear</button>
           </div>
           {groups.map(g=>(
             <div key={g} style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:6}}>
-              <span style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",minWidth:74}}>{g}</span>
+              <span style={{fontSize:FS.caption,color:MUTED,fontWeight:700,minWidth:74}}>{g}</span>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {metrics.filter(m=>m.group===g).map(m=>{
                   const on = sel.includes(m.key); const c = colorOf(m.key);
@@ -2891,7 +2843,7 @@ function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled
                     <button key={m.key} onClick={()=>toggle(m.key)} style={{
                       display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:20,cursor:"pointer",
                       border:`1px solid ${on?c:BORDER}`, background:on?c:"transparent", color:on?"#fff":MUTED,
-                      fontSize:11,fontWeight:600,fontFamily:SANS,WebkitTapHighlightColor:"transparent",
+                      fontSize:FS.caption,fontWeight:600,fontFamily:SANS,WebkitTapHighlightColor:"transparent",
                     }}>
                       <span style={{width:7,height:7,borderRadius:"50%",background:on?"#fff":c,display:"inline-block"}}/>
                       {m.label}
@@ -2906,22 +2858,22 @@ function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled
       {loading
         ? <ChartCard loading minHeight={340}/>
         : metrics.length===0
-          ? <ChartCard loading={false} minHeight={200}><div style={{color:FAINT,fontSize:13,textAlign:"center",padding:"40px 0"}}>No 5-minute data for this range.</div></ChartCard>
+          ? <ChartCard loading={false} minHeight={200}><div style={{color:MUTED,fontSize:FS.subhead,textAlign:"center",padding:"40px 0"}}>No 5-minute data for this range.</div></ChartCard>
           : pairs.length===0
-            ? <ChartCard loading={false} minHeight={160}><div style={{color:FAINT,fontSize:13,textAlign:"center",padding:"32px 0"}}>Select one or more parameters above to chart.</div></ChartCard>
+            ? <ChartCard loading={false} minHeight={160}><div style={{color:MUTED,fontSize:FS.subhead,textAlign:"center",padding:"32px 0"}}>Select one or more parameters above to chart.</div></ChartCard>
             : pairs.map((pair, pi)=>{
                 const [lu, ru] = pair;
                 const keys = sel.filter(k=>{ const u=byKey[k]?.unit; return u===lu || u===ru; });
                 return (
                   <div key={pi} style={{marginBottom:14}}>
                     <ChartCard loading={false} minHeight={300}>
-                      <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 4px 6px"}}>{lu}{ru?` · ${ru}`:""}</div>
+                      <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,padding:"0 4px 6px"}}>{lu}{ru?` · ${ru}`:""}</div>
                       <ResponsiveContainer width="100%" height={260}>
                         <ComposedChart data={data} margin={{top:4,right:8,left:0,bottom:0}}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                          <XAxis dataKey="lbl" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={multi?70:44}/>
-                          <YAxis yAxisId="L" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(lu)} domain={["auto","auto"]} label={{value:lu,angle:-90,position:"insideLeft",fill:FAINT,fontSize:10}}/>
-                          {ru && <YAxis yAxisId="R" orientation="right" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(ru)} domain={["auto","auto"]} label={{value:ru,angle:90,position:"insideRight",fill:FAINT,fontSize:10}}/>}
+                          <XAxis dataKey="lbl" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={multi?70:44}/>
+                          <YAxis yAxisId="L" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(lu)} domain={["auto","auto"]} label={{value:lu,angle:-90,position:"insideLeft",fill:MUTED,fontSize:10}}/>
+                          {ru && <YAxis yAxisId="R" orientation="right" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={40} tickFormatter={axisFmt(ru)} domain={["auto","auto"]} label={{value:ru,angle:90,position:"insideRight",fill:MUTED,fontSize:10}}/>}
                           <Tooltip content={(props)=><ExplorerTooltip {...props} byKey={byKey}/>} cursor={{stroke:FAINT,strokeDasharray:"3 3"}}/>
                           {keys.map(k=>(
                             <Line key={k} yAxisId={byKey[k].unit===lu?"L":"R"} type="monotone" dataKey={k} stroke={colorOf(k)} strokeWidth={1.6} dot={false} name={k} isAnimationActive={false} connectNulls/>
@@ -2970,27 +2922,27 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
   const moAtMax = month >= thisMonth;
   const moPrev = () => { const [y,m]=month.split('-').map(Number); onMonthChange(`${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,'0')}`); };
   const moNext = () => { if(!moAtMax){const [y,m]=month.split('-').map(Number); onMonthChange(`${m===12?y+1:y}-${String(m===12?1:m+1).padStart(2,'0')}`);} };
-  const navBtn = {padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS};
-  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 8px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM};
+  const navBtn = {padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS};
+  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 8px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM};
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>{rangeMode?"Custom Range":"Month"}</h2>
-          <div style={{fontSize:11,color:FAINT}}>{rangeMode?"Billing-period totals":"Daily totals"}</div>
+          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>{rangeMode?"Custom Range":"Month"}</h2>
+          <div style={{fontSize:FS.caption,color:MUTED}}>{rangeMode?"Billing-period totals":"Daily totals"}</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           {rangeMode ? (
             <>
               <input type="date" value={rangeStart} max={rangeEnd} onChange={e=>onRangeStart(e.target.value)} style={inputS}/>
-              <span style={{fontSize:12,color:FAINT}}>→</span>
+              <span style={{fontSize:FS.footnote,color:MUTED}}>→</span>
               <input type="date" value={rangeEnd} max={today} onChange={e=>onRangeEnd(e.target.value)} style={inputS}/>
             </>
           ) : (
             <>
               <button onClick={moPrev} style={navBtn}>‹</button>
               <input type="month" value={month} onChange={e=>onMonthChange(e.target.value)} style={inputS}/>
-              <button onClick={moNext} disabled={moAtMax} style={{...navBtn,background:moAtMax?BG:CARD,color:moAtMax?FAINT:TEXT,cursor:moAtMax?"default":"pointer",boxShadow:moAtMax?"none":SHADOW_SM}}>›</button>
+              <button onClick={moNext} disabled={moAtMax} style={{...navBtn,background:moAtMax?BG:CARD,color:moAtMax?MUTED:TEXT,cursor:moAtMax?"default":"pointer",boxShadow:moAtMax?"none":SHADOW_SM}}>›</button>
             </>
           )}
           <button onClick={()=>onModeChange&&onModeChange(rangeMode?"month":"range")} style={{...inputS,fontWeight:700,color:SOLAR,border:`1px solid ${SOLAR}`,background:"#FFFBEB"}}>{rangeMode?"Monthly":"Custom"}</button>
@@ -3001,8 +2953,8 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-            <XAxis dataKey="day" tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={rangeMode?22:6}/>
-            <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
+            <XAxis dataKey="day" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={rangeMode?22:6}/>
+            <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={32}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toFixed(1)} kWh`,n]} labelFormatter={l=>rangeMode?l:`Day ${l}`} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
@@ -3052,15 +3004,15 @@ function YearChart({year, onYearChange, data, loading}) {
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:TEXT}}>Year</h2>
-          <div style={{fontSize:11,color:FAINT}}>Monthly totals</div>
+          <h2 style={{margin:0,fontSize:FS.callout,fontWeight:700,color:TEXT}}>Year</h2>
+          <div style={{fontSize:FS.caption,color:MUTED}}>Monthly totals</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={yrPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:16,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
-          <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:12,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>
+          <button onClick={yrPrev} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.callout,lineHeight:1,cursor:"pointer",boxShadow:SHADOW_SM,fontFamily:SANS}}>‹</button>
+          <select value={year} onChange={e=>onYearChange(e.target.value)} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:8,color:TEXT,padding:"7px 10px",fontSize:FS.footnote,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>
             {["2024","2025","2026","2027"].map(y=><option key={y} value={y}>{y}</option>)}
           </select>
-          <button onClick={yrNext} disabled={yrAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:yrAtMax?BG:CARD,color:yrAtMax?FAINT:TEXT,fontSize:16,lineHeight:1,cursor:yrAtMax?"default":"pointer",boxShadow:yrAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
+          <button onClick={yrNext} disabled={yrAtMax} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:yrAtMax?BG:CARD,color:yrAtMax?MUTED:TEXT,fontSize:FS.callout,lineHeight:1,cursor:yrAtMax?"default":"pointer",boxShadow:yrAtMax?"none":SHADOW_SM,fontFamily:SANS}}>›</button>
         </div>
       </div>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
@@ -3068,8 +3020,8 @@ function YearChart({year, onYearChange, data, loading}) {
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-            <XAxis dataKey="month" tick={{fill:FAINT,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false}/>
-            <YAxis tick={{fill:FAINT,fontSize:10,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
+            <XAxis dataKey="month" tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:MUTED,fontSize:11,fontFamily:SANS}} tickLine={false} axisLine={false} width={32} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
             <ReferenceLine y={0} stroke={BORDER} strokeWidth={1}/>
             <Tooltip contentStyle={TOOLTIP_S} formatter={(v,n)=>[`${Math.abs(v).toLocaleString()} kWh`,n]} labelStyle={{color:MUTED,marginBottom:4}} cursor={false}/>
             {showProduced&&<Bar dataKey="productionPos" fill={CHART_PROD} fillOpacity={0.85} name="Solar" stackId="a" activeBar={false}/>}
@@ -3086,14 +3038,6 @@ function YearChart({year, onYearChange, data, loading}) {
   );
 }
 
-function Legend({color, label}) {
-  return (
-    <div style={{display:"flex",alignItems:"center",gap:5}}>
-      <span style={{width:10,height:10,borderRadius:2,background:color,display:"inline-block"}}/>
-      <span style={{fontSize:11,color:MUTED,fontWeight:500}}>{label}</span>
-    </div>
-  );
-}
 
 function SeriesToggle({series}) {
   return (
@@ -3104,7 +3048,7 @@ function SeriesToggle({series}) {
           <div style={{position:"relative",width:40,height:22,borderRadius:11,background:s.active?s.color:"#D1D5DB",transition:"background 0.2s",flexShrink:0}}>
             <div style={{position:"absolute",top:2,left:s.active?20:2,width:18,height:18,borderRadius:9,background:"#FFFFFF",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left 0.2s"}}/>
           </div>
-          <span style={{fontSize:10,color:s.active?MUTED:FAINT,fontWeight:500,textAlign:"center",lineHeight:1.3,whiteSpace:"pre-line"}}>{s.label}</span>
+          <span style={{fontSize:FS.caption,color:s.active?MUTED:MUTED,fontWeight:500,textAlign:"center",lineHeight:1.3,whiteSpace:"pre-line"}}>{s.label}</span>
         </button>
       ))}
     </div>
@@ -3368,8 +3312,8 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     setSwBusy(false);
   };
   const sn = inverters[0]?.sn || "";
-  const darkInput = {background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"6px 8px",fontFamily:SANS,fontSize:12};
-  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"6px 8px",fontFamily:SANS,fontSize:12};
+  const darkInput = {background:"#292524",border:"1px solid #44403C",borderRadius:6,color:"#FAFAF9",padding:"6px 8px",fontFamily:SANS,fontSize:FS.footnote};
+  const inputS = {background:CARD,border:`1px solid ${BORDER}`,borderRadius:6,color:TEXT,padding:"6px 8px",fontFamily:SANS,fontSize:FS.footnote};
 
   // Per-inverter energy registers for the CURRENT site (from the live status feed). A "stuck" feed-in
   // register = exporting power right now (grid net < 0) but Export Today ≈ 0 — the Dotsikas symptom.
@@ -3464,57 +3408,57 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   ];
   const fmtTs = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 
-  const Th = ({children, a="right"}) => <th style={{textAlign:a,padding:"4px 8px",fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap"}}>{children}</th>;
-  const Td = ({children, a="right", c=TEXT, b=false}) => <td style={{textAlign:a,padding:"4px 8px",fontSize:12,color:c,fontWeight:b?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{children}</td>;
+  const Th = ({children, a="right"}) => <th style={{textAlign:a,padding:"4px 8px",fontSize:FS.caption,color:MUTED,fontWeight:700,whiteSpace:"nowrap"}}>{children}</th>;
+  const Td = ({children, a="right", c=TEXT, b=false}) => <td style={{textAlign:a,padding:"4px 8px",fontSize:FS.footnote,color:c,fontWeight:b?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{children}</td>;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
-      <div style={{fontSize:11,color:FAINT,fontFamily:"monospace",textAlign:"right"}}>build {BUILD}</div>
+      <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace",textAlign:"right"}}>build {BUILD}</div>
 
       {/* ── Fleet Overview ────────────────────────────────────────────────── */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Fleet Overview</div>
-            <div style={{fontSize:11,color:FAINT}}>
+            <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Fleet Overview</div>
+            <div style={{fontSize:FS.caption,color:MUTED}}>
               {fleetLastRefresh ? `Updated ${fleetLastRefresh.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}` : "Loading…"}
               {fleetBusy && " · refreshing…"}
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}>
+            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:FS.caption,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={fleetAllUsers} onChange={e=>{setFleetAllUsers(e.target.checked);loadFleet(e.target.checked);}} style={{cursor:"pointer"}}/>
               Include all users' sites
             </label>
             <button onClick={()=>loadFleet(fleetAllUsers)} disabled={fleetBusy}
-              style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:11,fontWeight:700,fontFamily:SANS,cursor:fleetBusy?"default":"pointer"}}>
+              style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:fleetBusy?"default":"pointer"}}>
               ↻ Refresh
             </button>
           </div>
         </div>
-        {fleetErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:8}}>{fleetErr}</div>}
-        {!fleetData && !fleetErr && <div style={{fontSize:12,color:FAINT}}>Loading fleet data…</div>}
-        {fleetData && fleetData.length===0 && <div style={{fontSize:12,color:FAINT}}>No sites found.</div>}
+        {fleetErr && <div style={{color:GRID_IN,fontSize:FS.footnote,marginBottom:8}}>{fleetErr}</div>}
+        {!fleetData && !fleetErr && <div style={{fontSize:FS.footnote,color:MUTED}}>Loading fleet data…</div>}
+        {fleetData && fleetData.length===0 && <div style={{fontSize:FS.footnote,color:MUTED}}>No sites found.</div>}
         {fleetData && fleetData.length>0 && (() => {
           const totalPvNow   = fleetRows.reduce((s,m)=>s+(m.pv||0),0);
           const totalPvToday = fleetRows.reduce((s,m)=>s+(m.pvToday||0),0);
           const totalLoad    = fleetRows.reduce((s,m)=>s+(m.load||0),0);
           const onlineCnt    = fleetRows.filter(m=>m.status==="online").length;
-          const thStyle={textAlign:"right",padding:"5px 8px",fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap",cursor:"pointer",userSelect:"none"};
-          const tdStyle=(a="right",c=TEXT,b=false)=>({textAlign:a,padding:"5px 8px",fontSize:12,color:c,fontWeight:b?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"});
+          const thStyle={textAlign:"right",padding:"5px 8px",fontSize:FS.caption,color:MUTED,fontWeight:700,whiteSpace:"nowrap",cursor:"pointer",userSelect:"none"};
+          const tdStyle=(a="right",c=TEXT,b=false)=>({textAlign:a,padding:"5px 8px",fontSize:FS.footnote,color:c,fontWeight:b?700:500,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"});
           return <div style={{overflowX:"auto"}}>
             {/* KPI summary row */}
             <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10}}>
               {[
                 {label:"Sites", val:fleetRows.length, c:TEXT},
                 {label:"Online", val:`${onlineCnt}/${fleetRows.length}`, c:BATTERY},
-                {label:"Fleet PV Now", val:fmt(totalPvNow), c:SOLAR},
-                {label:"Fleet Load", val:fmt(totalLoad), c:LOAD_C},
-                {label:"PV Today", val:fmtE(totalPvToday), c:CHART_PROD},
+                {label:"Fleet PV now", val:fmt(totalPvNow), c:SOLAR},
+                {label:"Fleet load", val:fmt(totalLoad), c:LOAD_C},
+                {label:"PV today", val:fmtE(totalPvToday), c:CHART_PROD},
               ].map(({label,val,c})=>(
                 <div key={label} style={{background:BG,borderRadius:10,padding:"6px 12px",minWidth:90}}>
-                  <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:FAINT,marginBottom:2}}>{label}</div>
-                  <div style={{fontSize:14,fontWeight:700,color:c}}>{val}</div>
+                  <div style={{fontSize:FS.caption,fontWeight:700,color:MUTED,marginBottom:2}}>{label}</div>
+                  <div style={{fontSize:FS.body,fontWeight:700,color:c}}>{val}</div>
                 </div>
               ))}
             </div>
@@ -3541,8 +3485,8 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                   return <tr key={i} style={{borderTop:`1px solid ${BORDER}`}}>
                     <td style={tdStyle("left",TEXT,true)}>{m.name}</td>
                     <td style={{...tdStyle("center"),padding:"5px 8px"}}>
-                      <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:sm.bg,color:sm.c}}>{sm.label}</span>
-                      {m.total>1&&<span style={{fontSize:9,color:FAINT,marginLeft:4}}>{m.invOnline??0}/{m.total}</span>}
+                      <span style={{display:"inline-block",padding:"2px 8px",borderRadius:10,fontSize:FS.caption,fontWeight:700,background:sm.bg,color:sm.c}}>{sm.label}</span>
+                      {m.total>1&&<span style={{fontSize:FS.caption,color:MUTED,marginLeft:4}}>{m.invOnline??0}/{m.total}</span>}
                     </td>
                     <td style={tdStyle("right",SOLAR)}>{m.pv!=null?fmt(m.pv):"—"}</td>
                     <td style={tdStyle("right",LOAD_C)}>{m.load!=null?fmt(m.load):"—"}</td>
@@ -3552,12 +3496,12 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                     <td style={tdStyle("right",CHART_CONS)}>{m.consumedToday!=null?fmtE(m.consumedToday):"—"}</td>
                     <td style={tdStyle("right",GRID_OUT)}>{m.expToday!=null?fmtE(m.expToday):"—"}</td>
                     <td style={tdStyle("right",FAINT)}>{fmtUpdated(m.updated)}</td>
-                    {fleetAllUsers&&<td style={tdStyle("left",MUTED)}>{m.ownerEmail||<span style={{color:FAINT}}>you</span>}</td>}
+                    {fleetAllUsers&&<td style={tdStyle("left",MUTED)}>{m.ownerEmail||<span style={{color:MUTED}}>you</span>}</td>}
                   </tr>;
                 })}
               </tbody>
             </table>
-            <div style={{fontSize:10,color:FAINT,marginTop:8}}>PV Now / Home from live flow (≤5s); SOC / PV Today / Consumed / Exported from 5-min report. Auto-refreshes every 2 min. Click a column header to sort.</div>
+            <div style={{fontSize:FS.caption,color:MUTED,marginTop:8}}>PV Now / Home from live flow (≤5s); SOC / PV Today / Consumed / Exported from 5-min report. Auto-refreshes every 2 min. Click a column header to sort.</div>
           </div>;
         })()}
       </div>
@@ -3565,12 +3509,12 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
       {/* Users — all app accounts + linked Midnite handles + password reset */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
-          <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Users</div>
-          <button onClick={loadUsers} style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:11,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>↻ Refresh</button>
+          <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Users</div>
+          <button onClick={loadUsers} style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>↻ Refresh</button>
         </div>
-        {usersErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:8}}>{usersErr}</div>}
-        {!users&&!usersErr && <div style={{fontSize:12,color:FAINT}}>Loading…</div>}
-        {users?.length===0 && <div style={{fontSize:12,color:FAINT}}>No users yet.</div>}
+        {usersErr && <div style={{color:GRID_IN,fontSize:FS.footnote,marginBottom:8}}>{usersErr}</div>}
+        {!users&&!usersErr && <div style={{fontSize:FS.footnote,color:MUTED}}>Loading…</div>}
+        {users?.length===0 && <div style={{fontSize:FS.footnote,color:MUTED}}>No users yet.</div>}
         {users?.length>0 && <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr>
@@ -3585,27 +3529,27 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
               {(users||[]).flatMap(u=>{
                 const rs=resetSent[u.email];
                 const isLinking=linkTarget===u.id;
-                const miniBtn=(label,onClick,bg,fg,disabled)=><button onClick={onClick} disabled={disabled} style={{padding:"3px 8px",borderRadius:6,border:"none",background:bg,color:fg,fontSize:10,fontWeight:700,fontFamily:SANS,cursor:disabled?"default":"pointer",whiteSpace:"nowrap"}}>{label}</button>;
+                const miniBtn=(label,onClick,bg,fg,disabled)=><button onClick={onClick} disabled={disabled} style={{padding:"3px 8px",borderRadius:6,border:"none",background:bg,color:fg,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:disabled?"default":"pointer",whiteSpace:"nowrap"}}>{label}</button>;
                 const rows=[<tr key={u.id} style={{borderTop:`1px solid ${BORDER}`}}>
                   <Td a="left">{u.email}</Td>
-                  <Td a="left">{u.profile?.display_name||<span style={{color:FAINT}}>—</span>}</Td>
-                  <Td a="center"><span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:10,background:u.profile?.role==="admin"?"#FEF3C7":BORDER,color:u.profile?.role==="admin"?SOLAR:MUTED}}>{u.profile?.role||"user"}</span></Td>
+                  <Td a="left">{u.profile?.display_name||<span style={{color:MUTED}}>—</span>}</Td>
+                  <Td a="center"><span style={{fontSize:FS.caption,fontWeight:700,padding:"2px 6px",borderRadius:10,background:u.profile?.role==="admin"?"#FEF3C7":BORDER,color:u.profile?.role==="admin"?SOLAR:MUTED}}>{u.profile?.role||"user"}</span></Td>
                   <Td a="left">{u.accounts.length
                     ? <span style={{display:"flex",alignItems:"center",gap:6}}><span>{u.accounts.map(a=>a.midnite_username).join(", ")}</span>{miniBtn(unlinkBusy[u.email]?"…":"Unlink",()=>doUnlink(u.email),unlinkBusy[u.email]?BORDER:"#FEE2E2",unlinkBusy[u.email]?MUTED:GRID_IN,!!unlinkBusy[u.email])}</span>
                     : isLinking
-                      ? <span style={{color:SOLAR,fontSize:10,fontWeight:700}}>Linking…</span>
-                      : <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:FAINT}}>not linked</span>{miniBtn("Link Midnite",()=>openLink(u.id),"#0EA5E9","#fff",false)}</span>}</Td>
-                  <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:FAINT}}>never</span>}</Td>
+                      ? <span style={{color:SOLAR,fontSize:FS.caption,fontWeight:700}}>Linking…</span>
+                      : <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:MUTED}}>not linked</span>{miniBtn("Link Midnite",()=>openLink(u.id),"#0EA5E9","#fff",false)}</span>}</Td>
+                  <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:MUTED}}>never</span>}</Td>
                   <Td a="center">{miniBtn(rs==="sending"?"…":rs==="ok"?"✓ Sent":rs?.startsWith("err")?"Failed":"Send reset",()=>sendReset(u.email),rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",rs==="sending")}</Td>
                 </tr>];
                 if(isLinking) rows.push(<tr key={`link-${u.id}`} style={{borderTop:`1px solid ${BORDER}`}}>
                   <td colSpan={6} style={{padding:"10px 12px",background:"#FAFAF9"}}>
                     <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                      <input value={linkUser} onChange={e=>setLinkUser(e.target.value)} placeholder="Midnite username" autoFocus style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:12,fontFamily:SANS,color:TEXT,background:CARD,outline:"none",width:160}}/>
-                      <input type="password" value={linkPw} onChange={e=>setLinkPw(e.target.value)} placeholder="Midnite password" style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:12,fontFamily:SANS,color:TEXT,background:CARD,outline:"none",width:160}}/>
+                      <input value={linkUser} onChange={e=>setLinkUser(e.target.value)} placeholder="Midnite username" autoFocus style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:FS.footnote,fontFamily:SANS,color:TEXT,background:CARD,width:160}}/>
+                      <input type="password" value={linkPw} onChange={e=>setLinkPw(e.target.value)} placeholder="Midnite password" style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:FS.footnote,fontFamily:SANS,color:TEXT,background:CARD,width:160}}/>
                       {miniBtn(linkBusy?"Linking…":"Link account",()=>doLink(u.email),SOLAR,"#fff",linkBusy)}
                       {miniBtn("Cancel",()=>setLinkTarget(null),BORDER,MUTED,false)}
-                      {linkErr&&<span style={{color:GRID_IN,fontSize:11}}>{linkErr}</span>}
+                      {linkErr&&<span style={{color:GRID_IN,fontSize:FS.caption}}>{linkErr}</span>}
                     </div>
                   </td>
                 </tr>);
@@ -3620,18 +3564,18 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Energy Registers — {site?.name||"site"}</div>
-            <div style={{fontSize:11,color:FAINT}}>⚠ = exporting now but Export-Today ≈ 0 (stuck feed-in counter)</div>
+            <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Energy Registers — {site?.name||"site"}</div>
+            <div style={{fontSize:FS.caption,color:MUTED}}>⚠ = exporting now but Export-Today ≈ 0 (stuck feed-in counter)</div>
           </div>
-          <button onClick={runScan} disabled={scanning} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#0EA5E9",color:"#fff",fontSize:11,fontWeight:700,fontFamily:SANS,cursor:scanning?"default":"pointer"}}>{scanning?"Scanning…":"Scan all sites"}</button>
+          <button onClick={runScan} disabled={scanning} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#0EA5E9",color:"#fff",fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:scanning?"default":"pointer"}}>{scanning?"Scanning…":"Scan all sites"}</button>
         </div>
         {regs.length===0
-          ? <div style={{fontSize:12,color:FAINT}}>No live inverter data yet (open the Live tab once).</div>
+          ? <div style={{fontSize:FS.footnote,color:MUTED}}>No live inverter data yet (open the Live tab once).</div>
           : <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr>
               <Th a="left">Inverter</Th><Th>Grid now</Th><Th>Export today</Th><Th>Export total</Th><Th>Import today</Th><Th>PV today</Th><Th>PV total</Th><Th a="center">Flag</Th>
             </tr></thead><tbody>
               {regs.map(r=>(<tr key={r.sn} style={{borderTop:`1px solid ${BORDER}`}}>
-                <Td a="left" b>{r.label} <span style={{color:FAINT,fontWeight:400,fontFamily:"monospace",fontSize:10}}>{r.sn.slice(-8)}</span></Td>
+                <Td a="left" b>{r.label} <span style={{color:MUTED,fontWeight:400,fontFamily:"monospace",fontSize:FS.caption}}>{r.sn.slice(-8)}</span></Td>
                 <Td c={r.netW<-50?GRID_OUT:r.netW>50?GRID_IN:MUTED}>{fmt(Math.abs(r.netW))}{r.netW<-50?" ⤴":r.netW>50?" ⤵":""}</Td>
                 <Td c={r.stuck?GRID_IN:TEXT} b={r.stuck}>{fmtE(r.expToday)}</Td>
                 <Td c={MUTED}>{fmtE(r.expTotal)}</Td>
@@ -3642,8 +3586,8 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
               </tr>))}
             </tbody></table></div>}
         {scan && <div style={{marginTop:12,borderTop:`1px solid ${BORDER}`,paddingTop:10}}>
-          <div style={{fontSize:11,fontWeight:700,color:MUTED,marginBottom:6}}>FLEET SCAN ({scan.length} sites){scanning?" …":""}</div>
-          {scan.map((s,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12,padding:"3px 0"}}>
+          <div style={{fontSize:FS.caption,fontWeight:700,color:MUTED,marginBottom:6}}>FLEET SCAN ({scan.length} sites){scanning?" …":""}</div>
+          {scan.map((s,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:FS.footnote,padding:"3px 0"}}>
             <span style={{color:s.stuck?GRID_IN:TEXT,fontWeight:s.stuck?700:500}}>{s.stuck?"⚠ ":s.err?"⛔ ":"✓ "}{s.name}</span>
             <span style={{color:MUTED,fontVariantNumeric:"tabular-nums"}}>{s.err?s.err:`${s.exportingNow?"exporting":"idle"} · today ${(s.expTodayKwh||0).toFixed(1)} kWh`}</span>
           </div>))}
@@ -3652,25 +3596,25 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Access Log</div>
-            <div style={{fontSize:11,color:FAINT}}>{persistent? "Persistent (Vercel KV)" : "In-memory — recent activity only; add a KV store to persist across restarts"}</div>
+            <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Access Log</div>
+            <div style={{fontSize:FS.caption,color:MUTED}}>{persistent? "Persistent (Vercel KV)" : "In-memory — recent activity only; add a KV store to persist across restarts"}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",userSelect:"none"}}>
+            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:FS.caption,color:MUTED,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",userSelect:"none"}}>
               <input type="checkbox" checked={hideSelf} onChange={e=>setHideSelf(e.target.checked)} style={{cursor:"pointer"}}/>
               Hide my own events
             </label>
-            <button onClick={loadLog} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Refresh</button>
+            <button onClick={loadLog} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Refresh</button>
           </div>
         </div>
-        {logErr && <div style={{color:GRID_IN,fontSize:12}}>{logErr}</div>}
-        {shownLog && shownLog.length===0 && !logErr && <div style={{fontSize:12,color:FAINT}}>{log&&log.length>0&&hideSelf?"No events (your own are hidden).":"No events yet."}</div>}
+        {logErr && <div style={{color:GRID_IN,fontSize:FS.footnote}}>{logErr}</div>}
+        {shownLog && shownLog.length===0 && !logErr && <div style={{fontSize:FS.footnote,color:MUTED}}>{log&&log.length>0&&hideSelf?"No events (your own are hidden).":"No events yet."}</div>}
         {shownLog && shownLog.length>0 && (
           <div style={{maxHeight:300,overflow:"auto"}}>
             {shownLog.map((e,i)=>(
-              <div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline"}}>
-                <span style={{color:FAINT,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtTs(e.ts)}</span>
-                <span style={{fontWeight:700,color:e.type==="login"?BATTERY:LOAD_C,textTransform:"uppercase",fontSize:10}}>{e.type}</span>
+              <div key={i} style={{display:"flex",gap:10,fontSize:FS.footnote,padding:"5px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline"}}>
+                <span style={{color:MUTED,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtTs(e.ts)}</span>
+                <span style={{fontWeight:700,color:e.type==="login"?BATTERY:LOAD_C,fontSize:FS.caption}}>{e.type}</span>
                 <span style={{color:TEXT,fontWeight:600}}>{e.user}</span>
                 {e.site && <span style={{color:MUTED}}>· {e.site}</span>}
               </div>
@@ -3681,26 +3625,26 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
       {/* Live Register Probe — discover real-time data registers via the device-shadow live read */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{marginBottom:8}}>
-          <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Live Register Probe</div>
-          <div style={{fontSize:11,color:FAINT,lineHeight:1.5}}>On-demand live read of the inverter via device-shadow (<code>Force:1</code>) — sweeps the whole attribute space. <b>Run it twice ~10s apart</b>: values that <b>changed (Δ, highlighted)</b> are live measurements. Loose tags: ~60→Hz, ~100–300→V, 0–100→%, large→W. Read-only.</div>
+          <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Live Register Probe</div>
+          <div style={{fontSize:FS.caption,color:MUTED,lineHeight:1.5}}>On-demand live read of the inverter via device-shadow (<code>Force:1</code>) — sweeps the whole attribute space. <b>Run it twice ~10s apart</b>: values that <b>changed (Δ, highlighted)</b> are live measurements. Loose tags: ~60→Hz, ~100–300→V, 0–100→%, large→W. Read-only.</div>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
           <input value={swAutoId} onChange={e=>setSwAutoId(e.target.value)} placeholder="AutoId" style={{...inputS,width:100}}/>
-          <button onClick={runSweep} disabled={swBusy||!swAutoId} style={{padding:"6px 16px",borderRadius:8,border:"none",background:swBusy?MUTED:"#0EA5E9",color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:swBusy?"default":"pointer"}}>{swBusy?"Reading…":"Read all"}</button>
-          {swBusy && swProg && <span style={{fontSize:11,color:MUTED}}>{swProg}</span>}
+          <button onClick={runSweep} disabled={swBusy||!swAutoId} style={{padding:"6px 16px",borderRadius:8,border:"none",background:swBusy?MUTED:"#0EA5E9",color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:swBusy?"default":"pointer"}}>{swBusy?"Reading…":"Read all"}</button>
+          {swBusy && swProg && <span style={{fontSize:FS.caption,color:MUTED}}>{swProg}</span>}
           {swPrev && !swBusy && (
-            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none",marginLeft:"auto"}}>
+            <label style={{display:"flex",alignItems:"center",gap:5,fontSize:FS.caption,color:MUTED,fontWeight:600,cursor:"pointer",userSelect:"none",marginLeft:"auto"}}>
               <input type="checkbox" checked={swChangedOnly} onChange={e=>setSwChangedOnly(e.target.checked)} style={{cursor:"pointer"}}/>
               Show changed only
             </label>
           )}
         </div>
-        {swErr && <div style={{color:GRID_IN,fontSize:12,marginBottom:6}}>{swErr}</div>}
+        {swErr && <div style={{color:GRID_IN,fontSize:FS.footnote,marginBottom:6}}>{swErr}</div>}
         {/* Live watch — poll the power block every 10s for real-time correlation */}
         <div style={{borderTop:`1px solid ${BORDER}`,marginTop:10,paddingTop:10,marginBottom:6}}>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <button onClick={()=>setSwWatch(w=>!w)} disabled={!swAutoId} style={{padding:"6px 14px",borderRadius:8,border:"none",background:swWatch?GRID_IN:BATTERY,color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:swAutoId?"pointer":"default"}}>{swWatch?"■ Stop watch":"▶ Watch power block (10s)"}</button>
-            <span style={{fontSize:11,color:FAINT}}>0x3000–0x301F + Hz/temp/batV{swWatchTs?` · updated ${swWatchTs.toLocaleTimeString()}`:""}</span>
+            <button onClick={()=>setSwWatch(w=>!w)} disabled={!swAutoId} style={{padding:"6px 14px",borderRadius:8,border:"none",background:swWatch?GRID_IN:BATTERY,color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:swAutoId?"pointer":"default"}}>{swWatch?"■ Stop watch":"▶ Watch power block (10s)"}</button>
+            <span style={{fontSize:FS.caption,color:MUTED}}>0x3000–0x301F + Hz/temp/batV{swWatchTs?` · updated ${swWatchTs.toLocaleTimeString()}`:""}</span>
           </div>
           {swWatch && (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:6,marginTop:8}}>
@@ -3711,9 +3655,9 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                 const zero = parseFloat(v)===0;
                 return (
                   <div key={code} style={{display:"flex",alignItems:"baseline",gap:6,padding:"4px 8px",borderRadius:8,border:`1px solid ${changed?"#0EA5E9":BORDER}`,background:changed?"#E0F2FE":(zero?CARD:BG),opacity:zero?0.5:1}}>
-                    <span style={{fontFamily:"monospace",fontSize:11,color:MUTED,fontWeight:700}}>{code}</span>
-                    <span style={{fontSize:12,color:TEXT,fontWeight:600,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{String(v)}</span>
-                    {changed&&<span style={{fontSize:9,color:"#0369A1",fontWeight:800}}>Δ</span>}
+                    <span style={{fontFamily:"monospace",fontSize:FS.caption,color:MUTED,fontWeight:700}}>{code}</span>
+                    <span style={{fontSize:FS.footnote,color:TEXT,fontWeight:600,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{String(v)}</span>
+                    {changed&&<span style={{fontSize:FS.caption,color:"#0369A1",fontWeight:800}}>Δ</span>}
                   </div>
                 );
               })}
@@ -3761,28 +3705,28 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
           });
           return (
             <div>
-              <div style={{fontSize:11,color:MUTED,marginBottom:8}}>requested {swRes.requested} · <b style={{color:TEXT}}>{nonZero.length}</b> non-zero{swPrev?` · ${changedCount} changed since last read`:" · run again to spot live (changing) values"}</div>
+              <div style={{fontSize:FS.caption,color:MUTED,marginBottom:8}}>requested {swRes.requested} · <b style={{color:TEXT}}>{nonZero.length}</b> non-zero{swPrev?` · ${changedCount} changed since last read`:" · run again to spot live (changing) values"}</div>
               {/* Auto-label table: live reading → candidate register codes */}
               {matchRows.length>0 && (
                 <div style={{border:`1px solid ${BORDER}`,borderRadius:10,padding:"8px 10px",marginBottom:10,background:BG}}>
-                  <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Match to live status ({swInv?.label})</div>
+                  <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:6}}>Match to live status ({swInv?.label})</div>
                   {matchRows.map(r=>(
-                    <div key={r.label} style={{display:"flex",gap:8,fontSize:11,padding:"3px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline",flexWrap:"wrap"}}>
+                    <div key={r.label} style={{display:"flex",gap:8,fontSize:FS.caption,padding:"3px 0",borderBottom:`1px solid ${BORDER}`,alignItems:"baseline",flexWrap:"wrap"}}>
                       <span style={{color:MUTED,fontWeight:600,minWidth:90}}>{r.label}</span>
                       <span style={{color:TEXT,fontWeight:700,fontVariantNumeric:"tabular-nums",minWidth:70}}>{Number(r.val).toFixed(2)} {r.unit}</span>
-                      <span style={{fontFamily:"monospace",fontSize:10.5,display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <span style={{fontFamily:"monospace",fontSize:FS.caption,display:"flex",gap:8,flexWrap:"wrap"}}>
                         {r.hits.length
                           ? r.hits.map(h=>{ const live=isChanged(h.c); return <span key={h.c} style={{color:live?"#0369A1":MUTED,fontWeight:live?800:500}}>{h.c}={h.n}{h.s!==1?`(×${h.s})`:""}{live?" Δ":""}</span>; })
-                          : <span style={{color:FAINT}}>— no match</span>}
+                          : <span style={{color:MUTED}}>— no match</span>}
                       </span>
                     </div>
                   ))}
-                  <div style={{fontSize:10,color:FAINT,marginTop:6}}>Config codes excluded. Δ = also changed since last read (live). Power drifts vs the cached status; V/SOC/Hz/temp are the reliable matches.</div>
+                  <div style={{fontSize:FS.caption,color:MUTED,marginTop:6}}>Config codes excluded. Δ = also changed since last read (live). Power drifts vs the cached status; V/SOC/Hz/temp are the reliable matches.</div>
                 </div>
               )}
-              {!d && <div style={{fontSize:11,color:SOLAR,marginBottom:8}}>Open the Live tab once so the matcher has a status snapshot to compare against.</div>}
+              {!d && <div style={{fontSize:FS.caption,color:SOLAR,marginBottom:8}}>Open the Live tab once so the matcher has a status snapshot to compare against.</div>}
               {shown.length===0
-                ? <div style={{fontSize:12,color:FAINT}}>{swChangedOnly?"No values changed since the last read.":"No non-zero registers."}</div>
+                ? <div style={{fontSize:FS.footnote,color:MUTED}}>{swChangedOnly?"No values changed since the last read.":"No non-zero registers."}</div>
                 : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:6,maxHeight:360,overflow:"auto"}}>
                     {shown.map(code=>{
                       const v = data[code]; const n = parseFloat(v);
@@ -3791,10 +3735,10 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                       if(isFinite(n)){ if(n>=59&&n<=61)tag="Hz"; else if(n>=95&&n<=300)tag="V"; else if(n>=0&&n<=100&&Number.isInteger(n))tag="%"; else if(Math.abs(n)>=300)tag="W"; }
                       return (
                         <div key={code} style={{display:"flex",alignItems:"baseline",gap:6,padding:"4px 8px",borderRadius:8,border:`1px solid ${changed?"#0EA5E9":BORDER}`,background:changed?"#E0F2FE":BG}}>
-                          <span style={{fontFamily:"monospace",fontSize:11,color:MUTED,fontWeight:700}}>{code}</span>
-                          <span style={{fontSize:12,color:TEXT,fontWeight:600,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{String(v)}</span>
-                          {tag&&<span style={{fontSize:9,color:FAINT,fontWeight:700}}>{tag}</span>}
-                          {changed&&<span style={{fontSize:9,color:"#0369A1",fontWeight:800}}>Δ</span>}
+                          <span style={{fontFamily:"monospace",fontSize:FS.caption,color:MUTED,fontWeight:700}}>{code}</span>
+                          <span style={{fontSize:FS.footnote,color:TEXT,fontWeight:600,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{String(v)}</span>
+                          {tag&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:700}}>{tag}</span>}
+                          {changed&&<span style={{fontSize:FS.caption,color:"#0369A1",fontWeight:800}}>Δ</span>}
                         </div>
                       );
                     })}
@@ -3806,28 +3750,28 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
       {/* Realtime Flow Test — is getHybridFlowgraphRealTimeData fresher than the 5-min cache? */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{marginBottom:8}}>
-          <div style={{fontSize:14,fontWeight:700,color:TEXT}}>Realtime Flow Test</div>
-          <div style={{fontSize:11,color:FAINT,lineHeight:1.5}}>Polls <code>getHybridFlowgraphRealTimeData</code> <b>every 1s</b> and logs each sample (client time + endpoint SystemTime + values) below so you can copy it back to determine how often the data actually changes. Inverter: <span style={{fontFamily:"monospace"}}>{rtfSn||"—"}</span></div>
+          <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Realtime Flow Test</div>
+          <div style={{fontSize:FS.caption,color:MUTED,lineHeight:1.5}}>Polls <code>getHybridFlowgraphRealTimeData</code> <b>every 1s</b> and logs each sample (client time + endpoint SystemTime + values) below so you can copy it back to determine how often the data actually changes. Inverter: <span style={{fontFamily:"monospace"}}>{rtfSn||"—"}</span></div>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
-          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:12,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?"■ Stop":"▶ Log realtime flow (1s)"}</button>
-          {rtfTs && <span style={{fontSize:11,color:FAINT}}>polled {rtfTs.toLocaleTimeString()} · {rtfLog.length} samples</span>}
-          {rtfLog.length>0 && <button onClick={()=>setRtfLog([])} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear log</button>}
-          {rtfData && <button onClick={()=>setRtfRaw(r=>!r)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{rtfRaw?"Hide raw":"Raw"}</button>}
+          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?"■ Stop":"▶ Log realtime flow (1s)"}</button>
+          {rtfTs && <span style={{fontSize:FS.caption,color:MUTED}}>polled {rtfTs.toLocaleTimeString()} · {rtfLog.length} samples</span>}
+          {rtfLog.length>0 && <button onClick={()=>setRtfLog([])} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear log</button>}
+          {rtfData && <button onClick={()=>setRtfRaw(r=>!r)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{rtfRaw?"Hide raw":"Raw"}</button>}
         </div>
-        {rtfData && rtfData.ok===false && <div style={{color:GRID_IN,fontSize:12}}>{rtfData.error||"error"}</div>}
+        {rtfData && rtfData.ok===false && <div style={{color:GRID_IN,fontSize:FS.footnote}}>{rtfData.error||"error"}</div>}
         {rtfData && rtfData.ok!==false && (()=>{
           const prev = rtfPrevRef.current;
           const ch = (k)=> prev && String(prev[k])!==String(rtfData[k]);
           const tile = (label,val,changed,color)=>(
             <div style={{padding:"8px 10px",borderRadius:10,border:`1px solid ${changed?"#0EA5E9":BORDER}`,background:changed?"#E0F2FE":BG}}>
-              <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}{changed?" Δ":""}</div>
-              <div style={{fontSize:15,fontWeight:700,color:color||TEXT,fontVariantNumeric:"tabular-nums"}}>{val}</div>
+              <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700}}>{label}{changed?" Δ":""}</div>
+              <div style={{fontSize:FS.callout,fontWeight:700,color:color||TEXT,fontVariantNumeric:"tabular-nums"}}>{val}</div>
             </div>
           );
           return (
             <div>
-              <div style={{fontSize:12,color:MUTED,marginBottom:8}}>SystemTime: <b style={{color:TEXT}}>{rtfData.time||"—"}</b></div>
+              <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:8}}>SystemTime: <b style={{color:TEXT}}>{rtfData.time||"—"}</b></div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
                 {tile("PV",fmt(rtfData.pv),ch("pv"),SOLAR)}
                 {tile("Grid",fmt(rtfData.grid),ch("grid"),rtfData.grid<0?GRID_OUT:GRID_IN)}
@@ -3835,30 +3779,30 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                 {tile("Battery",fmt(rtfData.battery),ch("battery"),BATTERY)}
                 {tile("SOC",`${rtfData.soc}%`,ch("soc"),TEXT)}
               </div>
-              {rtfRaw && <pre style={{marginTop:10,maxHeight:220,overflow:"auto",fontSize:10,background:BG,padding:10,borderRadius:8,border:`1px solid ${BORDER}`,whiteSpace:"pre-wrap"}}>{JSON.stringify(rtfData.raw,null,2)}</pre>}
+              {rtfRaw && <pre style={{marginTop:10,maxHeight:220,overflow:"auto",fontSize:FS.caption,background:BG,padding:10,borderRadius:8,border:`1px solid ${BORDER}`,whiteSpace:"pre-wrap"}}>{JSON.stringify(rtfData.raw,null,2)}</pre>}
             </div>
           );
         })()}
         {rtfLog.length>0 && (
           <div style={{marginTop:12}}>
-            <div style={{fontSize:10,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Sample log — select all &amp; copy</div>
-            <textarea readOnly value={rtfLog.join("\n")} onFocus={e=>e.target.select()} style={{width:"100%",height:200,fontFamily:"monospace",fontSize:10.5,lineHeight:1.5,color:TEXT,background:BG,border:`1px solid ${BORDER}`,borderRadius:8,padding:10,resize:"vertical",whiteSpace:"pre"}}/>
+            <div style={{fontSize:FS.caption,color:MUTED,fontWeight:700,marginBottom:4}}>Sample log — select all &amp; copy</div>
+            <textarea readOnly value={rtfLog.join("\n")} onFocus={e=>e.target.select()} style={{width:"100%",height:200,fontFamily:"monospace",fontSize:FS.caption,lineHeight:1.5,color:TEXT,background:BG,border:`1px solid ${BORDER}`,borderRadius:8,padding:10,resize:"vertical",whiteSpace:"pre"}}/>
           </div>
         )}
       </div>
       <div style={{background:"#1C1917",borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
-        <div style={{color:"#F59E0B",fontWeight:700,fontSize:13,marginBottom:10,fontFamily:SANS}}>🔧 API Debug</div>
+        <div style={{color:"#F59E0B",fontWeight:700,fontSize:FS.subhead,marginBottom:10,fontFamily:SANS}}>🔧 API Debug</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
           {presets.map(p=>(
-            <button key={p.label} onClick={()=>run(p.action, p.body)} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#fff",fontWeight:600,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:SANS}}>{p.label}</button>
+            <button key={p.label} onClick={()=>run(p.action, p.body)} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#fff",fontWeight:600,padding:"5px 10px",fontSize:FS.caption,cursor:"pointer",fontFamily:SANS}}>{p.label}</button>
           ))}
         </div>
         <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
           <input value={action} onChange={e=>setAction(e.target.value)} placeholder="action" style={{...darkInput,width:130}}/>
           <input value={bodyText} onChange={e=>setBodyText(e.target.value)} placeholder='{"sn":"…"}' style={{...darkInput,flex:1,minWidth:160,fontFamily:"ui-monospace,monospace"}}/>
-          <button onClick={()=>run()} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:"pointer",fontFamily:SANS,fontSize:12}}>{busy?"…":"Run"}</button>
+          <button onClick={()=>run()} disabled={busy} style={{background:"#F59E0B",border:"none",borderRadius:8,color:"#1C1917",fontWeight:700,padding:"6px 14px",cursor:"pointer",fontFamily:SANS,fontSize:FS.footnote}}>{busy?"…":"Run"}</button>
         </div>
-        {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:11,lineHeight:1.5,margin:0,fontFamily:"ui-monospace,monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
+        {out && <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",color:"#E7E5E4",fontSize:FS.caption,lineHeight:1.5,margin:0,fontFamily:"ui-monospace,monospace",maxHeight:420,overflow:"auto"}}>{out}</pre>}
       </div>
     </div>
   );
@@ -4242,7 +4186,7 @@ export default function Dashboard() {
   const titlePast = useScrolledPast(largeTitleRef, [authState, site?.name]);
   useStaggerIn(liveRef, [authState, tab, site?.name, liveLoading]);
 
-  if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
+  if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:MUTED,fontSize:FS.subhead,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <LandingPage/>;
   if(authState==="reset_password") return <ResetPasswordPage onDone={async()=>{ setAuthState("loading"); try{await loadContext();}catch{setAuthState("appauth");} }}/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout} initErr={loginError}/>;
@@ -4283,7 +4227,7 @@ export default function Dashboard() {
                   {liveGate.paused&&(
                     <div className="ui-card" style={{padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                       <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                        <span style={{color:SOLAR_TEXT,fontSize:20,marginTop:1}}><Icon name="clock"/></span>
+                        <span style={{color:SOLAR_TEXT,fontSize:FS.title3,marginTop:1}}><Icon name="clock"/></span>
                         <div>
                           <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>
                             {liveGate.reason==="session" ? "Live view paused after 1 hour" : "Live view paused"}
@@ -4347,7 +4291,7 @@ export default function Dashboard() {
           {tab==="explorer"&&(
             explorerSn
               ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label}/>
-              : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:13}}>No inverter selected.</div>
+              : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:FS.subhead}}>No inverter selected.</div>
           )}
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
         </main>

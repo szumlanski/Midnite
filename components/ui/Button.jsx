@@ -108,3 +108,13 @@ export function Segmented({ options, value, onChange, label, size = "md", classN
     </div>
   );
 }
+
+// On/off switch (HIG toggle). Use for settings that take effect immediately.
+export function Switch({ checked, onChange, label, disabled }) {
+  return (
+    <button type="button" role="switch" aria-checked={!!checked} aria-label={label} title={label} disabled={disabled}
+      className="ui-switch" data-on={checked ? "true" : "false"} onClick={() => onChange(!checked)}>
+      <span className="ui-switch-knob" />
+    </button>
+  );
+}
