@@ -300,11 +300,11 @@ function LandingPage(){
           <circle cx="14" cy="18" r="5" fill="#FF6058"/><circle cx="30" cy="18" r="5" fill="#FFBD2E"/><circle cx="46" cy="18" r="5" fill="#28C840"/>
           <text x="230" y="22" textAnchor="middle" fill="white" fontSize="11" fontFamily="system-ui" opacity="0.7">Live Power Flow</text>
           <rect x="14" y="52" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
-          <text x="68" y="78" textAnchor="middle" fill={SOLAR} fontSize="22">☀</text>
+          {svgIcon("sun",68,71,22,SOLAR,2)}
           <text x="68" y="94" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Solar</text>
           <text x="68" y="108" textAnchor="middle" fill={SOLAR} fontSize="12" fontFamily="system-ui" fontWeight="700">8.3 kW</text>
           <rect x="338" y="52" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
-          <text x="392" y="78" textAnchor="middle" fill={GRID_OUT} fontSize="18">⚡</text>
+          {svgIcon("pylon",392,72,20,GRID_OUT,1.8)}
           <text x="392" y="94" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Grid</text>
           <text x="392" y="108" textAnchor="middle" fill={GRID_OUT} fontSize="12" fontFamily="system-ui" fontWeight="700">{"↑ 3.1 kW"}</text>
           <rect x="163" y="116" width="134" height="76" rx="12" fill="#0D1F33"/>
@@ -314,11 +314,11 @@ function LandingPage(){
           <rect x="180" y="167" width="82" height="10" rx="3" fill="#22C55E" opacity="0.8"/>
           <text x="230" y="177" textAnchor="middle" fill="white" fontSize="7" fontFamily="system-ui">SOC 82%</text>
           <rect x="14" y="220" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
-          <text x="68" y="246" textAnchor="middle" fill={BATTERY} fontSize="18">🔋</text>
+          {svgIcon("battery",68,240,20,BATTERY,1.8)}
           <text x="68" y="262" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Battery</text>
           <text x="68" y="276" textAnchor="middle" fill={BATTERY} fontSize="12" fontFamily="system-ui" fontWeight="700">Idle · 82%</text>
           <rect x="338" y="220" width="108" height="64" rx="10" fill={CARD} stroke={BORDER}/>
-          <text x="392" y="246" textAnchor="middle" fill={LOAD_C} fontSize="18">🏠</text>
+          {svgIcon("home",392,240,20,LOAD_C,1.8)}
           <text x="392" y="262" textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="system-ui" fontWeight="600">Home</text>
           <text x="392" y="276" textAnchor="middle" fill={LOAD_C} fontSize="12" fontFamily="system-ui" fontWeight="700">5.2 kW</text>
           <line x1="122" y1="84" x2="163" y2="140" stroke={SOLAR} strokeWidth="2" strokeDasharray="5,3" opacity="0.7"/>
@@ -400,7 +400,7 @@ function LandingPage(){
           <text x="230" y="22" textAnchor="middle" fill="white" fontSize="11" fontFamily="system-ui" opacity="0.7">Notifications · Settings</text>
           <rect x="12" y="48" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
           <rect x="22" y="58" width="26" height="26" rx="8" fill="#FEF3C7"/>
-          <text x="35" y="76" textAnchor="middle" fill={SOLAR} fontSize="14">🔋</text>
+          {svgIcon("battery",35,71,15,SOLAR,2)}
           <text x="58" y="68" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Battery SOC below 20%</text>
           <text x="58" y="83" fill={MUTED} fontSize="8" fontFamily="system-ui">All inverters · Email · 60 min cooldown</text>
           <rect x="376" y="62" width="34" height="16" rx="8" fill={BATTERY} opacity="0.2"/>
@@ -408,21 +408,21 @@ function LandingPage(){
           <circle cx="402" cy="70" r="6" fill={BATTERY}/>
           <rect x="12" y="106" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
           <rect x="22" y="116" width="26" height="26" rx="8" fill="#FEE2E2"/>
-          <text x="35" y="134" textAnchor="middle" fill={GRID_IN} fontSize="14">⚡</text>
+          {svgIcon("bolt",35,129,15,GRID_IN,2)}
           <text x="58" y="126" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Grid import above 2 kW</text>
           <text x="58" y="141" fill={MUTED} fontSize="8" fontFamily="system-ui">Maple Street Home · Email · 30 min cooldown</text>
           <rect x="376" y="120" width="34" height="16" rx="8" fill="#E5E7EB"/>
           <circle cx="388" cy="128" r="6" fill="#9CA3AF"/>
           <rect x="12" y="164" width="436" height="50" rx="10" fill={CARD} stroke={BORDER}/>
           <rect x="22" y="174" width="26" height="26" rx="8" fill="#EFF6FF"/>
-          <text x="35" y="192" textAnchor="middle" fill={LOAD_C} fontSize="14">📡</text>
+          {svgIcon("activity",35,187,15,LOAD_C,2)}
           <text x="58" y="184" fill={TEXT} fontSize="10" fontFamily="system-ui" fontWeight="700">Device offline</text>
           <text x="58" y="199" fill={MUTED} fontSize="8" fontFamily="system-ui">All sites · Email · 120 min cooldown · After 08:00</text>
           <rect x="376" y="178" width="34" height="16" rx="8" fill={BATTERY} opacity="0.2"/>
           <rect x="382" y="182" width="20" height="8" rx="4" fill={BATTERY}/>
           <circle cx="402" cy="186" r="6" fill={BATTERY}/>
           <rect x="12" y="222" width="436" height="24" rx="8" fill="#F0FDF4" stroke="#BBF7D0"/>
-          <text x="20" y="238" fill={BATTERY} fontSize="8" fontFamily="system-ui">✓ Test alert sent — 3 of 50 daily emails used</text>
+          <text x="20" y="238" fill={BATTERY} fontSize="8" fontFamily="system-ui">Test alert sent — 3 of 50 daily emails used</text>
         </svg>
       ),
     },
@@ -493,7 +493,7 @@ function LandingPage(){
       .lp-pbtn:disabled{background:#E5E7EB;color:${FAINT};box-shadow:none;cursor:default;opacity:1;}
       .lp-obtn{background:transparent;color:${SOLAR};border:2px solid ${SOLAR};border-radius:10px;padding:11px 24px;font-size:14px;font-weight:700;font-family:${SANS};cursor:pointer;transition:all .15s;}
       .lp-obtn:hover{background:${SOLAR};color:white;}
-      .lp-chk::before{content:"✓";color:${BATTERY};font-weight:700;margin-right:8px;}
+      .lp-chk::before{content:"";display:inline-block;width:1em;height:1em;margin-right:8px;vertical-align:-0.15em;background:${BATTERY};-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center/contain no-repeat;}
       .lp-flink{color:rgba(255,255,255,0.6);text-decoration:none;font-weight:500;}
       .lp-flink:hover{color:white;}
       .lp-nav-link{font-size:14px;font-weight:600;color:${MUTED};text-decoration:none;}
@@ -521,7 +521,7 @@ function LandingPage(){
       <div style={{maxWidth:1100,margin:"0 auto"}} className="lp-hero">
         <div>
           <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"4px 12px",fontSize:FS.footnote,fontWeight:700,color:"#92400E",marginBottom:20}}>
-            ✦ Pre-launch — all features free
+            <Icon name="sparkle"/>Pre-launch — all features free
           </div>
           <h1 style={{fontSize:"clamp(32px,5vw,52px)",fontWeight:800,lineHeight:1.15,letterSpacing:"-1.5px",color:TEXT,marginBottom:20}}>
             Monitor Your Solar<br/><span style={{color:SOLAR}}>In Real Time</span>
@@ -532,7 +532,7 @@ function LandingPage(){
           <div style={{display:"flex",flexWrap:"wrap",gap:16}}>
             {["Live 5-sec updates","Email alerts","Fleet management","Site sharing"].map(f=>(
               <span key={f} style={{fontSize:FS.subhead,color:MUTED,display:"flex",alignItems:"center",gap:6}}>
-                <span style={{color:BATTERY,fontWeight:700}}>✓</span>{f}
+                <span style={{color:BATTERY,fontWeight:700}}><Icon name="check"/></span>{f}
               </span>
             ))}
           </div>
@@ -622,7 +622,7 @@ function LandingPage(){
         <div style={{textAlign:"center",marginBottom:32}}>
           <h2 style={{fontSize:"clamp(26px,4vw,40px)",fontWeight:800,letterSpacing:"-1px",color:TEXT,marginBottom:16}}>Simple pricing</h2>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FEF3C7",border:"1px solid #FCD34D",borderRadius:20,padding:"6px 16px",fontSize:FS.subhead,fontWeight:700,color:"#92400E"}}>
-            ✦ Pre-launch: Pro features free for all users — pricing TBD
+            <Icon name="sparkle"/>Pre-launch: Pro features free for all users — pricing TBD
           </div>
         </div>
         <div className="lp-price">
@@ -641,7 +641,7 @@ function LandingPage(){
             <div style={{fontSize:36,fontWeight:800,color:"white",marginBottom:4}}>TBD<span style={{fontSize:FS.body,fontWeight:500,color:"rgba(255,255,255,0.5)"}}>/mo</span></div>
             <div style={{fontSize:FS.subhead,color:"rgba(255,255,255,0.5)",marginBottom:24}}>For installers managing a fleet</div>
             <ul style={{listStyle:"none",display:"flex",flexDirection:"column",gap:10,marginBottom:28,padding:0}}>
-              {proFt.map(f=><li key={f} style={{fontSize:FS.subhead,color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:8}}><span style={{color:"#F59E0B",fontWeight:700}}>✓</span>{f}</li>)}
+              {proFt.map(f=><li key={f} style={{fontSize:FS.subhead,color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:8}}><span style={{color:"#F59E0B",fontWeight:700}}><Icon name="check"/></span>{f}</li>)}
             </ul>
             <button className="lp-pbtn" style={{width:"100%"}} onClick={()=>scrollToAuth("signup")}>Start free during pre-launch</button>
           </div>
@@ -704,7 +704,7 @@ function ResetPasswordPage({onDone}){
       <div style={{fontSize:FS.subhead,color:MUTED,marginBottom:28,textAlign:"center"}}>Enter a new password for your Midnite Sentinel account.</div>
       <div style={{width:"100%",maxWidth:360}}>
         {done
-          ? <div style={{background:"#D1FAE5",border:"1px solid #6EE7B7",borderRadius:12,padding:"14px 20px",color:BATTERY,fontWeight:600,fontSize:FS.body,textAlign:"center"}}>✓ Password updated — signing you in…</div>
+          ? <div style={{background:"#D1FAE5",border:"1px solid #6EE7B7",borderRadius:12,padding:"14px 20px",color:BATTERY,fontWeight:600,fontSize:FS.body,textAlign:"center"}}><Icon name="check"/>Password updated — signing you in…</div>
           : <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:12}}>
               <input type="password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)} autoFocus required minLength={6} style={inputS}/>
               <input type="password" placeholder="Confirm new password" value={pw2} onChange={e=>setPw2(e.target.value)} required style={inputS}/>
@@ -808,7 +808,7 @@ function DigestSettings({activeId, site=null}){
     <div style={{border:`1px solid ${BORDER}`,borderRadius:12,padding:"14px 16px",marginBottom:18,background:"#FFFDF8"}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
         <div>
-          <div style={{fontSize:FS.body,fontWeight:800,color:TEXT,display:"flex",alignItems:"center",gap:7}}>☀ Daily digest</div>
+          <div style={{fontSize:FS.body,fontWeight:800,color:TEXT,display:"flex",alignItems:"center",gap:7}}><Icon name="sun"/>Daily digest</div>
           <div style={{fontSize:FS.footnote,color:MUTED,marginTop:3,lineHeight:1.5,maxWidth:380}}>A morning recap email of yesterday’s production, consumption, battery, and a 7-day trend — with charts.</div>
         </div>
         <Switch checked={enabled} disabled={busy} label="Daily digest" onChange={(v)=>save(v)}/>
@@ -3204,7 +3204,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   usePolling(()=>loadFleet(fleetAllUsers), POLL.FLEET_MS, [fleetAllUsers], { leading:false });
 
   const toggleFleetSort = (key) => setFleetSort(s => s.key===key ? {key, dir:-s.dir} : {key, dir:1});
-  const sortIcon = (key) => fleetSort.key===key ? (fleetSort.dir===1 ? " ▴" : " ▾") : "";
+  const sortIcon = (key) => fleetSort.key===key ? <Icon name={fleetSort.dir===1?"chevron-up":"chevron-down"} style={{marginLeft:2}}/> : null;
 
   const STATUS_META = { online:{label:"Online",bg:"#D1FAE5",c:BATTERY}, partial:{label:"Partial",bg:"#FEF3C7",c:SOLAR}, offline:{label:"Offline",bg:"#FEE2E2",c:GRID_IN}, error:{label:"Error",bg:"#FEE2E2",c:GRID_IN} };
   const statusRank = {online:3,partial:2,offline:1,error:0};
@@ -3461,7 +3461,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
             </label>
             <button onClick={()=>loadFleet(fleetAllUsers)} disabled={fleetBusy}
               style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:fleetBusy?"default":"pointer"}}>
-              ↻ Refresh
+              <Icon name="refresh"/>Refresh
             </button>
           </div>
         </div>
@@ -3520,7 +3520,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                     <td style={tdStyle("right",SOLAR)}>{m.pv!=null?fmt(m.pv):"—"}</td>
                     <td style={tdStyle("right",LOAD_C)}>{m.load!=null?fmt(m.load):"—"}</td>
                     <td style={tdStyle("right",socC)}>{m.soc!=null?`${Math.round(m.soc)}%`:"—"}</td>
-                    <td style={tdStyle("right",gridC)}>{m.gridNet!=null?(Math.abs(m.gridNet)>50?`${fmt(Math.abs(m.gridNet))}${m.gridNet<0?" ⤴":" ⤵"}`:"~0"):"—"}</td>
+                    <td style={tdStyle("right",gridC)}>{m.gridNet!=null?(Math.abs(m.gridNet)>50?<span style={{display:"inline-flex",alignItems:"center",gap:3}}>{fmt(Math.abs(m.gridNet))}<Icon name={m.gridNet<0?"arrow-up":"arrow-down"} label={m.gridNet<0?"Exporting":"Importing"}/></span>:"~0"):"—"}</td>
                     <td style={tdStyle("right",CHART_PROD)}>{m.pvToday!=null?fmtE(m.pvToday):"—"}</td>
                     <td style={tdStyle("right",CHART_CONS)}>{m.consumedToday!=null?fmtE(m.consumedToday):"—"}</td>
                     <td style={tdStyle("right",GRID_OUT)}>{m.expToday!=null?fmtE(m.expToday):"—"}</td>
@@ -3539,7 +3539,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
           <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Users</div>
-          <button onClick={loadUsers} style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>↻ Refresh</button>
+          <button onClick={loadUsers} style={{padding:"4px 10px",borderRadius:8,border:"none",background:BORDER,color:TEXT,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}><Icon name="refresh"/>Refresh</button>
         </div>
         {usersErr && <div style={{color:GRID_IN,fontSize:FS.footnote,marginBottom:8}}>{usersErr}</div>}
         {!users&&!usersErr && <div style={{fontSize:FS.footnote,color:MUTED}}>Loading…</div>}
@@ -3569,7 +3569,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
                       ? <span style={{color:SOLAR,fontSize:FS.caption,fontWeight:700}}>Linking…</span>
                       : <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:MUTED}}>not linked</span>{miniBtn("Link Midnite",()=>openLink(u.id),"#0EA5E9","#fff",false)}</span>}</Td>
                   <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:MUTED}}>never</span>}</Td>
-                  <Td a="center">{miniBtn(rs==="sending"?"…":rs==="ok"?"✓ Sent":rs?.startsWith("err")?"Failed":"Send reset",()=>sendReset(u.email),rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",rs==="sending")}</Td>
+                  <Td a="center">{miniBtn(rs==="sending"?"Sending…":rs==="ok"?<><Icon name="check"/> Sent</>:rs?.startsWith("err")?"Failed":"Send reset",()=>sendReset(u.email),rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",rs==="sending")}</Td>
                 </tr>];
                 if(isLinking) rows.push(<tr key={`link-${u.id}`} style={{borderTop:`1px solid ${BORDER}`}}>
                   <td colSpan={6} style={{padding:"10px 12px",background:"#FAFAF9"}}>
@@ -3594,7 +3594,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>Energy Registers — {site?.name||"site"}</div>
-            <div style={{fontSize:FS.caption,color:MUTED}}>⚠ = exporting now but Export-Today ≈ 0 (stuck feed-in counter)</div>
+            <div style={{fontSize:FS.caption,color:MUTED}}><Icon name="alert"/>= exporting now but Export-Today ≈ 0 (stuck feed-in counter)</div>
           </div>
           <button onClick={runScan} disabled={scanning} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#0EA5E9",color:"#fff",fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:scanning?"default":"pointer"}}>{scanning?"Scanning…":"Scan all sites"}</button>
         </div>
@@ -3605,19 +3605,19 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
             </tr></thead><tbody>
               {regs.map(r=>(<tr key={r.sn} style={{borderTop:`1px solid ${BORDER}`}}>
                 <Td a="left" b>{r.label} <span style={{color:MUTED,fontWeight:400,fontFamily:"monospace",fontSize:FS.caption}}>{r.sn.slice(-8)}</span></Td>
-                <Td c={r.netW<-50?GRID_OUT:r.netW>50?GRID_IN:MUTED}>{fmt(Math.abs(r.netW))}{r.netW<-50?" ⤴":r.netW>50?" ⤵":""}</Td>
+                <Td c={r.netW<-50?GRID_OUT:r.netW>50?GRID_IN:MUTED}>{fmt(Math.abs(r.netW))}{r.netW<-50?<><Icon name="arrow-up"/></>:r.netW>50?<><Icon name="arrow-down"/></>:""}</Td>
                 <Td c={r.stuck?GRID_IN:TEXT} b={r.stuck}>{fmtE(r.expToday)}</Td>
                 <Td c={MUTED}>{fmtE(r.expTotal)}</Td>
                 <Td>{fmtE(r.impToday)}</Td>
                 <Td>{fmtE(r.pvToday)}</Td>
                 <Td c={MUTED}>{fmtE(r.pvTotal)}</Td>
-                <Td a="center">{r.stuck?<span style={{color:GRID_IN,fontWeight:800}}>⚠</span>:<span style={{color:BATTERY}}>✓</span>}</Td>
+                <Td a="center">{r.stuck?<span style={{color:GRID_IN,fontWeight:800}}><Icon name="alert"/></span>:<span style={{color:BATTERY}}><Icon name="check"/></span>}</Td>
               </tr>))}
             </tbody></table></div>}
         {scan && <div style={{marginTop:12,borderTop:`1px solid ${BORDER}`,paddingTop:10}}>
           <div style={{fontSize:FS.caption,fontWeight:700,color:MUTED,marginBottom:6}}>FLEET SCAN ({scan.length} sites){scanning?" …":""}</div>
           {scan.map((s,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:FS.footnote,padding:"3px 0"}}>
-            <span style={{color:s.stuck?GRID_IN:TEXT,fontWeight:s.stuck?700:500}}>{s.stuck?"⚠ ":s.err?"⛔ ":"✓ "}{s.name}</span>
+            <span style={{color:s.stuck?GRID_IN:TEXT,fontWeight:s.stuck?700:500}}>{s.stuck?<><Icon name="alert"/></>:s.err?<><Icon name="stop"/></>:<><Icon name="check"/></>}{s.name}</span>
             <span style={{color:MUTED,fontVariantNumeric:"tabular-nums"}}>{s.err?s.err:`${s.exportingNow?"exporting":"idle"} · today ${(s.expTodayKwh||0).toFixed(1)} kWh`}</span>
           </div>))}
         </div>}
@@ -3672,7 +3672,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
         {/* Live watch — poll the power block every 10s for real-time correlation */}
         <div style={{borderTop:`1px solid ${BORDER}`,marginTop:10,paddingTop:10,marginBottom:6}}>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <button onClick={()=>setSwWatch(w=>!w)} disabled={!swAutoId} style={{padding:"6px 14px",borderRadius:8,border:"none",background:swWatch?GRID_IN:BATTERY,color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:swAutoId?"pointer":"default"}}>{swWatch?"■ Stop watch":"▶ Watch power block (10s)"}</button>
+            <button onClick={()=>setSwWatch(w=>!w)} disabled={!swAutoId} style={{padding:"6px 14px",borderRadius:8,border:"none",background:swWatch?GRID_IN:BATTERY,color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:swAutoId?"pointer":"default"}}>{swWatch?<><Icon name="stop"/>Stop watch</>:<><Icon name="play"/>Watch power block (10s)</>}</button>
             <span style={{fontSize:FS.caption,color:MUTED}}>0x3000–0x301F + Hz/temp/batV{swWatchTs?` · updated ${swWatchTs.toLocaleTimeString()}`:""}</span>
           </div>
           {swWatch && (
@@ -3783,7 +3783,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
           <div style={{fontSize:FS.caption,color:MUTED,lineHeight:1.5}}>Polls <code>getHybridFlowgraphRealTimeData</code> <b>every 1s</b> and logs each sample (client time + endpoint SystemTime + values) below so you can copy it back to determine how often the data actually changes. Inverter: <span style={{fontFamily:"monospace"}}>{rtfSn||"—"}</span></div>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
-          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?"■ Stop":"▶ Log realtime flow (1s)"}</button>
+          <button onClick={()=>setRtfOn(o=>!o)} disabled={!rtfSn} style={{padding:"6px 14px",borderRadius:8,border:"none",background:rtfOn?GRID_IN:BATTERY,color:"#fff",fontSize:FS.footnote,fontWeight:700,fontFamily:SANS,cursor:rtfSn?"pointer":"default"}}>{rtfOn?<><Icon name="stop"/>Stop</>:<><Icon name="play"/>Log realtime flow (1s)</>}</button>
           {rtfTs && <span style={{fontSize:FS.caption,color:MUTED}}>polled {rtfTs.toLocaleTimeString()} · {rtfLog.length} samples</span>}
           {rtfLog.length>0 && <button onClick={()=>setRtfLog([])} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Clear log</button>}
           {rtfData && <button onClick={()=>setRtfRaw(r=>!r)} style={{padding:"4px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:FS.caption,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>{rtfRaw?"Hide raw":"Raw"}</button>}
@@ -3820,7 +3820,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
         )}
       </div>
       <div style={{background:"#1C1917",borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
-        <div style={{color:"#F59E0B",fontWeight:700,fontSize:FS.subhead,marginBottom:10,fontFamily:SANS}}>🔧 API Debug</div>
+        <div style={{color:"#F59E0B",fontWeight:700,fontSize:FS.subhead,marginBottom:10,fontFamily:SANS}}><Icon name="wrench"/>API Debug</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
           {presets.map(p=>(
             <button key={p.label} onClick={()=>run(p.action, p.body)} disabled={busy} style={{background:"#0EA5E9",border:"none",borderRadius:8,color:"#fff",fontWeight:600,padding:"5px 10px",fontSize:FS.caption,cursor:"pointer",fontFamily:SANS}}>{p.label}</button>

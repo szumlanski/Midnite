@@ -58,6 +58,7 @@ const ICONS = {
   inverter: (<><rect x="5" y="2.5" width="14" height="19" rx="2.5" /><rect x="8" y="6" width="8" height="4" rx="1" />{P("M5 14h14M9 17.5h.01M12 17.5h.01")}</>),
   gauge: P("M12 14l4-4M3.34 19a10 10 0 1 1 17.32 0"),
   shield: P("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"),
+  sparkle: P("M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"),
 };
 
 export const ICON_NAMES = Object.keys(ICONS);

@@ -2,6 +2,15 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.8.0 (2026-10-02): Icons
+
+- Every emoji or symbol used as an icon in the app is now the one SVG icon set, so icons look the same on
+  every device and take the surrounding text color: 21 converted by an AST codemod
+  (`scripts/hig/codemod-icons.mjs`) plus the landing-page illustrations (SVG icons inside SVG), the
+  landing checklist ticks (CSS mask) and the Admin tables (sort chevrons, grid arrows, "Sent" check).
+- New icon: sparkle (pre-launch badges).
+- Emails keep their emoji on purpose (Gmail strips SVG); typographic characters (· — … → °) stay text.
+
 ## 0.7.0 (2026-10-02): Alerts and toasts
 
 - Every browser `confirm()` and `alert()` is gone (6 call sites). Confirmations are HIG alerts: a short
