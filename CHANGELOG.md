@@ -2,6 +2,17 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.7.0 (2026-10-02): Alerts and toasts
+
+- Every browser `confirm()` and `alert()` is gone (6 call sites). Confirmations are HIG alerts: a short
+  question, one line of consequence, Cancel and the action side by side; destructive actions (Delete,
+  Revoke, Unlink, Remove) are red and focus starts on Cancel; Escape cancels. A small pop-in on open.
+- Removing a site photo now asks first (it can't be undone).
+- Finished actions confirm with a toast that disappears on its own: alert added or deleted, test email
+  sent, access revoked, account unlinked, profile or photo saved, password updated, photo removed.
+  Failures in Admin unlink show as an error toast.
+- Fixed a hydration warning: the alert host renders only after the page hydrates.
+
 ## 0.6.0 (2026-10-02): Sheets
 
 - One `Sheet` component for every pop-up: Settings, Share site, Inverter settings, Compare inverter

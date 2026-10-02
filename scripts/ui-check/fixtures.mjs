@@ -716,6 +716,7 @@ const HANDLERS = {
   year: (b) => yearResp(b?.sn, b?.date),
   alertrules: () => alertRulesResp(),
   digest_get: () => digestGetResp(),
+  alerttest: () => ({ ok: true, to: "jason@example.com" }),
   share_list: () => shareListResp(),
   logview: () => ({ ok: true }),
   admin_users: () => adminUsersResp(),

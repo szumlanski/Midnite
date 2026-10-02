@@ -44,7 +44,7 @@ const VIEWPORTS = [
   { w: 390, h: 844, dsf: 2, mobile: true },
   { w: 1280, h: 800, dsf: 1, mobile: false },
 ];
-const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings"];
+const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings", "alert", "toast"];
 
 const log = (...m) => process.stderr.write(m.join(" ") + "\n");
 const summary = { screens: 0, errs: {}, blocked: 0, failedSteps: {} };
@@ -360,12 +360,31 @@ async function runViewport(browser, vp) {
   });
   if (settingsOk) await shoot(page, idle, "settings", { full: false });
 
+  // HIG alert: Unlink from the linked account's "…" menu, screenshot, then cancel with Escape.
+  screen = "alert";
+  if (settingsOk && await step("alert", async () => {
+    await page.getByRole("button", { name: "Account options" }).first().click();
+    await page.locator('[role="menu"] [role^="menuitem"]').filter({ hasText: /Unlink account/ }).first().click();
+    await page.locator('[role="alertdialog"]').first().waitFor({ timeout: 5000 });
+  })) {
+    await shoot(page, idle, "alert", { full: false });
+    await page.keyboard.press("Escape");
+    await page.locator('[role="alertdialog"]').first().waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  }
+
   screen = "settings-alerts";
   if (settingsOk && await step("settings-alerts", async () => {
     await clickModalTab("Alerts");
     await page.getByText("Threshold alerts", { exact: true }).waitFor({ timeout: 10000 });
     await page.getByText(/Daily digest/).first().waitFor({ timeout: 10000 });
   })) await shoot(page, idle, "settings-alerts", { full: false });
+
+  screen = "toast";
+  if (settingsOk && await step("toast", async () => {
+    await page.getByRole("button", { name: "Send test", exact: true }).first().click();
+    await page.locator(".ui-toast").first().waitFor({ timeout: 5000 });
+    await page.waitForTimeout(400);
+  })) await shoot(page, idle, "toast", { full: false });
 
   screen = "settings-sharing";
   if (settingsOk && await step("settings-sharing", async () => {

@@ -9,6 +9,7 @@ import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT
 import { Icon, svgIcon } from "@/components/ui/Icon";
 import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
+import { confirmAlert, toast } from "@/components/ui/Alert";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
@@ -868,12 +869,12 @@ function NotificationsSettings({activeId, site=null}){
       await api("alertrule_save",{ account_id:activeId, site_name:dev.siteName, device_id:dev.sn, device_label:dev.label,
         trigger_type:form.trigger_type, threshold_value:Number(form.threshold),
         cooldown_minutes:Number(form.cooldown), trigger_after_time:form.afterTime||null, enabled:true });
-      setAddingFor(null); setMsg("Alert added."); await load();
+      setAddingFor(null); toast("Alert added"); await load();
     }catch(e){ setErr(e.message); }
   };
   const toggleRule = async (rule)=>{ setErr(null); try{ await api("alertrule_save",{ ...rule, enabled:!rule.enabled }); await load(); }catch(e){ setErr(e.message); } };
-  const delRule = async (id)=>{ if(typeof window!=="undefined"&&!window.confirm("Delete this alert rule?")) return; try{ await api("alertrule_delete",{id}); await load(); }catch(e){ setErr(e.message); } };
-  const sendTest = async (dev)=>{ setErr(null); setMsg(null); setTesting(dev.sn); try{ const r=await api("alerttest",{ site_name:dev.siteName, device_label:dev.label, device_id:dev.sn }); setMsg(`Test email sent to ${r.to}.`); }catch(e){ setErr(e.message); } finally{ setTesting(null); } };
+  const delRule = async (id)=>{ if(!await confirmAlert("Delete this alert?", {message:"You’ll stop getting emails for it.", action:"Delete", destructive:true})) return; try{ await api("alertrule_delete",{id}); toast("Alert deleted"); await load(); }catch(e){ setErr(e.message); } };
+  const sendTest = async (dev)=>{ setErr(null); setMsg(null); setTesting(dev.sn); try{ const r=await api("alerttest",{ site_name:dev.siteName, device_label:dev.label, device_id:dev.sn }); toast(r?.to?`Test email sent to ${r.to}`:"Test email sent", {icon:"mail"}); }catch(e){ setErr(e.message); } finally{ setTesting(null); } };
 
   if(loading) return <div><div className="ui-skel" style={{height:120,borderRadius:14,marginBottom:12}}/><div className="ui-skel" style={{height:160,borderRadius:14}}/></div>;
   return (
@@ -992,7 +993,7 @@ function ShareModal({ site, accountId, onClose }){
   const submit=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null);
     try{ const r=await api("share_create",{accountId,site:site.name,email}); setMsg(r.pending?`Invite emailed to ${email} — they'll see it after signing up with that address.`:`Shared with ${email}.${r.emailed?"":" (Email isn't configured, so no notification was sent.)"}`); setEmail(""); load(); }
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
-  const revoke=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Stop sharing this site with them?")) return; try{ await api("share_revoke",{id}); load(); }catch(e){ setErr(e.message); } };
+  const revoke=async(id)=>{ if(!await confirmAlert("Stop sharing this site?", {message:"They lose access right away. You can share it again later.", action:"Revoke", destructive:true})) return; try{ await api("share_revoke",{id}); toast("Access revoked"); load(); }catch(e){ setErr(e.message); } };
   return (
     <Sheet title="Share site" subtitle={site.name} onClose={onClose} maxWidth={480}>
         <div>
@@ -1027,7 +1028,7 @@ function SharingSettings({ activeId, sites=[] }){
   const share=async(e)=>{ e.preventDefault(); if(!site||!email)return; setBusy(true);setErr(null);setMsg(null);
     try{ const r=await api("share_create",{accountId:activeId,site,email}); setMsg(r.pending?`Invite emailed to ${email} for ${site}.`:`Shared ${site} with ${email}.${r.emailed?"":" (Email isn't configured — no notification sent.)"}`); setEmail(""); load(); }
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
-  const revoke=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Stop sharing this site with them?")) return; try{ await api("share_revoke",{id}); load(); }catch(e){ setErr(e.message); } };
+  const revoke=async(id)=>{ if(!await confirmAlert("Stop sharing this site?", {message:"They lose access right away. You can share it again later.", action:"Revoke", destructive:true})) return; try{ await api("share_revoke",{id}); toast("Access revoked"); load(); }catch(e){ setErr(e.message); } };
   const out = data?.outgoing||[]; const inc = data?.incoming||[];
   const selStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer"};
   return (
@@ -1077,23 +1078,23 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
   const addAcct=async(e)=>{ e.preventDefault(); setBusy(true); setErr(null);
     try{ const r=await api("linkaccount",{username:u,password:p}); setU("");setP("");setAdding(false); if(!activeId) onSetActive(r.account.id); onChanged(); }
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
-  const unlink=async(id)=>{ if(typeof window!=="undefined"&&!window.confirm("Unlink this Midnite account?")) return; await api("unlinkaccount",{id}); onChanged(); };
+  const unlink=async(id)=>{ if(!await confirmAlert("Unlink this Midnite account?", {message:"Its sites disappear from Sentinel until you link it again.", action:"Unlink", destructive:true})) return; try{ await api("unlinkaccount",{id}); toast("Account unlinked"); onChanged(); }catch(e){ setErr(e.message); } };
   // Profile
   const [name,setName]=useState(profile.display_name||"");
-  const saveName=async()=>{ setBusy(true);setErr(null);setMsg(null); try{ await api("updateprofile",{display_name:name}); setMsg("Profile saved."); onChanged(); }catch(e){setErr(e.message);} finally{setBusy(false);} };
+  const saveName=async()=>{ setBusy(true);setErr(null);setMsg(null); try{ await api("updateprofile",{display_name:name}); toast("Profile saved"); onChanged(); }catch(e){setErr(e.message);} finally{setBusy(false);} };
   const ext=(f)=> (f.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
   const onAvatar=async(e)=>{ const f=e.target.files?.[0]; if(!f) return; setBusy(true);setErr(null);setMsg(null);
-    try{ const { data:{user} }=await supabase.auth.getUser(); const url=await uploadMedia("avatars",`${user.id}/avatar.${ext(f)}`,f); await api("updateprofile",{avatar_url:`${url}?t=${Date.now()}`}); setMsg("Photo updated."); onChanged(); }
+    try{ const { data:{user} }=await supabase.auth.getUser(); const url=await uploadMedia("avatars",`${user.id}/avatar.${ext(f)}`,f); await api("updateprofile",{avatar_url:`${url}?t=${Date.now()}`}); toast("Photo updated"); onChanged(); }
     catch(e){setErr(e.message);} finally{setBusy(false);} };
   // Security
   const [newEmail,setNewEmail]=useState(""); const [newPw,setNewPw]=useState("");
   const changeEmail=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null); try{ const {error}=await supabase.auth.updateUser({email:newEmail}); if(error)throw error; setMsg("Email change requested — you may need to confirm it."); setNewEmail(""); }catch(e){setErr(e.message);} finally{setBusy(false);} };
-  const changePw=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null); try{ const {error}=await supabase.auth.updateUser({password:newPw}); if(error)throw error; setMsg("Password updated."); setNewPw(""); }catch(e){setErr(e.message);} finally{setBusy(false);} };
+  const changePw=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null); try{ const {error}=await supabase.auth.updateUser({password:newPw}); if(error)throw error; toast("Password updated", {icon:"lock"}); setNewPw(""); }catch(e){setErr(e.message);} finally{setBusy(false);} };
   // Site photos
   const onSitePhoto=async(siteName,e)=>{ const f=e.target.files?.[0]; if(!f) return; setBusy(true);setErr(null);setMsg(null);
     try{ const { data:{user} }=await supabase.auth.getUser(); const safe=encodeURIComponent(siteName).replace(/[^A-Za-z0-9]/g,"_").slice(0,60); const url=await uploadMedia("sites",`${user.id}/${safe}.${ext(f)}`,f); await api("setsitephoto",{site:siteName,url:`${url}?t=${Date.now()}`}); onChanged(); }
     catch(e){setErr(e.message);} finally{setBusy(false);} };
-  const removeSitePhoto=async(siteName)=>{ setBusy(true); try{ await api("setsitephoto",{site:siteName,url:null}); onChanged(); }finally{setBusy(false);} };
+  const removeSitePhoto=async(siteName)=>{ if(!await confirmAlert("Remove this site photo?", {action:"Remove", destructive:true})) return; setBusy(true); try{ await api("setsitephoto",{site:siteName,url:null}); toast("Photo removed"); onChanged(); }catch(e){ setErr(e.message); }finally{setBusy(false);} };
 
   const goSec=(id)=>{ setSec(id); setErr(null); setMsg(null); };
   const fileBtn=(label,onChange)=>(<label className="ui-btn ui-btn--secondary ui-btn--sm" style={{flexShrink:0}}><Icon name="upload"/>{label}<input type="file" accept="image/*" onChange={onChange} style={{display:"none"}}/></label>);
@@ -3397,10 +3398,10 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   };
   const openLink = (userId) => { setLinkTarget(userId); setLinkUser(""); setLinkPw(""); setLinkErr(null); };
   const doUnlink = async (targetEmail) => {
-    if(!window.confirm(`Remove the linked Midnite account for ${targetEmail}? They will need to re-link to access data.`)) return;
+    if(!await confirmAlert(`Unlink ${targetEmail}’s Midnite account?`, {message:"They’ll need to link it again to see their data.", action:"Unlink", destructive:true})) return;
     setUnlinkBusy(s=>({...s,[targetEmail]:true}));
     try { await api("admin_unlink_account",{targetEmail}); await loadUsers(); }
-    catch(e){ alert("Unlink failed: "+String(e)); }
+    catch(e){ toast("Unlink failed: "+String(e.message||e), {tone:"error", ms:4000}); }
     setUnlinkBusy(s=>({...s,[targetEmail]:false}));
   };
   const doLink = async (targetEmail) => {
