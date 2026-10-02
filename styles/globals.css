@@ -220,7 +220,7 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--accent-text); font-size: var(--fs-subhead); font-weight: 600; text-align: left; border-radius: 8px;
 }
 .ui-rowlink:hover { background: var(--accent-tint); }
-.ui-rowlink .icon { color: var(--faint); }
+.ui-rowlink > .icon { color: var(--muted); }
 
 /* Skeleton placeholder with a soft shimmer (static under Reduce Motion) */
 .ui-skel {
@@ -229,3 +229,10 @@ button, input, select, textarea { font-family: inherit; }
   animation: ui-shimmer 1.4s ease-in-out infinite;
 }
 @keyframes ui-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* Live tab: flow diagram beside the hero + battery cards on wide screens */
+@media (min-width: 900px) {
+  .live-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 16px; }
+  .live-top > .ui-card { margin-bottom: 0 !important; }
+  .live-top > div > :last-child { margin-bottom: 0 !important; }
+}

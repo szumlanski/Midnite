@@ -1687,7 +1687,7 @@ function SiteHero({statuses, live=null, liveAt=null}) {
           </div>
           <div style={{fontSize:40,fontWeight:800,color:"#7C2D12",lineHeight:1,letterSpacing:"-1.2px"}}><CountUp value={totalPv} format={v=>fmt(v,2)} fromZero duration={0.9}/></div>
         </div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
           <span className="ui-pill" style={{fontSize:FS.footnote,padding:"6px 12px",background:isExporting?"#DCFCE7":isImporting?"#FEE2E2":"#F1F5F9",border:`1px solid ${isExporting?"#86EFAC":isImporting?"#FECACA":"#E2E8F0"}`,color:textTone(gridColor)}}>
             <Icon name="pylon"/>{gridLabel}{(isExporting||isImporting)&&<CountUp value={Math.abs(totalGrid)} format={v=>fmt(v)}/>}
           </span>
@@ -2616,7 +2616,7 @@ function FlowDiagram({flow}) {
 }
 
 function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, inverters, single, value, onPick}) {
-  const pill = (active, onClick, key, label, sub, power) => (
+  const pill = (active, onClick, key, label, sub, power, mono=true) => (
     <button key={key} type="button" onClick={onClick} aria-pressed={active} className="ui-press" style={{
       flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
       padding:"6px 14px", minHeight:48, borderRadius:12,
@@ -2627,17 +2627,17 @@ function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, 
       minWidth:64,
     }}>
       <span style={{fontSize:FS.subhead,fontWeight:700,color:active?SOLAR_TEXT:TEXT,whiteSpace:"nowrap"}}>{label}{power&&<span style={{fontWeight:500,color:active?SOLAR_TEXT:MUTED}}>{" · "}{power}</span>}</span>
-      <span style={{fontSize:FS.caption,fontWeight:500,color:active?SOLAR_TEXT:MUTED,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{sub}</span>
+      <span style={{fontSize:FS.caption,fontWeight:500,color:active?SOLAR_TEXT:MUTED,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:mono?"ui-monospace,SFMono-Regular,Menlo,monospace":SANS}}>{sub}</span>
     </button>
   );
   // Single-select mode (Explorer): no "All" pill; picking an inverter replaces the current one.
   return (
     <div className="inv-scroll" style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
-      {!single && pill(allSelected, onAll, "all", "All", `${inverters.length} inverters`, null)}
+      {!single && pill(allSelected, onAll, "all", "All", `${inverters.length} inverters`, null, false)}
       {inverters.map(inv=>{
         const s = statuses.find(x=>x.sn===inv.sn);
         const pv = s?.data?.photovoltaic?.power?.totalDc;
-        const active = single ? value===inv.sn : selectedSns.includes(inv.sn);
+        const active = single ? value===inv.sn : (!allSelected && selectedSns.includes(inv.sn));
         const onClick = single ? ()=>onPick(inv.sn) : ()=>onToggle(inv.sn);
         return pill(active, onClick, inv.sn, inv.label, inv.sn.slice(-8), pv!=null?fmt(pv):null);
       })}
@@ -3125,12 +3125,14 @@ const ADMIN_TAB = { id:"admin", label:"Admin", iconName:"shield" };
 // and a "…" menu that also carries Settings and Admin (the phone tab bar holds the 5 sections only).
 function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSettings, onLogout, accounts, activeAccountId, onSwitchAccount, isShared, isAdmin, subtitle, titleShown}){
   const acctItems = accounts.length>1 ? [{header:"Account"}, ...accounts.map(a=>({label:a.label, icon:"user", checked:a.id===activeAccountId, onClick:()=>{ if(a.id!==activeAccountId) onSwitchAccount(a.id); }})), {sep:true}] : [];
-  const desktopMenu = [...acctItems, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout}];
+  const help = {label:"Help & FAQ", icon:"help", onClick:()=>window.open("/faq","_blank","noopener")};
+  const desktopMenu = [...acctItems, help, {sep:true}, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout}];
   const phoneMenu = [
     {label:"Settings…", icon:"sliders", onClick:onSettings},
     ...(isAdmin&&!isShared ? [{label:"Admin", icon:"shield", checked: tab==="admin" ? true : undefined, onClick:()=>onTab("admin")}] : []),
-    {sep:true}, ...acctItems.filter(i=>!i.sep), ...(acctItems.length?[{sep:true}]:[]),
-    {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout},
+    help,
+    ...(acctItems.length?[{sep:true}, ...acctItems.filter(i=>!i.sep)]:[]),
+    {sep:true}, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout},
   ];
   return (
     <header className="ui-navbar">
@@ -4259,7 +4261,7 @@ export default function Dashboard() {
           titleShown={titlePast}/>
 
         {/* Content */}
-        <main className="page-pad" style={{maxWidth:960,margin:"0 auto",padding:"16px 16px 32px"}}>
+        <main className="page-pad" style={{maxWidth:1120,margin:"0 auto",padding:"16px 16px 32px"}}>
           <div ref={largeTitleRef} className="hide-desktop" style={{margin:"2px 0 14px"}}>
             <h1 className="ui-largetitle">{site.name}</h1>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:4,fontSize:FS.subhead,color:MUTED}}>
@@ -4296,9 +4298,13 @@ export default function Dashboard() {
                       <Button variant="primary" size="lg" icon="play" onClick={liveGate.resume}>Resume live</Button>
                     </div>
                   )}
-                  {flowAgg&&<FlowDiagram flow={flowAgg}/>}
-                  {allSelected&&<SiteHero statuses={statuses} live={liveAgg} liveAt={liveUpdatedAt}/>}
-                  {allSelected&&<BatteryPanel statuses={statuses}/>}
+                  <div className={allSelected?"live-top":undefined}>
+                    {flowAgg&&<FlowDiagram flow={flowAgg}/>}
+                    {allSelected&&<div>
+                      <SiteHero statuses={statuses} live={liveAgg} liveAt={liveUpdatedAt}/>
+                      <BatteryPanel statuses={statuses}/>
+                    </div>}
+                  </div>
                   {allSelected&&<LifetimePanel statuses={statuses}/>}
                   {selectedSns.length!==1&&(
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,margin:"6px 2px 10px"}}>
