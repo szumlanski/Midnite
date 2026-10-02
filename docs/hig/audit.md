@@ -31,7 +31,7 @@ Measured 2026-10-02 on `pages/index.jsx` (4,300 lines, 47 components, inline sty
 5. Emoji as icons render differently per device and cannot be colored or sized consistently.
 
 ## Checklist (one version per phase; preview, then merge on Jason's OK)
-- [ ] 1. v0.2.0 Showcase: header + Live tab (plus setup: HIG docs, UI kit, GSAP, screenshot harness)
+- [x] 1. v0.2.0 Showcase: header + Live tab (plus setup: HIG docs, UI kit, GSAP, screenshot harness)
 - [ ] 2. v0.3.0 Foundation: contrast tokens, type scale, focus rings, 44px phone targets, 16px inputs,
       sentence case, 768 breakpoint, 5-tab bar, globals.css + font cleanup, Reduce Motion, dead code
 - [ ] 3. v0.4.0 Other detail views: inverter detail, battery/lifetime/fault, Day/Month/Year/Explorer headers

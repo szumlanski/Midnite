@@ -2,7 +2,7 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
-## 0.2.0 (unreleased): Showcase, header and Live tab
+## 0.2.0 (2026-10-02): Showcase, header and Live tab
 
 - New navigation bar. Desktop: "‹ Fleet" back link, site name, section tabs as a segmented control whose
   selection pill glides, Share and Settings buttons, and a "…" menu with account switching and Sign out.
