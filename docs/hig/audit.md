@@ -39,7 +39,7 @@ Measured 2026-10-02 on `pages/index.jsx` (4,300 lines, 47 components, inline sty
 - [x] 5. v0.6.0 Sheets: one `<Sheet>` for the 5 overlays; Settings sub-tabs as a segmented control
 - [x] 6. v0.7.0 Alerts + toasts: `confirmAlert` at every confirm site, toasts for completed actions
 - [x] 7. v0.8.0 Icons: emoji/glyphs to the SVG icon set (emails excluded)
-- [ ] 8. v0.9.0 Remaining screens at 390px: landing, auth, FAQ, Terms, Admin, empty/loading/error states
+- [x] 8. v0.9.0 Remaining screens at 390px: landing, auth, FAQ, Terms, Admin, empty/loading/error states
 - [ ] 9. v1.0.0 Motion polish: GSAP pass across every screen, Reduce Motion pass, poll-time performance
 
 Skipped: host-page breakout (not embedded), PWA shell (no manifest), dark mode (Jason's call, 2026-10-02).

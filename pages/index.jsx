@@ -7,6 +7,7 @@ import { summarizeRule } from "@/lib/notifications/engine";
 import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
 import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT, LOAD_C, SOLAR_TEXT, BATTERY_TEXT, GRID_OUT_TEXT, GRID_IN_TEXT, SHADOW, SHADOW_SM, SANS, CHART_PROD, CHART_CONS, CHART_BAT, CHART_GRID, FS, textTone } from "@/components/ui/tokens";
 import { Icon, svgIcon } from "@/components/ui/Icon";
+import { Logo } from "@/components/ui/Logo";
 import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { confirmAlert, toast } from "@/components/ui/Alert";
@@ -190,24 +191,6 @@ const TOOLTIP_S = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:
 const WORK_MODE_LABELS = {0:"Self Consumption",1:"Feed-In Priority",2:"Backup Priority",3:"Time of Use",4:"Peak Shaving",5:"Off Grid"};
 const INV_STATE_LABELS  = {0:"Standby",1:"Normal",2:"Checking",3:"On Grid",4:"Off Grid",5:"Fault"};
 
-const Logo = ({size=32}) => (
-  <svg width={size} height={size} viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-    <rect width="256" height="256" rx="40" fill="#0D1F33"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(0 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(45 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(90 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(135 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(180 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(225 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(270 128 128)"/>
-    <rect x="120" y="12" width="16" height="50" rx="8" fill="#F59E0B" transform="rotate(315 128 128)"/>
-    <circle cx="128" cy="128" r="66" fill="#F59E0B"/>
-    <circle cx="128" cy="128" r="44" fill="#0D1F33"/>
-    <circle cx="128" cy="128" r="28" fill="#00C8E8"/>
-    <circle cx="128" cy="128" r="12" fill="#0D1F33"/>
-    <circle cx="128" cy="128" r="5" fill="#FFFFFF"/>
-  </svg>
-);
 
 const PageHead = ({title}) => (
   <Head>
@@ -490,9 +473,10 @@ function LandingPage(){
       }
       .lp-pbtn{background:linear-gradient(135deg,#FCD34D,#D97706);color:#7C2D12;border:none;border-radius:10px;padding:13px 28px;font-size:15px;font-weight:700;font-family:${SANS};cursor:pointer;box-shadow:0 4px 16px rgba(217,119,6,0.3);transition:opacity .15s;}
       .lp-pbtn:hover{opacity:.9;}
-      .lp-pbtn:disabled{background:#E5E7EB;color:${FAINT};box-shadow:none;cursor:default;opacity:1;}
-      .lp-obtn{background:transparent;color:${SOLAR};border:2px solid ${SOLAR};border-radius:10px;padding:11px 24px;font-size:14px;font-weight:700;font-family:${SANS};cursor:pointer;transition:all .15s;}
-      .lp-obtn:hover{background:${SOLAR};color:white;}
+      .lp-pbtn:disabled{background:#E5E7EB;color:${MUTED};box-shadow:none;cursor:default;opacity:1;}
+      .lp-pbtn:active:not(:disabled),.lp-obtn:active{transform:scale(.97);}
+      .lp-obtn{background:transparent;color:${SOLAR_TEXT};border:2px solid ${SOLAR};border-radius:10px;padding:11px 24px;font-size:14px;font-weight:700;font-family:${SANS};cursor:pointer;transition:all .15s;}
+      .lp-obtn:hover{background:${SOLAR_TEXT};border-color:${SOLAR_TEXT};color:white;}
       .lp-chk::before{content:"";display:inline-block;width:1em;height:1em;margin-right:8px;vertical-align:-0.15em;background:${BATTERY};-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center/contain no-repeat;}
       .lp-flink{color:rgba(255,255,255,0.6);text-decoration:none;font-weight:500;}
       .lp-flink:hover{color:white;}
@@ -502,16 +486,16 @@ function LandingPage(){
 
     {/* NAV */}
     <nav style={{position:"sticky",top:0,zIndex:100,background:"rgba(247,244,239,0.92)",backdropFilter:"blur(12px)",borderBottom:`1px solid ${BORDER}`,padding:"0 24px"}}>
-      <div style={{maxWidth:1100,margin:"0 auto",height:60,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{maxWidth:1100,margin:"0 auto",height:60,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
         <a href="/" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
           <Logo size={32}/>
-          <span style={{fontWeight:800,fontSize:FS.callout,color:TEXT,letterSpacing:"-0.5px"}}>Midnite Sentinel</span>
+          <span style={{fontWeight:800,fontSize:FS.callout,color:TEXT,letterSpacing:"-0.5px",whiteSpace:"nowrap"}}>Midnite Sentinel</span>
         </a>
-        <div style={{display:"flex",alignItems:"center",gap:20}}>
-          <a href="/faq" className="lp-nav-link">FAQ</a>
-          <a href="/terms" className="lp-nav-link">Terms</a>
-          <button className="lp-obtn" style={{padding:"7px 18px",fontSize:FS.subhead}} onClick={()=>scrollToAuth("signin")}>Sign in</button>
-          <button className="lp-pbtn" style={{padding:"9px 20px",fontSize:FS.subhead}} onClick={()=>scrollToAuth("signup")}>Sign up</button>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <a href="/faq" className="lp-nav-link hide-phone">FAQ</a>
+          <a href="/terms" className="lp-nav-link hide-phone">Terms</a>
+          <button className="lp-obtn" style={{padding:"7px 18px",fontSize:FS.subhead,whiteSpace:"nowrap"}} onClick={()=>scrollToAuth("signin")}>Sign in</button>
+          <button className="lp-pbtn hide-phone" style={{padding:"9px 20px",fontSize:FS.subhead,whiteSpace:"nowrap"}} onClick={()=>scrollToAuth("signup")}>Sign up</button>
         </div>
       </div>
     </nav>
@@ -543,7 +527,7 @@ function LandingPage(){
               <div style={{fontWeight:800,fontSize:FS.headline,color:TEXT,marginBottom:4}}>{mode==="signup"?"Start monitoring free":"Welcome back"}</div>
               <div style={{fontSize:FS.subhead,color:MUTED}}>{mode==="signup"?"No credit card required.":"Sign in to your portal."}</div>
             </div>
-            {err&&<div style={errBox}>{err}</div>}
+            {err&&<div role="alert" style={errBox}>{err}</div>}
             {msg&&<div style={okBox}>{msg}</div>}
             {GOOGLE_ON&&<>
               <button onClick={google} style={{width:"100%",padding:"11px 0",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:FS.body,fontWeight:600,fontFamily:SANS,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:14}}><GoogleG/> Continue with Google</button>
@@ -709,7 +693,7 @@ function ResetPasswordPage({onDone}){
               <input type="password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)} autoFocus required minLength={6} style={inputS}/>
               <input type="password" placeholder="Confirm new password" value={pw2} onChange={e=>setPw2(e.target.value)} required style={inputS}/>
               {err&&<div style={{color:GRID_IN,fontSize:FS.footnote}}>{err}</div>}
-              <button type="submit" disabled={busy} style={{padding:"11px",borderRadius:10,border:"none",background:SOLAR,color:"#fff",fontSize:FS.body,fontWeight:700,fontFamily:SANS,cursor:busy?"default":"pointer",marginTop:4}}>
+              <button type="submit" disabled={busy} style={{padding:"11px",minHeight:44,borderRadius:10,border:"none",background:SOLAR_TEXT,color:"#fff",fontSize:FS.body,fontWeight:700,fontFamily:SANS,cursor:busy?"default":"pointer",marginTop:4}}>
                 {busy?"Updating…":"Update password"}
               </button>
             </form>
@@ -729,13 +713,13 @@ function LinkMidnite({email,onLinked,onSignOut,initErr=null}){
     <AuthShell subtitle="Link your Midnite account">
       <div style={{background:CARD,borderRadius:20,padding:28,boxShadow:SHADOW}}>
         <div style={{fontSize:FS.subhead,color:MUTED,lineHeight:1.6,marginBottom:18}}>Signed in as <b style={{color:TEXT}}>{email}</b>. Connect your Midnite login to pull in your system’s data — your credentials are encrypted and never shown again.</div>
-        {err&&<div style={errBox}>{err}</div>}
+        {err&&<div role="alert" style={errBox}>{err}</div>}
         <form onSubmit={submit}>
-          <div style={{marginBottom:14}}><label style={lblS}>Midnite Username</label><input value={u} onChange={e=>setU(e.target.value)} autoFocus style={authInput}/></div>
-          <div style={{marginBottom:20}}><label style={lblS}>Midnite Password</label><input type="password" value={p} onChange={e=>setP(e.target.value)} style={authInput}/></div>
+          <div style={{marginBottom:14}}><label style={lblS} htmlFor="lm-user">Midnite username</label><input id="lm-user" value={u} onChange={e=>setU(e.target.value)} autoFocus autoComplete="username" autoCapitalize="none" style={authInput}/></div>
+          <div style={{marginBottom:20}}><label style={lblS} htmlFor="lm-pw">Midnite password</label><input id="lm-pw" type="password" value={p} onChange={e=>setP(e.target.value)} autoComplete="current-password" style={authInput}/></div>
           <button type="submit" disabled={busy||!u||!p} style={authBtn(busy||!u||!p)}>{busy?"Linking…":"Link account"}</button>
         </form>
-        <div style={{textAlign:"center",marginTop:16}}><button onClick={onSignOut} style={{border:"none",background:"none",color:MUTED,fontWeight:600,cursor:"pointer",fontFamily:SANS,fontSize:FS.subhead}}>Sign out</button></div>
+        <div style={{textAlign:"center",marginTop:12}}><Button variant="plain" icon="logout" onClick={onSignOut}>Sign out</Button></div>
       </div>
     </AuthShell>
   );
@@ -813,7 +797,7 @@ function DigestSettings({activeId, site=null}){
         </div>
         <Switch checked={enabled} disabled={busy} label="Daily digest" onChange={(v)=>save(v)}/>
       </div>
-      {err&&<div style={errBox}>{err}</div>}
+      {err&&<div role="alert" style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {!emailOk &&
         <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:FS.caption,color:"#92400E"}}>
@@ -881,7 +865,7 @@ function NotificationsSettings({activeId, site=null}){
     <>
       <DigestSettings activeId={activeId} site={site}/>
       <h3 style={{fontSize:FS.headline,fontWeight:800,color:TEXT,margin:"8px 0 10px",display:"flex",alignItems:"center",gap:8}}><Icon name="bell" style={{color:SOLAR}}/>Threshold alerts</h3>
-      {err&&<div style={errBox}>{err}</div>}
+      {err&&<div role="alert" style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {data && !data.emailConfigured &&
         <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:FS.footnote,color:"#92400E"}}>
@@ -997,7 +981,7 @@ function ShareModal({ site, accountId, onClose }){
   return (
     <Sheet title="Share site" subtitle={site.name} onClose={onClose} maxWidth={480}>
         <div>
-          {err&&<div style={errBox}>{err}</div>}
+          {err&&<div role="alert" style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
           <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:12,lineHeight:1.5}}>Give someone <strong>view-only</strong> access to this site. They'll get an email; if they don't have an account yet, they'll be invited to create one with that address and the site appears automatically. No equipment control — viewing only. Revoke anytime.</div>
           <form onSubmit={submit} style={{display:"flex",gap:8,marginBottom:18}}>
@@ -1033,7 +1017,7 @@ function SharingSettings({ activeId, sites=[] }){
   const selStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer"};
   return (
     <>
-      {err&&<div style={errBox}>{err}</div>}
+      {err&&<div role="alert" style={errBox}>{err}</div>}
       {msg&&<div style={okBox}>{msg}</div>}
       {data?.error&&<div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:FS.footnote,color:"#92400E"}}>Sharing isn’t set up on the database yet (run <code style={{fontFamily:"monospace"}}>supabase/schema.sql</code>).</div>}
       <div style={{fontSize:FS.footnote,color:MUTED,marginBottom:12,lineHeight:1.5}}>Share <strong>view-only</strong> access to a site. Recipients get an email; if they don’t have an account, they’re invited to make one with that address and the site appears automatically. No equipment control. Revoke anytime.</div>
@@ -1112,7 +1096,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
         {onLogout && <Button variant="destructive" icon="logout" onClick={onLogout}>Sign out</Button>}
       </>}>
         <div>
-          {err&&<div style={errBox}>{err}</div>}
+          {err&&<div role="alert" style={errBox}>{err}</div>}
           {msg&&<div style={okBox}>{msg}</div>}
 
           {sec==="accounts" && <>
@@ -3552,32 +3536,37 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
               <Th a="center">Role</Th>
               <Th a="left">Midnite account</Th>
               <Th>Last sign-in</Th>
-              <Th a="center">Reset pw</Th>
+              <Th a="center"><span className="sr-only">Actions</span></Th>
             </tr></thead>
             <tbody>
               {(users||[]).flatMap(u=>{
                 const rs=resetSent[u.email];
                 const isLinking=linkTarget===u.id;
-                const miniBtn=(label,onClick,bg,fg,disabled)=><button onClick={onClick} disabled={disabled} style={{padding:"3px 8px",borderRadius:6,border:"none",background:bg,color:fg,fontSize:FS.caption,fontWeight:700,fontFamily:SANS,cursor:disabled?"default":"pointer",whiteSpace:"nowrap"}}>{label}</button>;
                 const rows=[<tr key={u.id} style={{borderTop:`1px solid ${BORDER}`}}>
                   <Td a="left">{u.email}</Td>
                   <Td a="left">{u.profile?.display_name||<span style={{color:MUTED}}>—</span>}</Td>
-                  <Td a="center"><span style={{fontSize:FS.caption,fontWeight:700,padding:"2px 6px",borderRadius:10,background:u.profile?.role==="admin"?"#FEF3C7":BORDER,color:u.profile?.role==="admin"?SOLAR:MUTED}}>{u.profile?.role||"user"}</span></Td>
+                  <Td a="center"><span className="ui-pill" style={{background:u.profile?.role==="admin"?"#FEF3C7":"#F1F5F9",color:u.profile?.role==="admin"?SOLAR_TEXT:MUTED}}>{u.profile?.role==="admin"?"Admin":"User"}</span></Td>
                   <Td a="left">{u.accounts.length
-                    ? <span style={{display:"flex",alignItems:"center",gap:6}}><span>{u.accounts.map(a=>a.midnite_username).join(", ")}</span>{miniBtn(unlinkBusy[u.email]?"…":"Unlink",()=>doUnlink(u.email),unlinkBusy[u.email]?BORDER:"#FEE2E2",unlinkBusy[u.email]?MUTED:GRID_IN,!!unlinkBusy[u.email])}</span>
+                    ? <span>{u.accounts.map(a=>a.midnite_username).join(", ")}{unlinkBusy[u.email]&&<span style={{color:MUTED}}> · unlinking…</span>}</span>
                     : isLinking
-                      ? <span style={{color:SOLAR,fontSize:FS.caption,fontWeight:700}}>Linking…</span>
-                      : <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:MUTED}}>not linked</span>{miniBtn("Link Midnite",()=>openLink(u.id),"#0EA5E9","#fff",false)}</span>}</Td>
-                  <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:MUTED}}>never</span>}</Td>
-                  <Td a="center">{miniBtn(rs==="sending"?"Sending…":rs==="ok"?<><Icon name="check"/> Sent</>:rs?.startsWith("err")?"Failed":"Send reset",()=>sendReset(u.email),rs==="ok"?"#D1FAE5":rs?.startsWith("err")?"#FEE2E2":rs==="sending"?BORDER:"#0EA5E9",rs==="ok"?BATTERY:rs?.startsWith("err")?GRID_IN:rs==="sending"?MUTED:"#fff",rs==="sending")}</Td>
+                      ? <span style={{color:SOLAR_TEXT,fontWeight:700}}>Linking…</span>
+                      : <span style={{color:MUTED}}>Not linked</span>}</Td>
+                  <Td>{u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):<span style={{color:MUTED}}>Never</span>}
+                    {rs==="ok"&&<div style={{color:BATTERY_TEXT,fontSize:FS.footnote}}>Reset email sent</div>}
+                    {rs?.startsWith("err")&&<div style={{color:GRID_IN_TEXT,fontSize:FS.footnote}}>Reset failed</div>}</Td>
+                  <Td a="center"><MoreMenu label={`Actions for ${u.email}`} items={[
+                    {label:rs==="sending"?"Sending reset…":"Send password reset", icon:"mail", disabled:rs==="sending", onClick:()=>sendReset(u.email)},
+                    ...(!u.accounts.length?[{label:"Link Midnite account…", icon:"link", onClick:()=>openLink(u.id)}]:[]),
+                    ...(u.accounts.length?[{sep:true},{label:"Unlink Midnite account", icon:"link", destructive:true, disabled:!!unlinkBusy[u.email], onClick:()=>doUnlink(u.email)}]:[]),
+                  ]}/></Td>
                 </tr>];
                 if(isLinking) rows.push(<tr key={`link-${u.id}`} style={{borderTop:`1px solid ${BORDER}`}}>
                   <td colSpan={6} style={{padding:"10px 12px",background:"#FAFAF9"}}>
                     <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                      <input value={linkUser} onChange={e=>setLinkUser(e.target.value)} placeholder="Midnite username" autoFocus style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:FS.footnote,fontFamily:SANS,color:TEXT,background:CARD,width:160}}/>
-                      <input type="password" value={linkPw} onChange={e=>setLinkPw(e.target.value)} placeholder="Midnite password" style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${BORDER}`,fontSize:FS.footnote,fontFamily:SANS,color:TEXT,background:CARD,width:160}}/>
-                      {miniBtn(linkBusy?"Linking…":"Link account",()=>doLink(u.email),SOLAR,"#fff",linkBusy)}
-                      {miniBtn("Cancel",()=>setLinkTarget(null),BORDER,MUTED,false)}
+                      <input className="ui-field" aria-label="Midnite username" value={linkUser} onChange={e=>setLinkUser(e.target.value)} placeholder="Midnite username" autoFocus autoComplete="off" style={{width:180,cursor:"text"}}/>
+                      <input className="ui-field" aria-label="Midnite password" type="password" value={linkPw} onChange={e=>setLinkPw(e.target.value)} placeholder="Midnite password" autoComplete="new-password" style={{width:180,cursor:"text"}}/>
+                      <Button size="sm" variant="primary" onClick={()=>doLink(u.email)} disabled={linkBusy}>{linkBusy?"Linking…":"Link account"}</Button>
+                      <Button size="sm" onClick={()=>setLinkTarget(null)}>Cancel</Button>
                       {linkErr&&<span style={{color:GRID_IN,fontSize:FS.caption}}>{linkErr}</span>}
                     </div>
                   </td>
@@ -4215,7 +4204,7 @@ export default function Dashboard() {
   const titlePast = useScrolledPast(largeTitleRef, [authState, site?.name]);
   useStaggerIn(liveRef, [authState, tab, site?.name, liveLoading]);
 
-  if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:MUTED,fontSize:FS.subhead,fontFamily:SANS}}>Loading…</div></>);
+  if(authState==="loading") return (<><PageHead/><div role="status" aria-label="Loading" style={{minHeight:"100vh",background:BG,display:"flex",flexDirection:"column",gap:14,alignItems:"center",justifyContent:"center",color:MUTED,fontSize:FS.subhead,fontFamily:SANS}}><span className="splash-logo"><Logo size={56}/></span>Loading your sites…</div></>);
   if(authState==="appauth") return <LandingPage/>;
   if(authState==="reset_password") return <ResetPasswordPage onDone={async()=>{ setAuthState("loading"); try{await loadContext();}catch{setAuthState("appauth");} }}/>;
   if(authState==="link") return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout} initErr={loginError}/>;

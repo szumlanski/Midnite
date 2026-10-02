@@ -402,3 +402,8 @@ button, input, select, textarea { font-family: inherit; }
   font-size: var(--fs-subhead); font-weight: 600; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22); }
 .ui-toast .icon { color: #4ADE80; font-size: 18px; }
 .ui-toast--error .icon { color: #FCA5A5; }
+
+/* Splash: the logo breathes slowly while the app loads (static under Reduce Motion) */
+.splash-logo { display: inline-flex; animation: splash 1.6s ease-in-out infinite; }
+@keyframes splash { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.94); opacity: 0.8; } }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

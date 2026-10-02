@@ -232,6 +232,17 @@ async function runViewport(browser, vp) {
     })) await shoot(page, idle, "landing");
     await ctx.close();
   }
+  for (const pg of ["faq", "terms"]) {
+    if (!want(pg)) continue;
+    const { ctx, abortedUrls } = await newContext(browser, vp, false);
+    const page = await ctx.newPage(); attach(page, abortedUrls); const idle = netTracker(page);
+    screen = pg;
+    if (await step(pg, async () => {
+      await page.goto(`${BASE}/${pg}`, { waitUntil: "load" });
+      await page.locator("h1").first().waitFor({ timeout: 15000 });
+    })) await shoot(page, idle, pg);
+    await ctx.close();
+  }
 
   // ── signed-in flow: one page, screens in order ──
   if (ONLY && !APP_SCREENS.some((s) => ONLY.has(s))) return;

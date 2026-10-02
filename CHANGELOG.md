@@ -2,6 +2,23 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 0.9.0 (2026-10-02): Remaining screens
+
+- Landing page on phones: the nav shows the logo, name and Sign in only (FAQ, Terms and Sign up move out
+  of the way), nothing wraps; outline buttons use the text-safe amber; buttons press in slightly.
+- One logo everywhere: the canonical Sentinel mark moved to `components/ui/Logo.jsx`; FAQ and Terms were
+  drawing an older variant and now share it, along with the shared color tokens and type scale (FAQ/Terms
+  text contrast and sizes fixed by the same codemod as the app).
+- FAQ: copy updated for the new interface (Settings → Alerts, Export CSV, Share, the Fleet page), a chevron
+  icon on each question, "Sign in" in sentence case, desktop sidebar at the 768px breakpoint.
+- Terms: comfortable padding on phones.
+- Sign-in screens: sentence-case labels with proper autocomplete hints, Sign out as a real button,
+  errors announced to screen readers.
+- Loading: a branded splash (the logo breathes gently) instead of "Loading…".
+- Admin → Users: each row has a "…" menu (Send password reset, Link Midnite account…, and a red Unlink
+  after a divider) instead of inline colored buttons; role pills; reset results shown under the date.
+- Harness covers FAQ and Terms (42 screens).
+
 ## 0.8.0 (2026-10-02): Icons
 
 - Every emoji or symbol used as an icon in the app is now the one SVG icon set, so icons look the same on

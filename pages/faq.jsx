@@ -1,49 +1,10 @@
 import Head from 'next/head';
+import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, SOLAR_TEXT, BATTERY, GRID_IN, LOAD_C, SANS, FS } from '@/components/ui/tokens';
+import { Logo } from '@/components/ui/Logo';
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 
-const BG = "#F7F4EF";
-const CARD = "#FFFFFF";
-const BORDER = "#EAE4DC";
-const TEXT = "#1C1917";
-const MUTED = "#78716C";
-const FAINT = "#A8A29E";
-const SOLAR = "#D97706";
-const BATTERY = "#16A34A";
-const GRID_IN = "#DC2626";
-const LOAD_C = "#2563EB";
-const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
 
-function Logo({ size = 36 }) {
-  const rays = [0, 45, 90, 135, 180, 225, 270, 315];
-  return (
-    <svg width={size} height={size} viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="256" height="256" rx="52" fill="#0D1F33" />
-      {rays.map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const sinR = Math.sin(rad);
-        const cosR = Math.cos(rad);
-        const x1 = 128 + sinR * 72;
-        const y1 = 128 - cosR * 72;
-        const x2 = 128 + sinR * 96;
-        const y2 = 128 - cosR * 96;
-        const dx = sinR * 7;
-        const dy = -cosR * 7;
-        return (
-          <polygon
-            key={deg}
-            points={`${x1 + dy},${y1 - dx} ${x1 - dy},${y1 + dx} ${x2 - dy},${y2 + dx} ${x2 + dy},${y2 - dx}`}
-            fill="#F59E0B"
-          />
-        );
-      })}
-      <circle cx="128" cy="128" r="66" fill="#F59E0B" />
-      <circle cx="128" cy="128" r="44" fill="#0D1F33" />
-      <circle cx="128" cy="128" r="28" fill="#00C8E8" />
-      <circle cx="128" cy="128" r="12" fill="#0D1F33" />
-      <circle cx="128" cy="128" r="5" fill="#FFFFFF" />
-    </svg>
-  );
-}
 
 const FAQ_SECTIONS = [
   {
@@ -64,7 +25,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "What inverters and account types are supported?",
-        a: "Midnite Sentinel supports inverter systems accessible through the Midnite/Senergytec cloud API — including the MN 15-12KW-AIO (All-in-One) series and other Midnite-compatible inverters. Both installer accounts (Eagle API — manage fleets of end-user sites) and end-user accounts (Senergytec API — single site) are supported. Installer accounts unlock Fleet View and multi-site management.",
+        a: "Midnite Sentinel supports inverter systems accessible through the Midnite/Senergytec cloud API — including the MN 15-12KW-AIO (All-in-One) series and other Midnite-compatible inverters. Both installer accounts (Eagle API — manage fleets of end-user sites) and end-user accounts (Senergytec API — single site) are supported. Installer accounts unlock the Fleet page and multi-site management.",
       },
       {
         q: "Is there a mobile app?",
@@ -86,7 +47,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "How often does data update?",
-        a: "Live power flow (LIVE ● indicator) updates every ~5 seconds via a real-time cloud relay. Inverter status readings (cards, battery panel) update every 5 minutes from the Midnite cloud cache. Historical charts (Day/Month/Year) are based on the same 5-minute interval data. The \"Updated X min ago\" chip shows exactly how stale the current readings are.",
+        a: "Live power flow (the green Live badge) updates every ~5 seconds via a real-time cloud relay. Inverter status readings (cards, battery panel) update every 5 minutes from the Midnite cloud cache. Historical charts (Day/Month/Year) are based on the same 5-minute interval data. The \"Updated X min ago\" chip shows exactly how stale the current readings are.",
       },
       {
         q: "What does \"Updated X min ago\" mean?",
@@ -126,15 +87,15 @@ const FAQ_SECTIONS = [
   },
   {
     id: "fleet-view",
-    title: "Fleet View",
+    title: "Fleet",
     questions: [
       {
-        q: "What is Fleet View?",
-        a: "Fleet View is a real-time status dashboard for installer/admin accounts managing multiple sites. It shows all sites in a sortable, searchable table with columns for site status (Online/Partial/Offline), current PV power, house load, battery SOC, grid exchange, PV today, exported today, and last update time. KPI summary cards at the top show fleet-wide totals and a count of sites needing attention.",
+        q: "What is the Fleet page?",
+        a: "The Fleet page is a real-time status dashboard for installer/admin accounts managing multiple sites. It shows all sites in a sortable, searchable table with columns for site status (Online/Partial/Offline), current PV power, house load, battery SOC, grid exchange, PV today, exported today, and last update time. KPI summary cards at the top show fleet-wide totals and a count of sites needing attention.",
       },
       {
-        q: "Who can see Fleet View?",
-        a: "Fleet View appears automatically for accounts linked to an installer-type Midnite account, which can manage multiple end-user sites via the Eagle API. Single-site end-user accounts go directly to the site dashboard. If you've been granted view-only access to a shared site, you'll also see Fleet View if there are multiple shared sites on that account.",
+        q: "Who can see the Fleet page?",
+        a: "The Fleet page appears automatically for accounts linked to an installer-type Midnite account, which can manage multiple end-user sites via the Eagle API. Single-site end-user accounts go directly to the site dashboard. If you've been granted view-only access to a shared site, you'll also see the Fleet page if there are multiple shared sites on that account.",
       },
       {
         q: "What do the status indicators mean (Online, Partial, Offline)?",
@@ -142,7 +103,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Can I export Fleet data?",
-        a: "Yes — click the ⬇ CSV button in the Fleet View header to download the current table (all sites, all columns) as a CSV file. The file is named with today's date.",
+        a: "Yes — choose Export CSV (a button in the Fleet header on desktop, in the “…” menu on phones) to download the current table (all sites, all columns) as a CSV file. The file is named with today's date.",
       },
     ],
   },
@@ -152,7 +113,7 @@ const FAQ_SECTIONS = [
     questions: [
       {
         q: "How do I set up an alert?",
-        a: "Go to Settings → Notifications. Each inverter (device) in your linked account is listed. Click \"Add rule\" next to a device, choose a trigger type from the dropdown, set a threshold value, optionally set a time gate (e.g., only alert after 6 PM) and a cooldown period, then save. Email alerts will be sent when the condition is met.",
+        a: "Go to Settings → Alerts. Each inverter (device) in your linked account is listed. Click \"Add alert\" next to a device, choose a trigger type from the dropdown, set a threshold value, optionally set a time gate (e.g., only alert after 6 PM) and a cooldown period, then save. Email alerts will be sent when the condition is met.",
       },
       {
         q: "What trigger types are available?",
@@ -168,7 +129,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Why isn't my alert email arriving?",
-        a: "Check that a Resend API key is configured (Settings → Notifications shows a banner if email isn't set up). Also check your spam/junk folder. During pre-launch, the default sender is a shared testing address — adding it to your contacts helps. Verify your cooldown hasn't prevented a re-trigger. Use the \"Send test\" button in Notifications to verify end-to-end delivery.",
+        a: "Check that a Resend API key is configured (Settings → Alerts shows a banner if email isn't set up). Also check your spam/junk folder. During pre-launch, the default sender is a shared testing address — adding it to your contacts helps. Verify your cooldown hasn't prevented a re-trigger. Use the \"Send test\" button in Notifications to verify end-to-end delivery.",
       },
       {
         q: "How does device offline detection work?",
@@ -182,11 +143,11 @@ const FAQ_SECTIONS = [
     questions: [
       {
         q: "How do I share a site with someone?",
-        a: "In the dashboard header, click \"↗ Share\" (or go to Settings → Sharing). Enter the recipient's email address and click Share. If they have a Midnite Sentinel account, the site appears in their account switcher immediately. If not, they receive an invitation email asking them to sign up — the site will appear automatically when they do (using that email address).",
+        a: "In the dashboard header, click Share (the share icon on phones) (or go to Settings → Sharing). Enter the recipient's email address and click Share. If they have a Midnite Sentinel account, the site appears in their account switcher immediately. If not, they receive an invitation email asking them to sign up — the site will appear automatically when they do (using that email address).",
       },
       {
         q: "What can a shared (view-only) user access?",
-        a: "Shared users get read-only access to the specific site(s) shared with them. They can view Live, Day, Month, Year, and Explorer tabs, see Fleet View if multiple sites are shared, and see the site photo set by the owner. They cannot access Admin tools, create alerts, share the site with others, change any settings, or modify site photos.",
+        a: "Shared users get read-only access to the specific site(s) shared with them. They can view Live, Day, Month, Year, and Explorer tabs, see the Fleet page if multiple sites are shared, and see the site photo set by the owner. They cannot access Admin tools, create alerts, share the site with others, change any settings, or modify site photos.",
       },
       {
         q: "Are my Midnite credentials exposed to the recipient?",
@@ -216,7 +177,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "How do I add a site photo?",
-        a: "Go to Settings → Site Photos to upload a photo for any of your sites. On mobile, open Fleet View and tap the thumbnail icon next to a site to take a photo directly with your camera or choose one from your gallery. Site photos appear in Fleet View and may appear in other parts of the app in the future.",
+        a: "Go to Settings → Photos to upload a photo for any of your sites. On mobile, open the Fleet page and tap the thumbnail icon next to a site to take a photo directly with your camera or choose one from your gallery. Site photos appear in the Fleet page and may appear in other parts of the app in the future.",
       },
       {
         q: "How do I unlink or switch my Midnite account?",
@@ -275,7 +236,7 @@ function AccordionItem({ question, answer, isOpen, onToggle }) {
         aria-expanded={isOpen}
       >
         <span style={{
-          fontSize: 15,
+          fontSize: FS.callout,
           fontWeight: 600,
           color: isOpen ? SOLAR : TEXT,
           lineHeight: 1.45,
@@ -285,20 +246,20 @@ function AccordionItem({ question, answer, isOpen, onToggle }) {
         </span>
         <span style={{
           flexShrink: 0,
-          fontSize: 13,
-          color: isOpen ? SOLAR : FAINT,
+          fontSize: FS.subhead,
+          color: isOpen ? SOLAR_TEXT : MUTED,
           marginTop: 2,
           transition: 'color 0.15s, transform 0.2s',
           display: 'inline-block',
           transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
         }}>
-          ▼
+          <Icon name="chevron-down" />
         </span>
       </button>
       {isOpen && (
         <div style={{
           paddingBottom: 20,
-          fontSize: 15,
+          fontSize: FS.callout,
           color: MUTED,
           lineHeight: 1.75,
         }}>
@@ -319,7 +280,7 @@ function FAQSection({ section, openIndex, onToggle, globalOffset }) {
         marginBottom: 4,
       }}>
         <h2 style={{
-          fontSize: 17,
+          fontSize: FS.headline,
           fontWeight: 700,
           color: TEXT,
           margin: 0,
@@ -397,24 +358,24 @@ export default function FAQ() {
           }}>
             <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
               <Logo size={32} />
-              <span style={{ fontWeight: 700, fontSize: 16, color: TEXT, letterSpacing: '-0.3px' }}>
+              <span style={{ fontWeight: 700, fontSize: FS.callout, color: TEXT, letterSpacing: '-0.3px' }}>
                 Midnite Sentinel
               </span>
             </a>
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-              <a href="/terms" style={{ fontSize: 14, fontWeight: 500, color: MUTED, textDecoration: 'none' }}>
+              <a href="/terms" style={{ fontSize: FS.body, fontWeight: 500, color: MUTED, textDecoration: 'none' }}>
                 Terms
               </a>
               <a href="/" style={{
-                fontSize: 14,
+                fontSize: FS.body,
                 fontWeight: 600,
                 color: '#FFFFFF',
-                background: SOLAR,
+                background: SOLAR_TEXT,
                 borderRadius: 8,
                 padding: '6px 16px',
                 textDecoration: 'none',
               }}>
-                Sign In
+                Sign in
               </a>
             </div>
           </div>
@@ -428,11 +389,9 @@ export default function FAQ() {
           textAlign: 'center',
         }}>
           <p style={{
-            fontSize: 13,
+            fontSize: FS.subhead,
             fontWeight: 600,
-            color: SOLAR,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
+            color:SOLAR_TEXT,
             marginBottom: 12,
             marginTop: 0,
           }}>
@@ -449,7 +408,7 @@ export default function FAQ() {
             Frequently Asked Questions
           </h1>
           <p style={{
-            fontSize: 17,
+            fontSize: FS.headline,
             color: MUTED,
             margin: '0 auto',
             maxWidth: 480,
@@ -463,7 +422,7 @@ export default function FAQ() {
                 key={s.id}
                 href={`#${s.id}`}
                 style={{
-                  fontSize: 12,
+                  fontSize: FS.footnote,
                   fontWeight: 600,
                   color: MUTED,
                   background: BG,
@@ -504,7 +463,7 @@ export default function FAQ() {
             }}
               className="faq-sidebar"
             >
-              <p style={{ fontSize: 11, fontWeight: 700, color: FAINT, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>
+              <p style={{ fontSize: FS.caption, fontWeight: 700, color: MUTED, margin: '0 0 12px' }}>
                 Sections
               </p>
               <nav>
@@ -514,7 +473,7 @@ export default function FAQ() {
                     href={`#${s.id}`}
                     style={{
                       display: 'block',
-                      fontSize: 13,
+                      fontSize: FS.subhead,
                       fontWeight: 500,
                       color: MUTED,
                       textDecoration: 'none',
@@ -565,19 +524,19 @@ export default function FAQ() {
                 flexWrap: 'wrap',
               }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: '0 0 4px' }}>
+                  <p style={{ fontSize: FS.callout, fontWeight: 700, color: TEXT, margin: '0 0 4px' }}>
                     Still have questions?
                   </p>
-                  <p style={{ fontSize: 14, color: MUTED, margin: 0, lineHeight: 1.6 }}>
+                  <p style={{ fontSize: FS.body, color: MUTED, margin: 0, lineHeight: 1.6 }}>
                     We're happy to help. Reach out and we'll get back to you within 1–2 business days.
                   </p>
                 </div>
                 <a
                   href="mailto:jason+midnite@floridasolardesigngroup.com"
                   style={{
-                    fontSize: 14,
+                    fontSize: FS.body,
                     fontWeight: 600,
-                    color: SOLAR,
+                    color:SOLAR_TEXT,
                     border: `1.5px solid ${SOLAR}`,
                     borderRadius: 8,
                     padding: '8px 20px',
@@ -600,13 +559,13 @@ export default function FAQ() {
           textAlign: 'center',
           background: CARD,
         }}>
-          <p style={{ fontSize: 13, color: FAINT, margin: '0 0 8px' }}>
+          <p style={{ fontSize: FS.subhead, color: MUTED, margin: '0 0 8px' }}>
             © 2025 Second Stream LLC. All rights reserved.
           </p>
-          <p style={{ fontSize: 12, color: FAINT, margin: 0 }}>
-            <a href="/" style={{ color: FAINT, textDecoration: 'none' }}>Home</a>
+          <p style={{ fontSize: FS.footnote, color: MUTED, margin: 0 }}>
+            <a href="/" style={{ color: MUTED, textDecoration: 'none' }}>Home</a>
             {' · '}
-            <a href="/terms" style={{ color: FAINT, textDecoration: 'none' }}>Terms & Conditions</a>
+            <a href="/terms" style={{ color: MUTED, textDecoration: 'none' }}>Terms & Conditions</a>
             {' · '}
             Midnite Sentinel is not affiliated with Midnite Electric Co.
           </p>
@@ -615,7 +574,7 @@ export default function FAQ() {
       </div>
 
       <style>{`
-        @media (min-width: 700px) {
+        @media (min-width: 769px) {
           .faq-sidebar {
             display: block !important;
           }

@@ -1,47 +1,8 @@
 import Head from 'next/head';
+import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, SOLAR_TEXT, BATTERY, GRID_IN, LOAD_C, SANS, FS } from '@/components/ui/tokens';
+import { Logo } from '@/components/ui/Logo';
 
-const BG = "#F7F4EF";
-const CARD = "#FFFFFF";
-const BORDER = "#EAE4DC";
-const TEXT = "#1C1917";
-const MUTED = "#78716C";
-const FAINT = "#A8A29E";
-const SOLAR = "#D97706";
-const BATTERY = "#16A34A";
-const GRID_IN = "#DC2626";
-const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
 
-function Logo({ size = 36 }) {
-  const rays = [0, 45, 90, 135, 180, 225, 270, 315];
-  return (
-    <svg width={size} height={size} viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="256" height="256" rx="52" fill="#0D1F33" />
-      {rays.map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const sinR = Math.sin(rad);
-        const cosR = Math.cos(rad);
-        const x1 = 128 + sinR * 72;
-        const y1 = 128 - cosR * 72;
-        const x2 = 128 + sinR * 96;
-        const y2 = 128 - cosR * 96;
-        const dx = sinR * 7;
-        const dy = -cosR * 7;
-        return (
-          <polygon
-            key={deg}
-            points={`${x1 + dy},${y1 - dx} ${x1 - dy},${y1 + dx} ${x2 - dy},${y2 + dx} ${x2 + dy},${y2 - dx}`}
-            fill="#F59E0B"
-          />
-        );
-      })}
-      <circle cx="128" cy="128" r="66" fill="#F59E0B" />
-      <circle cx="128" cy="128" r="44" fill="#0D1F33" />
-      <circle cx="128" cy="128" r="28" fill="#00C8E8" />
-      <circle cx="128" cy="128" r="12" fill="#0D1F33" />
-      <circle cx="128" cy="128" r="5" fill="#FFFFFF" />
-    </svg>
-  );
-}
 
 export default function Terms() {
   const contactEmail = 'jason+midnite' + '@' + 'floridasolardesigngroup.com';
@@ -74,24 +35,24 @@ export default function Terms() {
           }}>
             <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
               <Logo size={32} />
-              <span style={{ fontWeight: 700, fontSize: 16, color: TEXT, letterSpacing: '-0.3px' }}>
+              <span style={{ fontWeight: 700, fontSize: FS.callout, color: TEXT, letterSpacing: '-0.3px' }}>
                 Midnite Sentinel
               </span>
             </a>
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-              <a href="/faq" style={{ fontSize: 14, fontWeight: 500, color: MUTED, textDecoration: 'none' }}>
+              <a href="/faq" style={{ fontSize: FS.body, fontWeight: 500, color: MUTED, textDecoration: 'none' }}>
                 FAQ
               </a>
               <a href="/" style={{
-                fontSize: 14,
+                fontSize: FS.body,
                 fontWeight: 600,
-                color: SOLAR,
+                color:SOLAR_TEXT,
                 border: `1.5px solid ${SOLAR}`,
                 borderRadius: 8,
                 padding: '6px 16px',
                 textDecoration: 'none',
               }}>
-                Sign In
+                Sign in
               </a>
             </div>
           </div>
@@ -102,20 +63,20 @@ export default function Terms() {
 
           {/* Header */}
           <div style={{ marginBottom: 48 }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: SOLAR, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+            <p style={{ fontSize: FS.subhead, fontWeight: 600, color:SOLAR_TEXT, marginBottom: 12 }}>
               Legal
             </p>
             <h1 style={{ fontSize: 32, fontWeight: 800, color: TEXT, margin: '0 0 12px', letterSpacing: '-0.5px', lineHeight: 1.2 }}>
               Terms &amp; Conditions
             </h1>
-            <p style={{ fontSize: 15, color: MUTED, margin: 0 }}>
+            <p style={{ fontSize: FS.callout, color: MUTED, margin: 0 }}>
               Effective Date: June 20, 2026
             </p>
           </div>
 
-          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '40px 44px' }}>
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 'clamp(20px, 5vw, 40px) clamp(18px, 5vw, 44px)' }}>
 
-            <p style={{ fontSize: 15, color: MUTED, lineHeight: 1.75, marginTop: 0, marginBottom: 32 }}>
+            <p style={{ fontSize: FS.callout, color: MUTED, lineHeight: 1.75, marginTop: 0, marginBottom: 32 }}>
               Please read these Terms &amp; Conditions ("Terms") carefully before using Midnite Sentinel (the
               "Service"), operated by <strong style={{ color: TEXT }}>Second Stream LLC</strong>, a Florida
               limited liability company ("Company," "we," "our," or "us"). By accessing or using the Service,
@@ -125,7 +86,7 @@ export default function Terms() {
             <Section number="1" title="Acceptance of Terms">
               <p>
                 By creating an account, accessing the Service at{' '}
-                <a href="https://midnite-rose.vercel.app" style={{ color: SOLAR }}>midnite-rose.vercel.app</a>{' '}
+                <a href="https://midnite-rose.vercel.app" style={{ color:SOLAR_TEXT }}>midnite-rose.vercel.app</a>{' '}
                 or any associated domain, or using any feature of the Service, you affirm that you are at
                 least 18 years of age, have the legal capacity to enter into a binding agreement, and accept
                 these Terms in full. If you are using the Service on behalf of an organization, you represent
@@ -313,16 +274,16 @@ export default function Terms() {
                 <li>
                   <strong>Supabase</strong> — Authentication, database, and file storage. We use Supabase to
                   store your account information, encrypted credentials, and notification data.
-                  (<a href="https://supabase.com/privacy" style={{ color: SOLAR }}>supabase.com/privacy</a>)
+                  (<a href="https://supabase.com/privacy" style={{ color:SOLAR_TEXT }}>supabase.com/privacy</a>)
                 </li>
                 <li>
                   <strong>Vercel</strong> — Hosting and serverless compute. The Service is deployed on Vercel's
                   infrastructure.
-                  (<a href="https://vercel.com/legal/privacy-policy" style={{ color: SOLAR }}>vercel.com/legal/privacy-policy</a>)
+                  (<a href="https://vercel.com/legal/privacy-policy" style={{ color:SOLAR_TEXT }}>vercel.com/legal/privacy-policy</a>)
                 </li>
                 <li>
                   <strong>Resend</strong> — Transactional email delivery for notifications and alerts.
-                  (<a href="https://resend.com/legal/privacy-policy" style={{ color: SOLAR }}>resend.com/legal/privacy-policy</a>)
+                  (<a href="https://resend.com/legal/privacy-policy" style={{ color:SOLAR_TEXT }}>resend.com/legal/privacy-policy</a>)
                 </li>
                 <li>
                   <strong>Midnite Electric / Senergytec API</strong> — The third-party cloud API that provides
@@ -532,16 +493,16 @@ export default function Terms() {
                 marginTop: 16,
               }}>
                 <p style={{ margin: '0 0 4px', fontWeight: 700, color: TEXT }}>Second Stream LLC</p>
-                <p style={{ margin: '0 0 4px', color: MUTED, fontSize: 14 }}>Florida Limited Liability Company</p>
-                <p style={{ margin: '0 0 4px', color: MUTED, fontSize: 14 }}>
+                <p style={{ margin: '0 0 4px', color: MUTED, fontSize: FS.body }}>Florida Limited Liability Company</p>
+                <p style={{ margin: '0 0 4px', color: MUTED, fontSize: FS.body }}>
                   Email:{' '}
-                  <a href={'mailto:' + contactEmail} style={{ color: SOLAR, fontWeight: 600 }}>
+                  <a href={'mailto:' + contactEmail} style={{ color:SOLAR_TEXT, fontWeight: 600 }}>
                     {contactEmail}
                   </a>
                 </p>
-                <p style={{ margin: 0, color: MUTED, fontSize: 14 }}>
+                <p style={{ margin: 0, color: MUTED, fontSize: FS.body }}>
                   Service URL:{' '}
-                  <a href="https://midnite-rose.vercel.app" style={{ color: SOLAR }}>
+                  <a href="https://midnite-rose.vercel.app" style={{ color:SOLAR_TEXT }}>
                     midnite-rose.vercel.app
                   </a>
                 </p>
@@ -557,10 +518,10 @@ export default function Terms() {
             borderTop: `1px solid ${BORDER}`,
             paddingTop: 32,
           }}>
-            <p style={{ fontSize: 13, color: FAINT, margin: '0 0 6px' }}>
+            <p style={{ fontSize: FS.subhead, color: MUTED, margin: '0 0 6px' }}>
               © 2026 Second Stream LLC. All rights reserved.
             </p>
-            <p style={{ fontSize: 12, color: FAINT, margin: 0 }}>
+            <p style={{ fontSize: FS.footnote, color: MUTED, margin: 0 }}>
               Midnite Sentinel is not affiliated with Midnite Electric Co.
             </p>
           </div>
@@ -576,9 +537,9 @@ function Section({ number, title, children, last }) {
     <section style={{ marginBottom: last ? 0 : 36 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
         <span style={{
-          fontSize: 11,
+          fontSize: FS.caption,
           fontWeight: 700,
-          color: SOLAR,
+          color:SOLAR_TEXT,
           background: '#FEF3C7',
           border: '1px solid #FDE68A',
           borderRadius: 6,
@@ -588,7 +549,7 @@ function Section({ number, title, children, last }) {
           {number}
         </span>
         <h2 style={{
-          fontSize: 18,
+          fontSize: FS.headline,
           fontWeight: 700,
           color: TEXT,
           margin: 0,
@@ -597,7 +558,7 @@ function Section({ number, title, children, last }) {
           {title}
         </h2>
       </div>
-      <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.75, paddingLeft: 0 }}>
+      <div style={{ fontSize: FS.callout, color: MUTED, lineHeight: 1.75, paddingLeft: 0 }}>
         {children}
       </div>
       {!last && (
