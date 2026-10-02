@@ -7,7 +7,9 @@
 
 ## Architecture
 
-- `pages/index.jsx` — React frontend dashboard (single-file, all components inline)
+- `pages/index.jsx` — React frontend dashboard (screens and feature components inline)
+- `components/ui/` — shared UI kit (tokens, icons, buttons, "…" menu, segmented control, GSAP motion hooks); see Frontend Design System
+- `styles/globals.css` — tokens as CSS variables, type scale, 44px phone targets, focus rings, Reduce Motion, `ui-*` classes
 - `pages/api/midnite.js` — Next.js serverless proxy (handles auth + API signing)
 - `public/favicon.svg` — Bold amber sun + sentinel eye icon
 - `public/logo.svg` — Same design as favicon
@@ -262,24 +264,34 @@ The `status` action calls `normalizeDetail(raw, sn)` before returning. Key logic
 
 **Theme**: Light warm residential (not dark/glassmorphism).
 
-### Design Tokens (index.jsx)
+### HIG rollout (2026-10)
+The app is being brought in line with Apple's Human Interface Guidelines, one version per phase. Rules that apply
+to this app: `docs/hig/notes.md` (source pages in `docs/hig/apple/`). Measured gaps + phase checklist:
+`docs/hig/audit.md`. Version history: `CHANGELOG.md` (version shows in the Admin build marker). Ship flow: build
+the phase on the feature branch, check the Vercel preview, merge to master on Jason's OK. Screenshot harness:
+`scripts/ui-check/` (fake data, no network). Dark mode is deliberately skipped.
+
+### Design Tokens (`components/ui/tokens.js`, mirrored as CSS variables in `styles/globals.css`)
 ```js
-const BG = "#F7F4EF";       // page background
-const CARD = "#FFFFFF";
-const BORDER = "#EAE4DC";
-const TEXT = "#1C1917";
-const MUTED = "#78716C";
-const FAINT = "#A8A29E";
-const SOLAR = "#D97706";    // amber — PV
-const BATTERY = "#16A34A";  // green — battery
-const GRID_IN = "#DC2626";  // red — importing from grid
-const GRID_OUT = "#059669"; // green — exporting to grid
-const LOAD_C = "#2563EB";   // blue — load/consumption
-const CHART_PROD = "#3B82F6";
-const CHART_CONS = "#F97316";
-const CHART_BAT = "#22C55E";
-const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
+BG "#F7F4EF"  CARD "#FFFFFF"  BORDER "#EAE4DC"  TEXT "#1C1917"
+MUTED "#716A65"   // secondary text, 5.3:1 (was #78716C)
+FAINT "#A8A29E"   // 2.5:1: borders/dividers/disabled only, NEVER text
+SOLAR "#D97706"  BATTERY "#16A34A"  GRID_IN "#DC2626"  GRID_OUT "#059669"  LOAD_C "#2563EB"  // fills, icons, dots
+SOLAR_TEXT "#B45309"  BATTERY_TEXT "#15803D"  GRID_OUT_TEXT "#047857"  GRID_IN_TEXT "#B91C1C"  // small text
+textTone(color)   // maps a fill color to its text-safe twin
+CHART_PROD "#3B82F6"  CHART_CONS "#F97316"  CHART_BAT "#22C55E"  CHART_GRID "#94A3B8"  // unchanged
+FS.caption/footnote/subhead/body/callout/headline/title3/title2/title1/large  // CSS vars, larger on phones
 ```
+- Phone rules live in `@media (max-width: 768px)`; `.hide-phone` / `.hide-desktop` helpers.
+- Targets: `var(--tap)` = 28px desktop / 44px phone. Phone inputs are forced to 16px (no iOS zoom).
+- Icons: `<Icon name="…"/>` from `components/ui/Icon.jsx` (one stroke set); inside SVG use `svgIcon(name,cx,cy)`.
+  No emoji as icons in the UI (emails are the exception: Gmail strips SVG).
+- Buttons: `Button` (primary/secondary/plain/destructive), `IconButton`, `MoreMenu` (the "…" menu; destructive
+  items red, last, after a divider), `Segmented`.
+- Motion (GSAP 3.15 + @gsap/react): `CountUp` (numbers glide between readings, equal values never animate),
+  `Meter` (bars), `useStaggerIn` (cards ease in on tab/site change only), `useSlidingIndicator` (tab pills).
+  Everything is off under `prefers-reduced-motion`. Keep tweens under 0.5s, transform/opacity only, and never
+  animate on a poll that returned the same value.
 
 ### Logo
 Bold amber sun with sentinel eye. Inline React `Logo` component in `index.jsx`, also `public/favicon.svg` and `public/logo.svg`. All three must match.
@@ -287,8 +299,10 @@ Bold amber sun with sentinel eye. Inline React `Logo` component in `index.jsx`, 
 Design: navy `#0D1F33` rounded-rect background → 8 amber `#F59E0B` pill rays rotated 0/45/90…315° → amber disc r=66 → navy ring r=44 → cyan `#00C8E8` iris r=28 → navy pupil r=12 → white core r=5. All on 256×256 viewBox centered at (128,128).
 
 ### Mobile / Layout
-- Bottom nav bar (fixed, mobile only via CSS `@media(max-width:640px)`): Live / Day / Month / Year tabs with SVG icons
-- Top tabs hidden on mobile (`display:none!important`)
+- `AppHeader`: desktop = "‹ Fleet" back, site name, `Segmented` section tabs, Share, Settings, "…" (accounts, Sign out).
+  Phone = back (or logo), compact title that fades in after the large title scrolls away, Share, "…" (Settings,
+  Admin, accounts, Sign out). The phone large title + subtitle sit at the top of `<main>`.
+- `TabBar` (phone only, ≤768px): exactly 5 sections (Live / Day / Month / Year / Explorer); Admin lives in "…".
 - Inverter selector: horizontal scroll, no-wrap, `.inv-scroll` class (hidden scrollbar CSS)
 - Pills show `INV-N · power` with last-8-chars SN as monospace subtitle
 

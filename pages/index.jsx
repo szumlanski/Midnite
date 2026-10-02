@@ -5,12 +5,16 @@ import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxi
 import { triggerGroups, getTrigger } from "@/lib/notifications/triggers";
 import { summarizeRule } from "@/lib/notifications/engine";
 import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
+import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT, LOAD_C, SOLAR_TEXT, BATTERY_TEXT, GRID_OUT_TEXT, GRID_IN_TEXT, SHADOW, SHADOW_SM, SANS, CHART_PROD, CHART_CONS, CHART_BAT, CHART_GRID, FS, textTone } from "@/components/ui/tokens";
+import { Icon, svgIcon } from "@/components/ui/Icon";
+import { Button, IconButton, MoreMenu, Segmented } from "@/components/ui/Button";
+import { CountUp, Meter, useStaggerIn, useSlidingIndicator } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0,7);
 const thisYear = today.slice(0,4);
 // Build marker (baked in at build time via next.config env) — lets you confirm a deploy landed.
-const BUILD = `${process.env.NEXT_PUBLIC_COMMIT || "local"} · ${(process.env.NEXT_PUBLIC_BUILD_TIME || "").slice(5,16).replace("T"," ")}`;
+const BUILD = `v${process.env.NEXT_PUBLIC_APP_VERSION || "?"} · ${process.env.NEXT_PUBLIC_COMMIT || "local"} · ${(process.env.NEXT_PUBLIC_BUILD_TIME || "").slice(5,16).replace("T"," ")}`;
 // Date math for the Explorer date-range picker (operate at noon to dodge DST edges).
 const addDays = (d,n) => { const x=new Date(d+"T12:00:00"); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
 const dayDiff = (a,b) => Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000);
@@ -35,7 +39,7 @@ function UpdatedChip({time, stale=10}){
   const m = ageMin(time);
   if(m==null) return null;
   const old = m>stale;
-  return <span style={{fontSize:10,fontWeight:600,color:old?"#92400E":FAINT,background:old?"#FDE68A":"transparent",padding:old?"2px 7px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0}}>{old?"⚠ ":""}Updated {fmtAge(m)}</span>;
+  return <span style={{fontSize:FS.caption,fontWeight:600,color:old?"#92400E":MUTED,background:old?"#FEF3C7":"transparent",padding:old?"2px 8px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0,display:"inline-flex",alignItems:"center",gap:4}}>{old&&<Icon name="alert"/>}Updated {fmtAge(m)}</span>;
 }
 // Live freshness chip — seconds since the last FRESH flowrt sample arrived (ticks every 1s on its own).
 // `atMs` is set when the inverter's real-time sample actually advanced (its report time), not on every poll.
@@ -46,7 +50,21 @@ function LiveChip({atMs, stale=30}){
   const s = Math.max(0, Math.round((Date.now()-atMs)/1000));
   const old = s>stale;
   const label = s<3 ? "just now" : s<60 ? `${s}s ago` : `${Math.floor(s/60)}m ${s%60}s ago`;
-  return <span style={{fontSize:10,fontWeight:600,color:old?"#92400E":BATTERY,background:old?"#FDE68A":"transparent",padding:old?"2px 7px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0,display:"inline-flex",alignItems:"center",gap:3}}>{!old&&<span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/>}Updated {label}</span>;
+  return <span style={{fontSize:FS.caption,fontWeight:600,color:old?"#92400E":BATTERY_TEXT,background:old?"#FEF3C7":"transparent",padding:old?"2px 8px":0,borderRadius:10,whiteSpace:"nowrap",textTransform:"none",letterSpacing:0,display:"inline-flex",alignItems:"center",gap:4}}>{old?<Icon name="alert"/>:<span style={{width:6,height:6,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 2s infinite"}}/>}Updated {label}</span>;
+}
+
+// "Live" badge shown while the real-time overlay is feeding a surface.
+function LiveBadge(){
+  return <span className="ui-pill" style={{padding:"2px 8px",background:"#DCFCE7",border:"1px solid #86EFAC",color:BATTERY_TEXT}}><span className="ui-dot" style={{width:6,height:6,background:BATTERY,animation:"pulse 2s infinite"}}/>Live</span>;
+}
+
+// Placeholder shown while the first live read is in flight (HIG Loading: show something at once).
+function LiveSkeleton(){
+  const blk = (h, mb=16) => <div className="ui-skel" style={{height:h,borderRadius:16,marginBottom:mb}}/>;
+  return (<div aria-busy="true" aria-label="Loading live data">
+    {blk(320)}{blk(170)}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{blk(260,0)}{blk(260,0)}</div>
+  </div>);
 }
 
 // Session cache for historical, immutable data (past day/month/year + their MPPT export). The
@@ -157,25 +175,7 @@ function aggregateRange(perMonth, start, end){
   return rows.sort((a,b)=>a._date.localeCompare(b._date));
 }
 
-// Design tokens
-const BG = "#F7F4EF";
-const CARD = "#FFFFFF";
-const BORDER = "#EAE4DC";
-const TEXT = "#1C1917";
-const MUTED = "#78716C";
-const FAINT = "#A8A29E";
-const SOLAR = "#D97706";
-const BATTERY = "#16A34A";
-const GRID_IN = "#DC2626";
-const GRID_OUT = "#059669";
-const LOAD_C = "#2563EB";
-const SHADOW = "0 1px 2px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)";
-const SHADOW_SM = "0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)";
-const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
-const CHART_PROD = "#3B82F6";
-const CHART_CONS = "#F97316";
-const CHART_BAT = "#22C55E";
-const CHART_GRID = "#94A3B8";
+// Design tokens live in components/ui/tokens.js (imported above).
 
 // MONTH/YEAR bar alignment — the permanent fix is a SINGLE shared stackId ("a") on every Bar
 // (positives and negatives). Recharts stacks positives up and negatives down at the SAME x, so
@@ -234,15 +234,8 @@ const PageHead = ({title}) => (
       .fleet-row:hover{background:#FAF7F2}
       .inv-scroll::-webkit-scrollbar{display:none}
       .inv-scroll{-ms-overflow-style:none;scrollbar-width:none}
-      @media(max-width:640px){
-        .bottom-nav{display:flex!important}
-        .top-tabs{display:none!important}
-        .page-pad{padding-bottom:80px!important}
-      }
-      @media(min-width:641px){
-        .bottom-nav{display:none!important}
-        .top-tabs{display:flex!important}
-      }
+      @keyframes nodeIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+      .flow-node-opt{transform-box:fill-box;transform-origin:center;animation:nodeIn .35s ease-out}
     `}</style>
   </Head>
 );
@@ -1609,21 +1602,25 @@ function FleetView({ sites, onPick, onBack, onLogout, sitePhotos={}, onPhotoChan
 function SOCBar({value}) {
   const color = value>60 ? BATTERY : value>30 ? SOLAR : GRID_IN;
   return (
-    <div style={{display:"flex",alignItems:"center",gap:8}}>
-      <div style={{flex:1,height:6,background:"#F1F5F9",borderRadius:3,overflow:"hidden"}}>
-        <div style={{width:`${value}%`,height:"100%",background:color,borderRadius:3,transition:"width 0.5s ease"}}/>
-      </div>
-      <span style={{fontSize:12,color,fontWeight:700,minWidth:32,fontVariantNumeric:"tabular-nums"}}>{value}%</span>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{flex:1}}><Meter value={value} color={color} height={8} label="Battery state of charge"/></div>
+      <span style={{fontSize:FS.footnote,color:textTone(color),fontWeight:700,minWidth:36,textAlign:"right"}}><CountUp value={value} format={v=>`${Math.round(v)}%`}/></span>
     </div>
   );
 }
 
-function StatTile({label, value, color=MUTED, sub=null}) {
+// Small label + value tile. Pass `num` + `format` instead of `value` to get an animated number.
+function StatTile({label, value, color=MUTED, sub=null, icon=null, num, format, tint=BG}) {
+  const tone = textTone(color);
   return (
-    <div style={{background:BG,borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:11,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{label}</div>
-      <div style={{fontSize:15,fontWeight:700,color,fontVariantNumeric:"tabular-nums"}}>{value}</div>
-      {sub&&<div style={{fontSize:10,color:FAINT,marginTop:1}}>{sub}</div>}
+    <div style={{background:tint,borderRadius:12,padding:"10px 12px",minWidth:0}}>
+      <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:3,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+        {icon&&<Icon name={icon} style={{color}}/>}{label}
+      </div>
+      <div style={{fontSize:FS.callout,fontWeight:700,color:tone,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+        {format ? <CountUp value={num} format={format}/> : value}
+      </div>
+      {sub&&<div style={{fontSize:FS.caption,color:MUTED,marginTop:2}}>{sub}</div>}
     </div>
   );
 }
@@ -1677,29 +1674,35 @@ function SiteHero({statuses, live=null, liveAt=null}) {
   const isExporting = totalGrid < -50;
   const isImporting = totalGrid > 50;
   const gridColor = isExporting ? GRID_OUT : isImporting ? GRID_IN : MUTED;
-  const gridLabel = isExporting ? `Exporting ${fmt(Math.abs(totalGrid))}` : isImporting ? `Importing ${fmt(totalGrid)}` : "Grid balanced";
+  const gridLabel = isExporting ? "Exporting" : isImporting ? "Importing" : "Grid balanced";
+  const tint = "rgba(255,255,255,0.72)";
   return (
-    <div style={{background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:16,padding:"20px 20px",marginBottom:16,border:`1px solid #FDE68A`,boxShadow:"0 2px 8px rgba(217,119,6,0.08)"}}>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
-        <div>
-          <div style={{fontSize:11,color:"#92400E",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>Site Production Now{live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:8,fontWeight:800,color:BATTERY}}>LIVE</span></span>}{live ? <LiveChip atMs={liveAt}/> : <UpdatedChip time={updated}/>}</div>
-          <div style={{fontSize:36,fontWeight:800,color:"#92400E",lineHeight:1,letterSpacing:"-1px",fontVariantNumeric:"tabular-nums"}}>{fmt(totalPv,2)}</div>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:20,background:isExporting?"#DCFCE7":isImporting?"#FEE2E2":"#F1F5F9",border:`1px solid ${isExporting?"#86EFAC":isImporting?"#FECACA":"#E2E8F0"}`}}>
-            <span style={{width:7,height:7,borderRadius:"50%",background:gridColor,display:"inline-block"}}/>
-            <span style={{fontSize:12,fontWeight:700,color:gridColor}}>{gridLabel}</span>
+    <div className="hero-card" style={{background:`linear-gradient(135deg,#FFFBEB,#FEF3C7)`,borderRadius:18,padding:"18px 18px 16px",marginBottom:16,border:`1px solid #FDE68A`,boxShadow:"0 2px 10px rgba(217,119,6,0.10)"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:FS.subhead,color:"#92400E",fontWeight:700,marginBottom:6,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <Icon name="sun" style={{color:SOLAR,fontSize:18}}/>Solar now
+            {live&&<LiveBadge/>}
+            {live ? <LiveChip atMs={liveAt}/> : <UpdatedChip time={updated}/>}
           </div>
-          {gridFreq&&<span style={{fontSize:10,color:MUTED,fontWeight:500}}>{gridFreq.toFixed(2)} Hz</span>}
+          <div style={{fontSize:40,fontWeight:800,color:"#7C2D12",lineHeight:1,letterSpacing:"-1.2px"}}><CountUp value={totalPv} format={v=>fmt(v,2)} fromZero duration={0.9}/></div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+          <span className="ui-pill" style={{fontSize:FS.footnote,padding:"6px 12px",background:isExporting?"#DCFCE7":isImporting?"#FEE2E2":"#F1F5F9",border:`1px solid ${isExporting?"#86EFAC":isImporting?"#FECACA":"#E2E8F0"}`,color:textTone(gridColor)}}>
+            <Icon name="pylon"/>{gridLabel}{(isExporting||isImporting)&&<CountUp value={Math.abs(totalGrid)} format={v=>fmt(v)}/>}
+          </span>
+          {gridFreq&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:500}}>{gridFreq.toFixed(2)} Hz</span>}
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8}}>
-        <StatTile label="Load" value={fmt(totalLoad,2)} color={LOAD_C}/>
-        <StatTile label="Battery" value={totalBat>10?`+${fmt(totalBat)}`:totalBat<-10?fmt(totalBat):"Idle"} color={totalBat>10?BATTERY:totalBat<-10?SOLAR:MUTED} sub={avgSoc!=null?`SOC ${avgSoc.toFixed(0)}%`:null}/>
-        <StatTile label="PV Today" value={fmtE(totalToday)} color={TEXT}/>
-        {totalImpToday>0&&<StatTile label="Imported" value={fmtE(totalImpToday)} color={GRID_IN}/>}
-        {totalExpToday>0&&<StatTile label="Exported" value={fmtE(totalExpToday)} color={GRID_OUT}/>}
-        {avgSelfSuff!=null&&<StatTile label="Self-Sufficient" value={`${avgSelfSuff.toFixed(0)}%`} color={MUTED}/>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:8}}>
+        <StatTile tint={tint} icon="home" label="Home" num={totalLoad} format={v=>fmt(v,2)} color={LOAD_C}/>
+        <StatTile tint={tint} icon={totalBat>10?"battery-charging":"battery"} label={totalBat>10?"Charging":totalBat<-10?"Discharging":"Battery"}
+          value={Math.abs(totalBat)>10?null:"Idle"} num={Math.abs(totalBat)>10?Math.abs(totalBat):undefined} format={Math.abs(totalBat)>10?(v=>fmt(v)):undefined}
+          color={totalBat>10?BATTERY:totalBat<-10?SOLAR:MUTED} sub={avgSoc!=null?`${avgSoc.toFixed(0)}% charged`:null}/>
+        <StatTile tint={tint} icon="sun" label="Solar today" value={fmtE(totalToday)} color={TEXT}/>
+        {totalImpToday>0&&<StatTile tint={tint} icon="arrow-down" label="Imported today" value={fmtE(totalImpToday)} color={GRID_IN}/>}
+        {totalExpToday>0&&<StatTile tint={tint} icon="arrow-up" label="Exported today" value={fmtE(totalExpToday)} color={GRID_OUT}/>}
+        {avgSelfSuff!=null&&<StatTile tint={tint} icon="shield" label="Self-sufficient" value={`${avgSelfSuff.toFixed(0)}%`} color={MUTED}/>}
       </div>
     </div>
   );
@@ -1754,47 +1757,45 @@ function BatteryPanel({statuses}) {
   const socColor = avgSoc > 60 ? BATTERY : avgSoc > 30 ? SOLAR : GRID_IN;
 
   return (
-    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"18px 20px",marginBottom:16,boxShadow:SHADOW_SM}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:9,background:closedLoop?"#DCFCE7":"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🔋</div>
-          <div>
-            <div style={{fontSize:14,fontWeight:700,color:TEXT}}>{closedLoop ? brand : "Battery Bank"}</div>
-            <div style={{fontSize:11,color:FAINT}}>
+    <div className="ui-card" style={{padding:"16px 18px",marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+          <div style={{width:36,height:36,borderRadius:10,background:closedLoop?"#DCFCE7":"#F1F5F9",color:closedLoop?BATTERY_TEXT:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}><Icon name={isCharging?"battery-charging":"battery"}/></div>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT}}>{closedLoop ? brand : "Battery bank"}</div>
+            <div style={{fontSize:FS.footnote,color:MUTED}}>
               {capacityAh > 0 && `${capacityAh} Ah`}
               {capacityKwh && ` · ~${capacityKwh} kWh`}
-              {!closedLoop && <span style={{color:SOLAR,fontWeight:600}}> · Open loop (no BMS)</span>}
+              {!closedLoop && <span style={{color:SOLAR_TEXT,fontWeight:600}}> · Open loop (no BMS)</span>}
             </div>
           </div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
           <UpdatedChip time={updated}/>
-          {isCharging    && <span style={{fontSize:11,fontWeight:700,color:BATTERY,background:"#DCFCE7",padding:"3px 8px",borderRadius:10}}>↑ {fmt(totalCharge)}</span>}
-          {isDischarging && <span style={{fontSize:11,fontWeight:700,color:SOLAR,background:"#FEF3C7",padding:"3px 8px",borderRadius:10}}>↓ {fmt(totalDischarge)}</span>}
-          {!isCharging && !isDischarging && <span style={{fontSize:11,fontWeight:600,color:FAINT}}>Idle</span>}
+          {isCharging    && <span className="ui-pill" style={{color:BATTERY_TEXT,background:"#DCFCE7"}}><Icon name="arrow-up"/>{fmt(totalCharge)}</span>}
+          {isDischarging && <span className="ui-pill" style={{color:SOLAR_TEXT,background:"#FEF3C7"}}><Icon name="arrow-down"/>{fmt(totalDischarge)}</span>}
+          {!isCharging && !isDischarging && <span className="ui-pill" style={{color:MUTED,background:"#F1F5F9"}}>Idle</span>}
         </div>
       </div>
 
       <div style={{marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
-          <span style={{fontSize:12,fontWeight:600,color:MUTED}}>State of Charge{!closedLoop && " (estimated)"}</span>
-          <span style={{fontSize:24,fontWeight:800,color:socColor,fontVariantNumeric:"tabular-nums"}}>{Math.round(avgSoc)}%</span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+          <span style={{fontSize:FS.subhead,fontWeight:600,color:MUTED}}>Charge{!closedLoop && " (estimated)"}</span>
+          <span style={{fontSize:28,fontWeight:800,color:textTone(socColor),letterSpacing:"-0.5px"}}><CountUp value={avgSoc} format={v=>`${Math.round(v)}%`}/></span>
         </div>
-        <div style={{height:10,background:"#F1F5F9",borderRadius:5,overflow:"hidden"}}>
-          <div style={{width:`${avgSoc}%`,height:"100%",background:`linear-gradient(90deg,${socColor},${socColor}CC)`,borderRadius:5,transition:"width 0.5s ease"}}/>
-        </div>
+        <Meter value={avgSoc} color={`linear-gradient(90deg,${socColor},${socColor}CC)`} height={12} label="Battery state of charge"/>
         {rate
-          ? <div style={{marginTop:8,fontSize:12,fontWeight:600,color:rate.color}}>{rate.sign}{rate.pct.toFixed(1)}%/hr · {fmtHrs(rate.hrs)} {rate.label}</div>
-          : capacityKwhNum && <div style={{marginTop:8,fontSize:12,fontWeight:500,color:FAINT}}>Idle</div>}
+          ? <div style={{marginTop:8,fontSize:FS.subhead,fontWeight:600,color:textTone(rate.color)}}>{rate.sign}{rate.pct.toFixed(1)}%/hr · {fmtHrs(rate.hrs)} {rate.label}</div>
+          : capacityKwhNum && <div style={{marginTop:8,fontSize:FS.subhead,fontWeight:500,color:MUTED}}>Idle</div>}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8}}>
         <StatTile label="Voltage"  value={`${avgVoltage.toFixed(1)} V`} color={TEXT}/>
         <StatTile label="Current"  value={`${totalCurrent.toFixed(1)} A`} color={TEXT}/>
         {closedLoop && <StatTile label="Health" value={`${Math.round(avgHealth)}%`} color={avgHealth>80?BATTERY:avgHealth>60?SOLAR:GRID_IN}/>}
-        {closedLoop && avgTemp > 0 && <StatTile label="Temp" value={`${avgTemp.toFixed(0)}°C`} color={avgTemp>45?GRID_IN:avgTemp>35?SOLAR:TEXT}/>}
-        {totalChargeIn    > 0 && <StatTile label="Lifetime In"  value={fmtE(totalChargeIn)}    color={MUTED}/>}
-        {totalDischargeOut > 0 && <StatTile label="Lifetime Out" value={fmtE(totalDischargeOut)} color={MUTED}/>}
+        {closedLoop && avgTemp > 0 && <StatTile icon="thermometer" label="Temperature" value={`${avgTemp.toFixed(0)}°C`} color={avgTemp>45?GRID_IN:avgTemp>35?SOLAR:TEXT}/>}
+        {totalChargeIn    > 0 && <StatTile label="Lifetime in"  value={fmtE(totalChargeIn)}    color={MUTED}/>}
+        {totalDischargeOut > 0 && <StatTile label="Lifetime out" value={fmtE(totalDischargeOut)} color={MUTED}/>}
       </div>
     </div>
   );
@@ -1809,13 +1810,13 @@ function LifetimePanel({statuses}) {
   const loadTotal= v.reduce((s,i)=>s+(i.data.load?.power?.total||0),0);
   if(!pvTotal) return null;
   return (
-    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:"18px 20px",marginBottom:16,boxShadow:SHADOW_SM}}>
-      <div style={{fontSize:11,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Lifetime Totals</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
-        <StatTile label="PV Produced"   value={fmtE(pvTotal)}   color={CHART_PROD}/>
-        <StatTile label="Grid Exported" value={fmtE(expTotal)}  color={GRID_OUT}/>
-        <StatTile label="Grid Imported" value={fmtE(impTotal)}  color={GRID_IN}/>
-        {loadTotal>0&&<StatTile label="Load Total" value={fmtE(loadTotal)} color={LOAD_C}/>}
+    <div className="ui-card" style={{padding:"16px 18px",marginBottom:16}}>
+      <div className="ui-card-title" style={{marginBottom:12}}><Icon name="clock"/>Lifetime totals</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:8}}>
+        <StatTile icon="sun" label="Solar produced" value={fmtE(pvTotal)} color={CHART_PROD}/>
+        <StatTile icon="arrow-up" label="Exported" value={fmtE(expTotal)} color={GRID_OUT}/>
+        <StatTile icon="arrow-down" label="Imported" value={fmtE(impTotal)} color={GRID_IN}/>
+        {loadTotal>0&&<StatTile icon="home" label="Home total" value={fmtE(loadTotal)} color={LOAD_C}/>}
       </div>
     </div>
   );
@@ -2174,48 +2175,49 @@ function InverterCard({inv, status, live}) {
   const hasAnyMpptData = mppts.some(m => (m.voltage||0) > 0 || (m.power||0) > 0);
   const activePorts = d?.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&(p.lines||[]).reduce((s,l)=>s+(l.power||0),0)>0) : [];
   return (
-    <div className="inv-card" style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,overflow:"hidden",boxShadow:SHADOW_SM}}>
+    <div className="inv-card ui-card" style={{overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div style={{height:3,background:online?`linear-gradient(90deg,${SOLAR},${BATTERY})`:"#E5E7EB"}}/>
-      <div style={{padding:"16px 16px 14px"}}>
+      <div style={{padding:"14px 16px 12px",flex:1}}>
         {/* Header */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-          <div>
-            <div style={{fontSize:16,fontWeight:700,color:TEXT}}>{inv.label}</div>
-            {model&&<div style={{fontSize:10,color:MUTED,marginTop:1}}>{model}</div>}
-            <div style={{fontSize:10,color:FAINT,marginTop:1,fontVariantNumeric:"tabular-nums"}}>{inv.sn}</div>
-            {inv.autoId&&<button onClick={()=>setShowSettings(true)} style={{marginTop:5,padding:"2px 8px",borderRadius:6,border:`1px solid ${BORDER}`,background:BG,color:MUTED,fontSize:10,fontWeight:600,fontFamily:SANS,cursor:"pointer"}}>Settings ›</button>}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-            <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:online?"#DCFCE7":"#FEE2E2",border:`1px solid ${online?"#86EFAC":"#FECACA"}`}}>
-              <span style={{width:5,height:5,borderRadius:"50%",background:online?BATTERY:GRID_IN,display:"inline-block",animation:online?"pulse 2s infinite":"none"}}/>
-              <span style={{fontSize:10,fontWeight:700,color:online?BATTERY:GRID_IN}}>{online?"LIVE":"OFFLINE"}</span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:12}}>
+          <div style={{display:"flex",gap:10,minWidth:0}}>
+            <div style={{width:36,height:36,borderRadius:10,background:"#F5F1EB",color:MUTED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}><Icon name="inverter"/></div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:FS.headline,fontWeight:700,color:TEXT,lineHeight:1.2}}>{inv.label}</div>
+              {model&&<div style={{fontSize:FS.footnote,color:MUTED,marginTop:1}}>{model}</div>}
+              <div style={{fontSize:FS.caption,color:MUTED,marginTop:1,fontVariantNumeric:"tabular-nums",fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{inv.sn}</div>
             </div>
-            {gridFreq&&<span style={{fontSize:10,color:FAINT,fontWeight:500}}>{gridFreq.toFixed(2)} Hz</span>}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+            <span className="ui-pill" style={{background:online?"#DCFCE7":"#FEE2E2",color:online?BATTERY_TEXT:GRID_IN_TEXT}}>
+              <span className="ui-dot" style={{background:online?BATTERY:GRID_IN}}/>{online?"Online":"Offline"}
+            </span>
+            {gridFreq&&<span style={{fontSize:FS.caption,color:MUTED,fontWeight:500}}>{gridFreq.toFixed(2)} Hz</span>}
             <UpdatedChip time={d?.inverter?.lastUpdateTime}/>
           </div>
         </div>
-        {status?.ok===false&&<div style={{fontSize:12,color:GRID_IN,padding:"8px 10px",background:"#FEF2F2",borderRadius:8,marginBottom:8}}>{status.error||"No data"}</div>}
+        {status?.ok===false&&<div style={{fontSize:FS.subhead,color:GRID_IN_TEXT,padding:"8px 10px",background:"#FEF2F2",borderRadius:8,marginBottom:8,display:"flex",gap:6,alignItems:"center"}}><Icon name="alert"/>{status.error||"No data"}</div>}
         {d&&(
           <>
             {/* Main stats */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-              <StatTile label="Solar" value={fmt(pv)} color={SOLAR}/>
-              <StatTile label="Load" value={fmt(load)} color={LOAD_C}/>
-              <StatTile label={gridLabel} value={fmt(gridNet!=null?Math.abs(gridNet):null)} color={gridColor}/>
-              <StatTile label={batChg>10?"Charging":batDis>10?"Discharging":"Battery"} value={fmt(batChg>10?batChg:batDis>10?-batDis:0)} color={batChg>10?BATTERY:batDis>10?SOLAR:MUTED}/>
+              <StatTile icon="sun" label="Solar" num={pv} format={v=>fmt(v)} color={SOLAR}/>
+              <StatTile icon="home" label="Home" num={load} format={v=>fmt(v)} color={LOAD_C}/>
+              <StatTile icon="pylon" label={gridLabel} num={gridNet!=null?Math.abs(gridNet):null} format={v=>fmt(v)} color={gridColor}/>
+              <StatTile icon={batChg>10?"battery-charging":"battery"} label={batChg>10?"Charging":batDis>10?"Discharging":"Battery"} num={batChg>10?batChg:batDis>10?batDis:0} format={v=>fmt(v)} color={batChg>10?BATTERY:batDis>10?SOLAR:MUTED}/>
             </div>
             {/* MPPT strings */}
             {hasAnyMpptData&&(
-              <div style={{marginBottom:10,padding:"8px 10px",background:BG,borderRadius:10}}>
-                <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>PV Strings</div>
+              <div style={{marginBottom:10,padding:"10px 12px",background:BG,borderRadius:12}}>
+                <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Solar strings</div>
                 {mppts.map((m,i)=>{
                   const v=m.voltage||0, a=m.current||0, w=m.power||0;
                   return (
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:i<mppts.length-1?4:0}}>
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:FS.footnote,marginBottom:i<mppts.length-1?4:0}}>
                       <span style={{color:MUTED,fontWeight:600}}>MPPT {i+1}</span>
                       {v>0||w>0
-                        ? <span style={{color:w>0?SOLAR:MUTED,fontVariantNumeric:"tabular-nums"}}>{v.toFixed(0)}V · {a.toFixed(2)}A · {fmt(w)}</span>
-                        : <span style={{color:FAINT}}>—</span>}
+                        ? <span style={{color:w>0?SOLAR_TEXT:MUTED,fontVariantNumeric:"tabular-nums"}}>{v.toFixed(0)} V · {a.toFixed(2)} A · {fmt(w)}</span>
+                        : <span style={{color:MUTED}}>Off</span>}
                     </div>
                   );
                 })}
@@ -2223,14 +2225,14 @@ function InverterCard({inv, status, live}) {
             )}
             {/* Smart Ports */}
             {activePorts.length>0&&(
-              <div style={{marginBottom:10,padding:"8px 10px",background:"#F0FDF4",borderRadius:10,border:`1px solid #DCFCE7`}}>
-                <div style={{fontSize:9,color:FAINT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Smart Ports</div>
+              <div style={{marginBottom:10,padding:"10px 12px",background:"#F0FDF4",borderRadius:12,border:`1px solid #DCFCE7`}}>
+                <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Smart ports</div>
                 {activePorts.map(([key,port])=>{
                   const w=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
                   return (
-                    <div key={key} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}}>
+                    <div key={key} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:FS.footnote,marginBottom:2}}>
                       <span style={{color:MUTED,fontWeight:600}}>Port {key}</span>
-                      <span style={{color:BATTERY,fontVariantNumeric:"tabular-nums"}}>{fmt(w)} · {fmtE(port.power?.today||0)} today</span>
+                      <span style={{color:BATTERY_TEXT,fontVariantNumeric:"tabular-nums"}}>{fmt(w)} · {fmtE(port.power?.today||0)} today</span>
                     </div>
                   );
                 })}
@@ -2238,38 +2240,41 @@ function InverterCard({inv, status, live}) {
             )}
             {/* Battery SOC */}
             <div style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                <span style={{fontSize:11,color:MUTED,fontWeight:600}}>Battery SOC</span>
-                {temp!=null&&<span style={{fontSize:11,color:FAINT}}>{temp}°C</span>}
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <span style={{fontSize:FS.footnote,color:MUTED,fontWeight:600}}>Battery</span>
+                {temp!=null&&<span style={{fontSize:FS.footnote,color:MUTED,display:"inline-flex",alignItems:"center",gap:3}}><Icon name="thermometer"/>{temp}°C</span>}
               </div>
               {soc!=null&&<SOCBar value={soc}/>}
             </div>
             {/* L1/L2 voltage pills */}
             {(l1Volt||l2Volt)&&(
               <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-                {l1Volt&&<span style={{fontSize:10,color:FAINT,background:BG,padding:"3px 8px",borderRadius:6}}>L1 {l1Volt.toFixed(1)} V</span>}
-                {l2Volt&&<span style={{fontSize:10,color:FAINT,background:BG,padding:"3px 8px",borderRadius:6}}>L2 {l2Volt.toFixed(1)} V</span>}
+                {l1Volt&&<span style={{fontSize:FS.caption,color:MUTED,background:BG,padding:"3px 8px",borderRadius:6,fontVariantNumeric:"tabular-nums"}}>L1 {l1Volt.toFixed(1)} V</span>}
+                {l2Volt&&<span style={{fontSize:FS.caption,color:MUTED,background:BG,padding:"3px 8px",borderRadius:6,fontVariantNumeric:"tabular-nums"}}>L2 {l2Volt.toFixed(1)} V</span>}
               </div>
             )}
             {/* Today summary */}
-            <div style={{paddingTop:10,borderTop:`1px solid ${BORDER}`,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(70px,1fr))",gap:6}}>
+            <div style={{paddingTop:10,borderTop:`1px solid ${BORDER}`,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(80px,1fr))",gap:6}}>
               <div>
-                <div style={{fontSize:9,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>PV Today</div>
-                <div style={{fontSize:12,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtE(eToday)}</div>
+                <div style={{fontSize:FS.caption,color:MUTED,fontWeight:600,marginBottom:2}}>Solar today</div>
+                <div style={{fontSize:FS.subhead,fontWeight:700,color:TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtE(eToday)}</div>
               </div>
               {gridInToday>0&&<div>
-                <div style={{fontSize:9,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Imported</div>
-                <div style={{fontSize:12,fontWeight:700,color:GRID_IN,fontVariantNumeric:"tabular-nums"}}>{fmtE(gridInToday)}</div>
+                <div style={{fontSize:FS.caption,color:MUTED,fontWeight:600,marginBottom:2}}>Imported</div>
+                <div style={{fontSize:FS.subhead,fontWeight:700,color:GRID_IN_TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtE(gridInToday)}</div>
               </div>}
               {gridOutToday>0&&<div>
-                <div style={{fontSize:9,color:FAINT,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Exported</div>
-                <div style={{fontSize:12,fontWeight:700,color:GRID_OUT,fontVariantNumeric:"tabular-nums"}}>{fmtE(gridOutToday)}</div>
+                <div style={{fontSize:FS.caption,color:MUTED,fontWeight:600,marginBottom:2}}>Exported</div>
+                <div style={{fontSize:FS.subhead,fontWeight:700,color:GRID_OUT_TEXT,fontVariantNumeric:"tabular-nums"}}>{fmtE(gridOutToday)}</div>
               </div>}
             </div>
           </>
         )}
-        {!d&&!status&&<div style={{fontSize:12,color:FAINT,textAlign:"center",padding:"12px 0"}}>Connecting…</div>}
+        {!d&&!status&&<div style={{fontSize:FS.subhead,color:MUTED,textAlign:"center",padding:"12px 0"}}>Connecting…</div>}
       </div>
+      {inv.autoId&&<div style={{borderTop:`1px solid ${BORDER}`,padding:"2px 8px"}}>
+        <button type="button" className="ui-rowlink" onClick={()=>setShowSettings(true)}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon name="sliders"/>Inverter settings</span><Icon name="chevron"/></button>
+      </div>}
       {showSettings&&<SettingsModal inv={inv} onClose={()=>setShowSettings(false)}/>}
     </div>
   );
@@ -2525,40 +2530,24 @@ function FlowEdge({d, active, reverse, value=0, color="#16A34A"}) {
     className={active?(reverse?"flow-rev":"flow-anim"):""}
     style={active?{animationDuration:`${dur}s`}:undefined}/>;
 }
-// High-tension transmission tower (lattice pylon) drawn in white for the GRID node.
-const gridPylon = (cx, cy) => (
-  <g stroke="#fff" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none">
-    <line x1={cx-7} y1={cy+12} x2={cx-2.5} y2={cy-11}/>
-    <line x1={cx+7} y1={cy+12} x2={cx+2.5} y2={cy-11}/>
-    <line x1={cx-5.4} y1={cy+3.5} x2={cx+5.4} y2={cy+3.5}/>
-    <line x1={cx-3.7} y1={cy-4.5} x2={cx+3.7} y2={cy-4.5}/>
-    <path d={`M${cx-7},${cy+12} L${cx+5.4},${cy+3.5} M${cx+7},${cy+12} L${cx-5.4},${cy+3.5}`}/>
-    <path d={`M${cx-5.4},${cy+3.5} L${cx+3.7},${cy-4.5} M${cx+5.4},${cy+3.5} L${cx-3.7},${cy-4.5}`}/>
-    <line x1={cx-10} y1={cy-7} x2={cx+10} y2={cy-7}/>
-    <line x1={cx-7} y1={cy-10.5} x2={cx+7} y2={cy-10.5}/>
-    <line x1={cx} y1={cy-10.5} x2={cx} y2={cy-13}/>
-    <line x1={cx-10} y1={cy-7} x2={cx-10} y2={cy-5}/>
-    <line x1={cx+10} y1={cy-7} x2={cx+10} y2={cy-5}/>
-    <line x1={cx-7} y1={cy-10.5} x2={cx-7} y2={cy-8.5}/>
-    <line x1={cx+7} y1={cy-10.5} x2={cx+7} y2={cy-8.5}/>
-  </g>
-);
-function FlowNode({x, y, r=22, color, icon, iconSvg, label, value, sub, sub2, sub2Color, place="below"}) {
+function FlowNode({x, y, r=22, color, icon, label, watts, sub, sub2, sub2Color, place="below", optional=false}) {
   // All text sits on the side AWAY from the inverter (above for top nodes, below for bottom ones)
-  // so the connector line — which exits the icon toward the center — never crosses the labels.
+  // so the connector line, which exits the icon toward the center, never crosses the labels.
   const above = place==="above";
-  const labelY = above ? y-r-38 : y+r+15;
-  const valueY = above ? y-r-21 : y+r+31;
-  const subY   = above ? y-r-7  : y+r+45;
-  const sub2Y  = above ? subY-13 : subY+13;
+  const lift = above && !sub ? 15 : 0; // no sub line: pull label + value down toward the node
+  const labelY = above ? y-r-40+lift : y+r+17;
+  const valueY = above ? y-r-22+lift : y+r+35;
+  const subY   = above ? y-r-7  : y+r+51;
+  const sub2Y  = above ? subY-14 : subY+14;
   return (
-    <g>
+    <g className={optional?"flow-node-opt":undefined}>
+      <circle cx={x} cy={y} r={r+4} fill={color} opacity="0.14"/>
       <circle cx={x} cy={y} r={r} fill={color}/>
-      {iconSvg ? iconSvg(x, y) : <text x={x} y={y+r*0.28} textAnchor="middle" fontSize={r-4}>{icon}</text>}
-      <text x={x} y={labelY} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={FAINT} fontFamily={SANS} letterSpacing="0.5">{label}</text>
-      <text x={x} y={valueY} textAnchor="middle" fontSize="13" fontWeight="700" fill={TEXT} fontFamily={SANS}>{value}</text>
-      {sub&&<text x={x} y={subY} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={SANS}>{sub}</text>}
-      {sub2&&<text x={x} y={sub2Y} textAnchor="middle" fontSize="10" fontWeight="700" fill={sub2Color||MUTED} fontFamily={SANS}>{sub2}</text>}
+      {svgIcon(icon, x, y, r*1.05, "#fff", 2)}
+      <text x={x} y={labelY} textAnchor="middle" fontSize="12" fontWeight="600" fill={MUTED} fontFamily={SANS}>{label}</text>
+      <text x={x} y={valueY} textAnchor="middle" fontSize="15.5" fontWeight="800" fill={TEXT} fontFamily={SANS}><CountUp as="tspan" value={watts} format={v=>fmt(v)}/></text>
+      {sub&&<text x={x} y={subY} textAnchor="middle" fontSize="11.5" fill={MUTED} fontFamily={SANS}>{sub}</text>}
+      {sub2&&<text x={x} y={sub2Y} textAnchor="middle" fontSize="11.5" fontWeight="700" fill={sub2Color||MUTED} fontFamily={SANS}>{sub2}</text>}
     </g>
   );
 }
@@ -2601,29 +2590,26 @@ function FlowDiagram({flow}) {
   if(showSmart)   edges.push({ d:`M200,305 L200,${B}`, active:true, reverse:true, value:flow.smartLoad });
   if(flow.couple>A) edges.push({ d:`M56,182 L${L},182`, active:true, reverse:flow.couple<0, value:flow.couple });
   return (
-    <div style={{background:CARD,borderRadius:16,padding:"10px 8px 6px",border:`1px solid ${BORDER}`,boxShadow:SHADOW_SM,marginBottom:16}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"4px 8px 0"}}>
-        <span style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:11,fontWeight:700,color:FAINT,letterSpacing:"0.06em"}}>POWER FLOW</span>
-          {flow.live&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:10,background:"#DCFCE7",border:"1px solid #86EFAC"}}><span style={{width:5,height:5,borderRadius:"50%",background:BATTERY,display:"inline-block",animation:"pulse 1.5s infinite"}}/><span style={{fontSize:9,fontWeight:800,color:BATTERY,letterSpacing:"0.04em"}}>LIVE</span></span>}
-        </span>
+    <div className="ui-card" style={{padding:"12px 8px 6px",marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",padding:"2px 8px 0"}}>
+        <span className="ui-card-title"><Icon name="activity"/>Power flow{flow.live&&<LiveBadge/>}</span>
         {flow.live ? <LiveChip atMs={flow.liveAt}/> : (flow.updated&&<UpdatedChip time={flow.updated}/>)}
       </div>
-      <svg viewBox="0 0 400 400" style={{width:"100%",height:"auto",display:"block"}}>
+      <svg viewBox="0 0 400 400" style={{width:"100%",maxWidth:520,height:"auto",display:"block",margin:"0 auto"}} role="img" aria-label={`Power flow: solar ${fmt(flow.pv)}, home ${fmt(flow.load)}, grid ${flow.grid<0?"exporting":"importing"} ${fmt(Math.abs(flow.grid))}, battery ${flow.battery>0?"charging":"discharging"} ${fmt(Math.abs(flow.battery))}`}>
         {edges.map((e,i)=><FlowEdge key={i} {...e}/>)}
         <InverterGraphic count={flow.count}/>
-        <FlowNode x={56} y={92} place="above" color={SOLAR} icon="☀️" label="SOLAR" value={fmt(flow.pv)}/>
-        <FlowNode x={344} y={92} place="above" color={flow.grid<0?GRID_OUT:GRID_IN} iconSvg={gridPylon} label="GRID" value={fmt(Math.abs(flow.grid))} sub={flow.grid<0?"exporting":"importing"}/>
-        <FlowNode x={56} y={300} place="below" color={BATTERY} icon="🔋" label="BATTERY" value={fmt(Math.abs(flow.battery))}
+        <FlowNode x={56} y={92} place="above" color={SOLAR} icon="sun" label="Solar" watts={flow.pv}/>
+        <FlowNode x={344} y={92} place="above" color={flow.grid<0?GRID_OUT:GRID_IN} icon="pylon" label="Grid" watts={Math.abs(flow.grid)} sub={Math.abs(flow.grid)<=A?"idle":flow.grid<0?"exporting":"importing"}/>
+        <FlowNode x={56} y={300} place="below" color={BATTERY} icon={flow.battery>A?"battery-charging":"battery"} label="Battery" watts={Math.abs(flow.battery)}
           sub={flow.remainKwh!=null ? `${flow.soc.toFixed(0)}% · ~${flow.remainKwh.toFixed(1)} kWh`
-            : flow.soc!=null ? `SOC ${flow.soc.toFixed(0)}%`
+            : flow.soc!=null ? `${flow.soc.toFixed(0)}% charged`
             : flow.voltage!=null ? `${flow.voltage.toFixed(1)} V` : null}
           sub2={flow.ratePctHr!=null ? `${flow.rateSign}${flow.ratePctHr.toFixed(1)}%/hr` : null}
-          sub2Color={flow.battery>0?BATTERY:SOLAR}/>
-        <FlowNode x={344} y={300} place="below" color={LOAD_C} icon="🏠" label="HOME" value={fmt(flow.load)}/>
-        {flow.gen>A      && <FlowNode x={200} y={64} r={17} place="above" color="#57534E" icon="⚙️" label="GEN" value={fmt(flow.gen)}/>}
-        {showSmart      && <FlowNode x={200} y={322} r={17} place="below" color="#7C3AED" icon="🔌" label="SMART LOAD" value={fmt(flow.smartLoad)}/>}
-        {flow.couple>A   && <FlowNode x={40} y={182} r={16} place="below" color="#0891B2" icon="🔗" label="AC" value={fmt(Math.abs(flow.couple))}/>}
+          sub2Color={flow.battery>0?BATTERY_TEXT:SOLAR_TEXT}/>
+        <FlowNode x={344} y={300} place="below" color={LOAD_C} icon="home" label="Home" watts={flow.load}/>
+        {flow.gen>A      && <FlowNode optional x={200} y={64} r={17} place="above" color="#57534E" icon="cog" label="Generator" watts={flow.gen}/>}
+        {showSmart      && <FlowNode optional x={200} y={322} r={17} place="below" color="#7C3AED" icon="plug" label="Smart load" watts={flow.smartLoad}/>}
+        {flow.couple>A   && <FlowNode optional x={40} y={182} r={16} place="below" color="#0891B2" icon="link" label="AC couple" watts={Math.abs(flow.couple)}/>}
       </svg>
     </div>
   );
@@ -2631,17 +2617,17 @@ function FlowDiagram({flow}) {
 
 function InverterSelector({selectedSns, onToggle, onAll, allSelected, statuses, inverters, single, value, onPick}) {
   const pill = (active, onClick, key, label, sub, power) => (
-    <button key={key} onClick={onClick} style={{
-      flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1,
-      padding:"8px 14px", borderRadius:12,
+    <button key={key} type="button" onClick={onClick} aria-pressed={active} className="ui-press" style={{
+      flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
+      padding:"6px 14px", minHeight:48, borderRadius:12,
       border:`1.5px solid ${active?SOLAR:BORDER}`,
       background:active?"#FFFBEB":CARD,
       cursor:"pointer", fontFamily:SANS,
-      boxShadow: active ? `0 0 0 3px rgba(217,119,6,0.1)` : SHADOW_SM,
-      minWidth:56, opacity: active?1:0.65,
+      boxShadow: active ? `0 0 0 3px rgba(217,119,6,0.12)` : SHADOW_SM,
+      minWidth:64,
     }}>
-      <span style={{fontSize:12,fontWeight:700,color:active?SOLAR:TEXT,whiteSpace:"nowrap"}}>{label}{power&&<span style={{fontWeight:500,color:active?SOLAR:MUTED}}>{" · "}{power}</span>}</span>
-      <span style={{fontSize:10,fontWeight:500,color:active?"#B45309":FAINT,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"monospace"}}>{sub}</span>
+      <span style={{fontSize:FS.subhead,fontWeight:700,color:active?SOLAR_TEXT:TEXT,whiteSpace:"nowrap"}}>{label}{power&&<span style={{fontWeight:500,color:active?SOLAR_TEXT:MUTED}}>{" · "}{power}</span>}</span>
+      <span style={{fontSize:FS.caption,fontWeight:500,color:active?SOLAR_TEXT:MUTED,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{sub}</span>
     </button>
   );
   // Single-select mode (Explorer): no "All" pill; picking an inverter replaces the current one.
@@ -3126,13 +3112,89 @@ function SeriesToggle({series}) {
 }
 
 const TABS = [
-  { id:"live", label:"Live", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> },
-  { id:"day",  label:"Day",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg> },
-  { id:"month",label:"Month",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
-  { id:"year", label:"Year", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg> },
-  { id:"explorer",label:"Explorer",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg> },
+  { id:"live", label:"Live", iconName:"bolt" },
+  { id:"day",  label:"Day",  iconName:"sun" },
+  { id:"month",label:"Month",iconName:"calendar" },
+  { id:"year", label:"Year", iconName:"chart" },
+  { id:"explorer",label:"Explorer",iconName:"activity" },
 ];
-const ADMIN_TAB = { id:"admin", label:"Admin", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg> };
+const ADMIN_TAB = { id:"admin", label:"Admin", iconName:"shield" };
+
+// Top navigation bar. Desktop: back to Fleet, site name, the section tabs, Share, Settings and a "…"
+// menu. Phone: back (or logo), a compact title that fades in once the large title scrolls away, Share,
+// and a "…" menu that also carries Settings and Admin (the phone tab bar holds the 5 sections only).
+function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSettings, onLogout, accounts, activeAccountId, onSwitchAccount, isShared, isAdmin, subtitle, titleShown}){
+  const acctItems = accounts.length>1 ? [{header:"Account"}, ...accounts.map(a=>({label:a.label, icon:"user", checked:a.id===activeAccountId, onClick:()=>{ if(a.id!==activeAccountId) onSwitchAccount(a.id); }})), {sep:true}] : [];
+  const desktopMenu = [...acctItems, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout}];
+  const phoneMenu = [
+    {label:"Settings…", icon:"sliders", onClick:onSettings},
+    ...(isAdmin&&!isShared ? [{label:"Admin", icon:"shield", checked: tab==="admin" ? true : undefined, onClick:()=>onTab("admin")}] : []),
+    {sep:true}, ...acctItems.filter(i=>!i.sep), ...(acctItems.length?[{sep:true}]:[]),
+    {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout},
+  ];
+  return (
+    <header className="ui-navbar">
+      {/* Leading */}
+      {multiSite
+        ? <button type="button" className="ui-backlink" onClick={onFleet}><Icon name="back"/>Fleet</button>
+        : <span style={{display:"inline-flex",flexShrink:0}}><Logo size={28}/></span>}
+      <div className="hide-phone" style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flexShrink:1}}>
+        {multiSite&&<span style={{display:"inline-flex",flexShrink:0}}><Logo size={28}/></span>}
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>{site.name}</div>
+          <div style={{fontSize:FS.caption,color:MUTED,whiteSpace:"nowrap"}}>{subtitle}</div>
+        </div>
+        {isShared&&<span className="ui-pill" style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:SOLAR_TEXT}}>Shared · view only</span>}
+      </div>
+      {/* Phone compact title */}
+      <div className="hide-desktop" style={{flex:1,minWidth:0,textAlign:"center"}}>
+        <div className={`ui-navtitle${titleShown?" is-shown":""}`} aria-hidden={!titleShown}>{site.name}</div>
+      </div>
+      {/* Desktop tabs */}
+      <div className="hide-phone" style={{flex:1,display:"flex",justifyContent:"center",minWidth:0}}>
+        <Segmented label="Sections" options={tabs.map(t=>({value:t.id,label:t.label}))} value={tab} onChange={onTab}/>
+      </div>
+      {/* Trailing */}
+      <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+        {onShare&&<span className="hide-phone"><Button size="sm" icon="share" onClick={onShare}>Share</Button></span>}
+        {onShare&&<span className="hide-desktop"><IconButton icon="share" label="Share site" onClick={onShare}/></span>}
+        <span className="hide-phone"><Button size="sm" icon="sliders" onClick={onSettings}>Settings</Button></span>
+        <span className="hide-phone"><MoreMenu label="More" items={desktopMenu}/></span>
+        <span className="hide-desktop"><MoreMenu label="More" items={phoneMenu}/></span>
+      </div>
+    </header>
+  );
+}
+
+// Phone tab bar: the five sections, icon over a one-word label; the selection pill glides between tabs.
+function TabBar({tabs, tab, onTab}){
+  const box = useRef(null), ind = useRef(null);
+  useSlidingIndicator(box, ind, tab, {inset:10});
+  return (
+    <nav ref={box} className="ui-tabbar" aria-label="Sections">
+      <span ref={ind} className="ui-tab-ind" aria-hidden="true"/>
+      {tabs.map(t=>(
+        <button key={t.id} type="button" className="ui-tab" data-active={tab===t.id?"true":"false"} aria-current={tab===t.id?"page":undefined} onClick={()=>onTab(t.id)}>
+          <Icon name={t.iconName} strokeWidth={tab===t.id?2.1:1.8}/>
+          <span>{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// Large title (phone only). Reports whether it has scrolled under the nav bar.
+function useScrolledPast(ref, deps=[]){
+  const [past, setPast] = useState(false);
+  useEffect(()=>{
+    const el = ref.current;
+    if(!el || typeof IntersectionObserver==="undefined") return;
+    const io = new IntersectionObserver(([e])=>setPast(!e.isIntersecting && e.boundingClientRect.top < 80), {rootMargin:"-56px 0px 0px 0px", threshold:0});
+    io.observe(el);
+    return ()=>io.disconnect();
+  }, deps);
+  return past;
+}
 
 // Known device-shadow CONFIG/setting codes (the readsettings register set) — excluded from the
 // Live Register Probe's "match to live" so coincidental setting values don't drown out real telemetry.
@@ -4173,6 +4235,10 @@ export default function Dashboard() {
   // Own + shared-to-me accounts for the switcher; whether the active one is a shared (view-only) account.
   const switchAccts = [...accounts.map(a=>({id:a.id,label:a.label||a.midnite_username})), ...sharedAccounts.map(a=>({id:a.id,label:`${a.label} · shared`}))];
   const activeIsShared = sharedAccounts.some(a=>a.id===activeAccountId);
+  const largeTitleRef = useRef(null);
+  const liveRef = useRef(null);
+  const titlePast = useScrolledPast(largeTitleRef, [authState, site?.name]);
+  useStaggerIn(liveRef, [authState, tab, site?.name, liveLoading]);
 
   if(authState==="loading") return (<><PageHead/><div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",color:FAINT,fontSize:13,fontFamily:SANS}}>Loading…</div></>);
   if(authState==="appauth") return <LandingPage/>;
@@ -4186,44 +4252,21 @@ export default function Dashboard() {
     <>
       <PageHead/>
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
-        {/* Header */}
-        <div style={{borderBottom:`1px solid ${BORDER}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:CARD,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.04)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-            <Logo size={30}/>
-            <div>
-              <div style={{fontSize:14,fontWeight:700,color:TEXT,lineHeight:1.2}}>{site.name}</div>
-              <div style={{fontSize:10,color:FAINT}}>{site.inverters.length} inverter{site.inverters.length!==1?"s":""}
-                {lastUpdate&&<span> · {lastUpdate.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span>}
-              </div>
-            </div>
-          </div>
-          <div className="inv-scroll" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"nowrap",flex:"0 1 auto",minWidth:0,overflowX:"auto"}}>
-            {/* Desktop tabs */}
-            <div className="top-tabs" style={{gap:2,background:"#F1F5F9",borderRadius:10,padding:3,flexShrink:0}}>
-              {(isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS).map(t=>(
-                <button key={t.id} onClick={()=>setTab(t.id)} className="tab-btn" style={{
-                  padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:SANS,
-                  background:tab===t.id?CARD:"transparent",
-                  color:tab===t.id?TEXT:MUTED,
-                  fontSize:12,fontWeight:tab===t.id?700:500,
-                  boxShadow:tab===t.id?SHADOW_SM:"none",
-                }}>{t.label}</button>
-              ))}
-            </div>
-            {switchAccts.length>1 && (
-              <select value={activeAccountId||""} onChange={e=>switchAccount(e.target.value)} title="Active account" style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BORDER}`,background:CARD,color:TEXT,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",maxWidth:170,flexShrink:0}}>
-                {switchAccts.map(a=><option key={a.id} value={a.id}>{a.label}</option>)}
-              </select>
-            )}
-            {activeIsShared&&<span style={{fontSize:10,fontWeight:700,color:SOLAR,background:"#FFFBEB",border:"1px solid #FDE68A",padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap",flexShrink:0}}>SHARED · view-only</span>}
-            {site&&!activeIsShared&&<button onClick={()=>setShowShare(true)} title="Share this site" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>↗ Share</button>}
-            {sites.length>1&&<button onClick={openFleet} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>⊞ Fleet</button>}
-            <button onClick={()=>setShowAccountSettings(true)} title="Account settings" style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${BORDER}`,background:"transparent",color:MUTED,fontSize:11,fontWeight:600,fontFamily:SANS,cursor:"pointer",flexShrink:0}}>Settings</button>
-          </div>
-        </div>
+        <AppHeader site={site} multiSite={sites.length>1} tabs={isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS} tab={tab} onTab={setTab}
+          onFleet={openFleet} onShare={!activeIsShared?()=>setShowShare(true):null} onSettings={()=>setShowAccountSettings(true)} onLogout={handleLogout}
+          accounts={switchAccts} activeAccountId={activeAccountId} onSwitchAccount={switchAccount} isShared={activeIsShared} isAdmin={isAdmin}
+          subtitle={`${site.inverters.length} inverter${site.inverters.length!==1?"s":""}${lastUpdate?` · ${lastUpdate.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:""}`}
+          titleShown={titlePast}/>
 
         {/* Content */}
-        <div className="page-pad" style={{maxWidth:960,margin:"0 auto",padding:"16px 16px 24px",animation:"fadeUp 0.35s ease"}}>
+        <main className="page-pad" style={{maxWidth:960,margin:"0 auto",padding:"16px 16px 32px"}}>
+          <div ref={largeTitleRef} className="hide-desktop" style={{margin:"2px 0 14px"}}>
+            <h1 className="ui-largetitle">{site.name}</h1>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:4,fontSize:FS.subhead,color:MUTED}}>
+              <span>{site.inverters.length} inverter{site.inverters.length!==1?"s":""}{lastUpdate?` · ${lastUpdate.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:""}</span>
+              {activeIsShared&&<span className="ui-pill" style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:SOLAR_TEXT}}>Shared · view only</span>}
+            </div>
+          </div>
           {tab==="explorer"
             ? <InverterSelector single value={explorerSn} onPick={setExplorerSn} statuses={statuses} inverters={site.inverters}/>
             : <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>}
@@ -4231,32 +4274,36 @@ export default function Dashboard() {
 
           {tab==="live"&&(
             <>
-              {liveError&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:12,padding:"12px 16px",marginBottom:12,fontSize:13,color:GRID_IN}}>Error: {liveError}</div>}
+              {liveError&&<div role="alert" style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:12,padding:"12px 16px",marginBottom:12,fontSize:FS.subhead,color:GRID_IN_TEXT,display:"flex",gap:8,alignItems:"center"}}><Icon name="alert"/>Couldn’t load live data: {liveError}</div>}
               {liveLoading
-                ? <div style={{textAlign:"center",color:FAINT,padding:48,fontSize:13}}>Connecting to Midnite portal…</div>
-                : <>
+                ? <LiveSkeleton/>
+                : <div ref={liveRef}>
                   {liveGate.paused&&(
-                    <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",boxShadow:SHADOW_SM}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:TEXT,fontFamily:SANS}}>
-                          {liveGate.reason==="session" ? "Live view paused after 1 hour" : "Live view paused"}
-                        </div>
-                        <div style={{fontSize:12,color:MUTED,fontFamily:SANS,marginTop:2}}>
-                          {liveGate.reason==="session"
-                            ? "Still here? Resume to keep the real-time feed running."
-                            : "Paused after 10 minutes with no activity. Numbers below still refresh every minute."}
+                    <div className="ui-card" style={{padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                        <span style={{color:SOLAR_TEXT,fontSize:20,marginTop:1}}><Icon name="clock"/></span>
+                        <div>
+                          <div style={{fontSize:FS.body,fontWeight:700,color:TEXT}}>
+                            {liveGate.reason==="session" ? "Live view paused after 1 hour" : "Live view paused"}
+                          </div>
+                          <div style={{fontSize:FS.subhead,color:MUTED,marginTop:2}}>
+                            {liveGate.reason==="session"
+                              ? "Still here? Resume to keep the real-time feed running."
+                              : "Paused after 10 minutes with no activity. Numbers below still refresh every minute."}
+                          </div>
                         </div>
                       </div>
-                      <button onClick={liveGate.resume} style={{padding:"8px 16px",minHeight:44,borderRadius:10,border:"none",background:SOLAR,color:"#fff",fontSize:13,fontWeight:700,fontFamily:SANS,cursor:"pointer"}}>Resume live</button>
+                      <Button variant="primary" size="lg" icon="play" onClick={liveGate.resume}>Resume live</Button>
                     </div>
                   )}
                   {flowAgg&&<FlowDiagram flow={flowAgg}/>}
                   {allSelected&&<SiteHero statuses={statuses} live={liveAgg} liveAt={liveUpdatedAt}/>}
                   {allSelected&&<BatteryPanel statuses={statuses}/>}
                   {allSelected&&<LifetimePanel statuses={statuses}/>}
-                  {site.inverters.some(i=>i.autoId) && (
-                    <div style={{marginBottom:12}}>
-                      <button onClick={()=>setShowCompare(true)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:10,border:`1px solid ${BORDER}`,background:CARD,color:MUTED,fontSize:12,fontWeight:600,fontFamily:SANS,cursor:"pointer",boxShadow:SHADOW_SM}}>⚙ Compare all inverter settings</button>
+                  {selectedSns.length!==1&&(
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,margin:"6px 2px 10px"}}>
+                      <h2 style={{fontSize:FS.title3,fontWeight:800,color:TEXT,letterSpacing:"-0.3px"}}>Inverters</h2>
+                      {site.inverters.some(i=>i.autoId)&&<Button size="sm" icon="sliders" onClick={()=>setShowCompare(true)}>Compare settings</Button>}
                     </div>
                   )}
                   {selectedSns.length===1 ? (
@@ -4265,7 +4312,7 @@ export default function Dashboard() {
                       return <InverterDetailPanel key={s.sn} inv={inv} status={s}/>;
                     })
                   ) : (
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12,marginBottom:16}}>
                       {visibleStatuses.map(s=>{
                         const inv = site.inverters.find(i=>i.sn===s.sn)||{sn:s.sn,label:s.label};
                         return <InverterCard key={s.sn} inv={inv} status={s} live={liveFlow[s.sn]}/>;
@@ -4273,7 +4320,7 @@ export default function Dashboard() {
                     </div>
                   )}
                   {allSelected&&<FaultPanel site={site}/>}
-                </>
+                </div>
               }
             </>
           )}
@@ -4297,25 +4344,12 @@ export default function Dashboard() {
               : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:13}}>No inverter selected.</div>
           )}
           {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
-        </div>
+        </main>
 
         {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout} readOnly={activeIsShared}/>}
         {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
-        {/* Mobile bottom nav */}
-        <div className="bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:CARD,borderTop:`1px solid ${BORDER}`,padding:"8px 0 max(8px, env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>
-          {(isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS).map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{
-              display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-              padding:"4px 16px",border:"none",background:"transparent",cursor:"pointer",fontFamily:SANS,
-              color:tab===t.id?SOLAR:FAINT,
-              minWidth:56,
-            }}>
-              {t.icon}
-              <span style={{fontSize:10,fontWeight:tab===t.id?700:500}}>{t.label}</span>
-            </button>
-          ))}
-        </div>
+        <TabBar tabs={TABS} tab={tab} onTab={setTab}/>
       </div>
     </>
   );
