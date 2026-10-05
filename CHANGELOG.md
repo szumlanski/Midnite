@@ -2,6 +2,14 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.0.1 (2026-10-05): Remove phantom smart-port readings
+
+- Inverter cards and the single-inverter view no longer show "Smart ports". The status call reports the
+  same smart-port power and energy on every inverter (3.8 kW / 15.0 kWh today on all five at Wise Naples)
+  even though nothing is wired to the smart ports.
+- The power-flow diagram no longer builds a Smart load node from those readings before the live feed
+  connects (it would have shown 19 kW). A genuine separate backup load still comes from the live feed.
+
 ## 1.0.0 (2026-10-02): Motion polish, HIG rollout complete
 
 - Charts: Month and Year bars grow in over 0.45s instead of Recharts' default 1.5s, and not at all under

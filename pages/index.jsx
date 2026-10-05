@@ -2116,7 +2116,8 @@ function InverterCard({inv, status, live}) {
   // a connected string even when a stale snapshot captured 0W current. All-zero (voltage AND power)
   // means no data at all: either no strings or the rich endpoint isn't available.
   const hasAnyMpptData = mppts.some(m => (m.voltage||0) > 0 || (m.power||0) > 0);
-  const activePorts = d?.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&(p.lines||[]).reduce((s,l)=>s+(l.power||0),0)>0) : [];
+  // Smart-port readings from the status call are not shown: they come back identical on every inverter
+  // (e.g. 3.8 kW / 15.0 kWh on all five at Wise) even with nothing wired to the smart ports.
   return (
     <div className="inv-card ui-card" style={{overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div style={{height:3,background:online?`linear-gradient(90deg,${SOLAR},${BATTERY})`:"#E5E7EB"}}/>
@@ -2161,21 +2162,6 @@ function InverterCard({inv, status, live}) {
                       {v>0||w>0
                         ? <span style={{color:w>0?SOLAR_TEXT:MUTED,fontVariantNumeric:"tabular-nums"}}>{v.toFixed(0)} V · {a.toFixed(2)} A · {fmt(w)}</span>
                         : <span style={{color:MUTED}}>Off</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {/* Smart Ports */}
-            {activePorts.length>0&&(
-              <div style={{marginBottom:10,padding:"10px 12px",background:"#F0FDF4",borderRadius:12,border:`1px solid #DCFCE7`}}>
-                <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Smart ports</div>
-                {activePorts.map(([key,port])=>{
-                  const w=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
-                  return (
-                    <div key={key} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:FS.footnote,marginBottom:2}}>
-                      <span style={{color:MUTED,fontWeight:600}}>Port {key}</span>
-                      <span style={{color:BATTERY_TEXT,fontVariantNumeric:"tabular-nums"}}>{fmt(w)} · {fmtE(port.power?.today||0)} today</span>
                     </div>
                   );
                 })}
@@ -2270,7 +2256,6 @@ function InverterDetailPanel({inv, status}) {
   const loadLines    = d.load?.lines || [];
   const loadW        = balanceLoad(d) || 0;
   const loadFreq     = loadLines.find(l=>l.frequency>0)?.frequency || 0;
-  const smartPorts   = d.smartPorts ? Object.entries(d.smartPorts).filter(([,p])=>p&&((p.lines||[]).some(l=>l.power>0)||(p.power?.total||0)>0)) : [];
   const hasGen       = d.gen && (d.gen.lines||[]).some(l=>(l.power||0)>0);
 
   return (
@@ -2398,30 +2383,6 @@ function InverterDetailPanel({inv, status}) {
           <StatTile label="Total consumed" value={fmtE(d.load?.power?.total||0)}    color={MUTED}/>
         </div>
       </SectionCard>
-
-      {/* Smart Ports — full width if any active */}
-      {smartPorts.length>0&&(
-        <SectionCard icon="plug" title="Smart ports" fullWidth>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:16}}>
-            {smartPorts.map(([key,port])=>{
-              const portW=(port.lines||[]).reduce((s,l)=>s+(l.power||0),0);
-              return (
-                <div key={key}>
-                  <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Port {key}</div>
-                  {(port.lines||[]).filter(l=>l.voltage>0||l.power>0).map((l,i)=>(
-                    <PhaseRow key={i} label={`L${i+1}`} line={l}/>
-                  ))}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginTop:8}}>
-                    <StatTile label="Live"  value={fmt(portW)}                     color={portW>0?BATTERY:MUTED}/>
-                    <StatTile label="Today" value={fmtE(port.power?.today||0)}     color={MUTED}/>
-                    {(port.power?.total||0)>0&&<StatTile label="Lifetime" value={fmtE(port.power.total)} color={MUTED}/>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-      )}
 
       {/* Generator — full width if active */}
       {hasGen&&(
@@ -4131,7 +4092,10 @@ export default function Dashboard() {
     const battery = sum(d=>(d.battery?.charge||0)-(d.battery?.discharge||0));
     const load = sum(d=>balanceLoad(d));
     const gen = sum(d=>portW(d.gen));
-    const smartLoad = sum(d=>{const sp=d.smartPorts||{}; return portW(sp.A)+portW(sp.B)+portW(sp.C);});
+    // The status call's smart-port numbers are phantom (same reading on every inverter, no smart loads wired),
+    // so the diagram never builds a Smart load node from them. The live overlay sets smartLoad only for a
+    // genuine separate EPS/backup load.
+    const smartLoad = 0;
     const couple = sum(d=>d.couple?.netW||d.couple?.power||0); // provision — shows when the API exposes it
     const w = selStatus.filter(x=>(x.data.battery?.soc||0)>0);
     const times = selStatus.map(x=>x.data.inverter?.lastUpdateTime).filter(Boolean).sort();

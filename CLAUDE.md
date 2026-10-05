@@ -449,6 +449,10 @@ diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **d
 - Node text sits on the side **away** from the inverter (`place="above"` top nodes / `"below"` bottom) so
   connectors never cross labels.
 - Grid icon = drawn **transmission pylon** (`gridPylon`, passed via `iconSvg`), not a bank emoji.
+- **Smart-port readings from the status call are NOT displayed anywhere** (inverter cards, single-inverter view,
+  flow-diagram fallback). `getInverterStatus` `smartPortA/B/C` come back identical on every inverter (Wise:
+  3.8 kW / 15.0 kWh today on all five) with no smart loads wired (Jason, 2026-10-05). The proxy still passes
+  `smartPorts` through; the raw CSV smart-load columns stay selectable in Explorer.
 - **Optional nodes** appear only when active (>20 W): **Generator** (top-center), **Smart Load** (bottom-center)
   and **AC Couple** (left). Smart Load is **suppressed when it ≈ Home** (`|smartLoad − load| < max(80, load*0.1)`)
   — on AIO units the house is served through a smart port, so the reading IS Home and must not be shown twice.
