@@ -230,6 +230,21 @@ drop policy if exists "site shares read" on public.site_shares;
 create policy "site shares read" on public.site_shares for select
   using (auth.uid() = owner_user_id or auth.uid() = shared_with_user_id);
 
+-- ── Diagnostics captures (admin-only, read-only raw data) ────────────────────
+-- One row per "Download diagnostics" click: the raw vendor responses for every inverter
+-- at a site plus what the app made of them. Written and read only by the service-role
+-- proxy (no RLS policies on purpose = no client access). Safe to delete old rows.
+create table if not exists public.diagnostics (
+  id          uuid primary key default gen_random_uuid(),
+  created_at  timestamptz not null default now(),
+  created_by  uuid references auth.users on delete set null,
+  site_name   text,
+  account_id  uuid references public.midnite_accounts on delete set null,
+  payload     jsonb not null
+);
+create index if not exists diagnostics_created_at on public.diagnostics (created_at desc);
+alter table public.diagnostics enable row level security;
+
 -- ── Reload PostgREST's schema cache ─────────────────────────────────────────
 -- Supabase's REST layer (PostgREST, which supabase-js talks to) keeps an in-memory
 -- schema cache. After creating a table it can still report PGRST205 / "Could not

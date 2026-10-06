@@ -2,6 +2,16 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.0 (2026-10-06): Download diagnostics (admin)
+
+- Admins get "Download diagnostics" in the "…" menu on any site, including sites shared with them. One click
+  captures the raw vendor data for every inverter at the site (status, detail, live flow, today's and
+  yesterday's day data and 5-minute CSV export, month and year) next to what the app made of it, and the
+  app's own live view. It downloads as a JSON file and is saved to the `diagnostics` table. Read-only:
+  nothing is sent to the inverters; tokens and passwords are redacted.
+- Purpose: diagnose 3-phase and AC-coupled sites (Zeke's GC_EMS, 194WPC, GenevasWay) without their
+  Midnite logins.
+
 ## 1.0.1 (2026-10-05): Remove phantom smart-port readings
 
 - Inverter cards and the single-inverter view no longer show "Smart ports". The status call reports the

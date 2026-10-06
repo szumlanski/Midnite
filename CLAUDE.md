@@ -157,6 +157,15 @@ All actions accept optional `username` and `password` in the request body. Falls
 
 **Critical**: The `year` action must pass `date` to the API. Without it the API returns `{"status":false,"message":"no params"}`.
 
+**`diagnostics` action** (admin-only, read-only, allowed on SHARED sites): the header "…" menu item **Download
+diagnostics** sends `{siteName, memberId, memberAutoId, serials, autoIds, appView}`; the proxy captures, per inverter,
+the raw `getInverterStatus`, `InverterDetailInfoNewone`, `getHybridFlowgraphRealTimeData`, day + CSV export for
+today and yesterday, month and year, plus `normalized` (what `normalizeRich`/`normalizeDetail`/flow parsing make
+of them). Secrets are redacted (`DIAG_REDACT`). Saved to `public.diagnostics` (RLS on, no policies = service role
+only) and returned for a JSON download. Read captures with SQL:
+`select id, site_name, created_at from diagnostics order by created_at desc;` then `payload->'inverters'`.
+Built to diagnose Zeke Yewdall's shared 3-phase / AC-coupled sites (GC_EMS, 194WPC, GenevasWay, Peyton).
+
 **Debug actions** (Admin page only; safe to keep): `probemonth`, `probemppt`, `vendorsrc`, `viewtest`,
 `installertest`, `flow`, `rawstatus`, `debug`, `shadow`, `readsettings`, `shadowsweep`, `iotshadow`, `codelookup`,
 `rtsweep`.

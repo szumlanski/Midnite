@@ -435,7 +435,9 @@ async function resolveAccount(userId, accountId) {
   const e = new Error("No linked Midnite account"); e.code = 409; throw e;
 }
 // Data actions a shared (view-only) viewer may call.
-const SHARED_ALLOWED = new Set(["sites", "status", "flow", "flowrt", "day", "dayexcel", "month", "year", "logsearch", "logview"]);
+// "diagnostics" is read-only and admin-only (checked in its case); it is allowed here so an admin can capture
+// raw data for a site someone shared with them.
+const SHARED_ALLOWED = new Set(["sites", "status", "flow", "flowrt", "day", "dayexcel", "month", "year", "logsearch", "logview", "diagnostics"]);
 // Reject requests for serials/sites outside what's actually shared with the viewer.
 async function assertSharedScope(auth, accountId, sharedSites, action, body) {
   if (action === "sites") return;
@@ -449,6 +451,73 @@ async function assertSharedScope(auth, accountId, sharedSites, action, body) {
   const allowed = new Set();
   for (const s of sites) if (sharedSites.includes(s.MemberID)) for (const g of (s.GoodsID || [])) allowed.add(typeof g === "string" ? g : g.GoodsID);
   for (const sn of reqSerials) if (!allowed.has(sn)) { const e = new Error("That inverter isn't part of a site shared with you."); e.code = 403; throw e; }
+}
+
+// ── Diagnostics capture (admin-only, read-only) ─────────────────────────────────────────────────────
+// Collects the RAW vendor responses for every inverter at a site, next to what our normalizers make of
+// them, so data problems (3-phase, AC-coupled PV, export sign, multi-system sites) can be diagnosed
+// without the site's Midnite login. Nothing is written to the inverter or the vendor.
+const DIAG_REDACT = /^(token|accesstoken|access_token|password|pwd|passwd|sign|secret|authorization)$/i;
+function diagRedact(v, depth = 0) {
+  if (depth > 12 || v == null) return v;
+  if (Array.isArray(v)) return v.map((x) => diagRedact(x, depth + 1));
+  if (typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = DIAG_REDACT.test(k) ? "[redacted]" : diagRedact(x, depth + 1);
+    return o;
+  }
+  return v;
+}
+async function diagTry(fn) {
+  const t0 = Date.now();
+  try { return { ok: true, ms: Date.now() - t0, data: diagRedact(await fn()) }; }
+  catch (e) { return { ok: false, ms: Date.now() - t0, error: String(e.message || e).slice(0, 500) }; }
+}
+async function diagExcelCsv(memberId, sn, date) {
+  const sign = makeSign({ MemberID: memberId, inDate: date, GoodsID: sn });
+  const enc = encodeURIComponent;
+  const url = `${BASE}/Eagle/v1//Excel/hybridStatusExcelMidNite?MemberID=${enc(memberId)}&inDate=${enc(date)}&GoodsID=${enc(sn)}&sign=${enc(sign)}`;
+  const resp = await fetch(url, { headers: {
+    "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+    "Referer": "https://service.midnitepower.com/",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "Cookie": "timezone=America%2FNew_York",
+  }});
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`excel ${resp.status}: ${text.slice(0, 200)}`);
+  return { lines: text.split(/\r?\n/).filter((l) => l.trim().length) };
+}
+async function collectInverterDiagnostics(auth, { sn, autoId, memberAutoId, memberId, dates, month, year }) {
+  const memberAuto = memberAutoId || auth.memberAutoId;
+  const sign = (b) => { b.sign = makeSign(b); return b; };
+  const out = { sn, autoId: autoId ?? null };
+  const tasks = {
+    rich: () => (autoId && memberAuto)
+      ? midnitePost("/Eagle/v1/Inverterapi/getInverterStatus", sign({ AutoId: String(autoId), memberAutoID: String(memberAuto) }), auth.token)
+      : Promise.reject(new Error("no autoId/memberAutoId")),
+    detail: () => midnitePost("/Senergytec/web/v2/Inverterapi/InverterDetailInfoNewone", sign({ GoodsID: sn, MemberAutoID: auth.memberAutoId }), auth.senToken || auth.token),
+    flowrt: () => midnitePost("/Eagle/v1/Inverterapi/getHybridFlowgraphRealTimeData", sign({ GoodsID: sn }), auth.token),
+    month: () => midnitePost("/Senergytec/web/v2/Inverterapi/monthProductionAndConsumptionArea", sign({ GoodsID: sn, date: month }), auth.token),
+    year: () => midnitePost("/Senergytec/web/v2/Inverterapi/yearProductionAndConsumptionArea", sign({ GoodsID: sn, date: year }), auth.token),
+  };
+  for (const d of dates) {
+    tasks[`day_${d}`] = () => midnitePost("/Senergytec/web/v2/Inverterapi/dayProductionAndConsumptionAreaTime", sign({ GoodsID: sn, date: d }), auth.token);
+    tasks[`csv_${d}`] = () => diagExcelCsv(memberId, sn, d);
+  }
+  const keys = Object.keys(tasks);
+  const results = await Promise.all(keys.map((k) => diagTry(tasks[k])));
+  keys.forEach((k, i) => { out[k] = results[i]; });
+  // What our normalizers make of the same raw data (so raw vs. app view can be compared side by side).
+  out.normalized = {
+    rich: out.rich.ok && out.rich.data?.data ? normalizeRich(out.rich.data) : null,
+    detail: out.detail.ok ? normalizeDetail(out.detail.data, sn) : null,
+    flowrt: out.flowrt.ok ? {
+      pv: parseFloat(out.flowrt.data?.TotalDCpower || 0), grid: parseFloat(out.flowrt.data?.gridCurrpac || 0),
+      load: parseFloat(out.flowrt.data?.loadCurrpac || 0), eps: parseFloat(out.flowrt.data?.epsCurrpac || 0),
+      gen: parseFloat(out.flowrt.data?.genCurrpac || 0), battery: parseFloat(out.flowrt.data?.Pbat || 0),
+    } : null,
+  };
+  return out;
 }
 
 export default async function handler(req, res) {
@@ -896,6 +965,43 @@ export default async function handler(req, res) {
     if (!resolved.owned) await assertSharedScope(auth, acct.id, resolved.sharedSites, action, req.body || {});
 
     switch (action) {
+      case "diagnostics": {
+        // Admin-only, read-only raw capture for one site (works on sites shared with the admin).
+        if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+        const { serials, autoIds = [], memberAutoId, siteName, memberId, dates: reqDates, appView } = req.body || {};
+        if (!Array.isArray(serials) || !serials.length) return res.status(400).json({ error: "serials required" });
+        if (serials.length > 12) return res.status(400).json({ error: "at most 12 inverters per capture" });
+        const ymd = (d) => d.toISOString().slice(0, 10);
+        const now = new Date();
+        const dates = (Array.isArray(reqDates) && reqDates.length ? reqDates : [ymd(now), ymd(new Date(now.getTime() - 86400000))])
+          .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).slice(0, 3);
+        const month = dates[0].slice(0, 7), year = dates[0].slice(0, 4);
+        const inverters = [];
+        // Three inverters at a time keeps the vendor API from being flooded on 6-inverter sites.
+        for (let i = 0; i < serials.length; i += 3) {
+          const batch = serials.slice(i, i + 3).map((sn, j) => collectInverterDiagnostics(auth, {
+            sn, autoId: autoIds[i + j], memberAutoId, memberId: memberId || siteName || auth.username, dates, month, year,
+          }));
+          inverters.push(...(await Promise.all(batch)));
+        }
+        const payload = {
+          kind: "midnite-sentinel-diagnostics", version: 1,
+          capturedAt: now.toISOString(), capturedBy: user.email,
+          site: siteName || null, shared: !resolved.owned, accountType: auth.accountType || null,
+          dates, month, year, inverters,
+          appView: appView ? diagRedact(appView) : null,
+        };
+        let id = null, saved = false, saveError = null;
+        try {
+          const { data, error } = await supabaseAdmin().from("diagnostics")
+            .insert({ created_by: user.id, site_name: siteName || null, account_id: acct.id, payload })
+            .select("id").single();
+          if (error) throw error;
+          id = data.id; saved = true;
+        } catch (e) { saveError = schemaMissing(e) ? "diagnostics table missing (run supabase/schema.sql)" : String(e.message || e); }
+        await logAccess({ type: "diagnostics", user: user.email, account: acct.midnite_username, site: (siteName || "").slice(0, 80) });
+        return res.json({ ok: true, id, saved, saveError, payload });
+      }
       case "logview": {
         await logAccess({ type: "view", user: user.email, account: acct.midnite_username, site: (req.body?.site || "").slice(0, 80) });
         return res.json({ ok: true });

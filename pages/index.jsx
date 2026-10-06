@@ -3043,14 +3043,16 @@ const ADMIN_TAB = { id:"admin", label:"Admin", iconName:"shield" };
 // Top navigation bar. Desktop: back to Fleet, site name, the section tabs, Share, Settings and a "…"
 // menu. Phone: back (or logo), a compact title that fades in once the large title scrolls away, Share,
 // and a "…" menu that also carries Settings and Admin (the phone tab bar holds the 5 sections only).
-function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSettings, onLogout, accounts, activeAccountId, onSwitchAccount, isShared, isAdmin, subtitle, titleShown}){
+function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSettings, onLogout, accounts, activeAccountId, onSwitchAccount, isShared, isAdmin, subtitle, titleShown, onDiagnostics, diagBusy}){
   const acctItems = accounts.length>1 ? [{header:"Account"}, ...accounts.map(a=>({label:a.label, icon:"user", checked:a.id===activeAccountId, onClick:()=>{ if(a.id!==activeAccountId) onSwitchAccount(a.id); }})), {sep:true}] : [];
   const help = {label:"Help & FAQ", icon:"help", onClick:()=>window.open("/faq","_blank","noopener")};
-  const desktopMenu = [...acctItems, help, {sep:true}, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout}];
+  // Admin-only raw data capture; works on shared sites too (read-only).
+  const diag = isAdmin && onDiagnostics ? {label:diagBusy?"Collecting diagnostics…":"Download diagnostics", icon:"download", disabled:!!diagBusy, onClick:onDiagnostics} : null;
+  const desktopMenu = [...acctItems, help, diag, {sep:true}, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout}];
   const phoneMenu = [
     {label:"Settings…", icon:"sliders", onClick:onSettings},
     ...(isAdmin&&!isShared ? [{label:"Admin", icon:"shield", checked: tab==="admin" ? true : undefined, onClick:()=>onTab("admin")}] : []),
-    help,
+    help, diag,
     ...(acctItems.length?[{sep:true}, ...acctItems.filter(i=>!i.sep)]:[]),
     {sep:true}, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout},
   ];
@@ -4167,6 +4169,31 @@ export default function Dashboard() {
   const activeIsShared = sharedAccounts.some(a=>a.id===activeAccountId);
   const largeTitleRef = useRef(null);
   const liveRef = useRef(null);
+  const [diagBusy, setDiagBusy] = useState(false);
+  // Admin-only: capture the raw vendor data for every inverter at this site (works on shared sites, whose
+  // Midnite login we never see). The proxy saves it to the `diagnostics` table and returns it; we also
+  // download it as a JSON file. Read-only: nothing is written to the inverter or the vendor.
+  async function downloadDiagnostics(){
+    if(!site || diagBusy) return;
+    setDiagBusy(true);
+    toast("Collecting diagnostics… this takes a few seconds", {icon:"download", ms:4000});
+    try {
+      const appView = {
+        selectedSns, liveFlow, flowAgg, liveAgg, liveUpdatedAt,
+        statuses: statuses.map(s=>({sn:s?.sn, ok:s?.ok, source:s?.source||"detail", error:s?.error||null})),
+        build: BUILD, viewport: typeof window!=="undefined" ? {w:window.innerWidth,h:window.innerHeight} : null,
+        site: { name: site.name, memberAutoId: site.memberAutoId ?? null, inverters: site.inverters.map(i=>({sn:i.sn,label:i.label,autoId:i.autoId??null})) },
+      };
+      const r = await api("diagnostics", { siteName: site.name, memberId: site.name, memberAutoId: site.memberAutoId,
+        serials: site.inverters.map(i=>i.sn), autoIds: site.inverters.map(i=>i.autoId), appView });
+      const name = `diagnostics-${String(site.name).replace(/[^A-Za-z0-9_-]+/g,"_")}-${new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")}.json`;
+      const blob = new Blob([JSON.stringify({ id:r.id, saved:r.saved, ...r.payload }, null, 2)], {type:"application/json"});
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast(r.saved ? `Diagnostics saved for ${site.name}` : `Diagnostics downloaded (not saved: ${r.saveError})`, {icon:"check", ms:4000});
+    } catch(e){ toast("Diagnostics failed: "+String(e.message||e), {tone:"error", ms:5000}); }
+    finally { setDiagBusy(false); }
+  }
   const titlePast = useScrolledPast(largeTitleRef, [authState, site?.name]);
   useStaggerIn(liveRef, [authState, tab, site?.name, liveLoading]);
   const tabRef = useRef(null);
@@ -4188,7 +4215,7 @@ export default function Dashboard() {
           onFleet={openFleet} onShare={!activeIsShared?()=>setShowShare(true):null} onSettings={()=>setShowAccountSettings(true)} onLogout={handleLogout}
           accounts={switchAccts} activeAccountId={activeAccountId} onSwitchAccount={switchAccount} isShared={activeIsShared} isAdmin={isAdmin}
           subtitle={`${site.inverters.length} inverter${site.inverters.length!==1?"s":""}${lastUpdate?` · ${lastUpdate.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:""}`}
-          titleShown={titlePast}/>
+          titleShown={titlePast} onDiagnostics={downloadDiagnostics} diagBusy={diagBusy}/>
 
         {/* Content */}
         <main className="page-pad" style={{maxWidth:1120,margin:"0 auto",padding:"16px 16px 32px"}}>
