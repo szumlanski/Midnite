@@ -458,6 +458,12 @@ diagonal). Moving dots (CSS `flowdash` keyframes, `.flow-anim`/`.flow-rev`); **d
 - Node text sits on the side **away** from the inverter (`place="above"` top nodes / `"below"` bottom) so
   connectors never cross labels.
 - Grid icon = drawn **transmission pylon** (`gridPylon`, passed via `iconSvg`), not a bank emoji.
+- **AC-coupled solar ALWAYS enters through a smart port configured as an "AC coupled input"** (Jason, 2026-10-06).
+  So on AC-coupled sites the smart-port reading IS the AC solar, not a load. The day feed's `Production` and live
+  `TotalDCpower` are DC-only, which is why GenevasWay (AC-coupled only) has correct kWh (month rollup) but no
+  solar graph. Open: find which field says a port is configured as AC-coupled (raw `smartPortA/B/C` object or a
+  settings register; capture with Download diagnostics), then count that port's power as solar and keep hiding
+  ports that are not AC-coupled (the Wise phantom below).
 - **Smart-port readings from the status call are NOT displayed anywhere** (inverter cards, single-inverter view,
   flow-diagram fallback). `getInverterStatus` `smartPortA/B/C` come back identical on every inverter (Wise:
   3.8 kW / 15.0 kWh today on all five) with no smart loads wired (Jason, 2026-10-05). The proxy still passes
