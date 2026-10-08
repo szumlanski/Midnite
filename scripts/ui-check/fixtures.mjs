@@ -453,6 +453,9 @@ function yearResp(sn, date) {
     const t = monthTotals(hit.site, y, m).reduce((acc, x) => addT(acc, x.t), ZERO_T);
     Data.push({ month: m, ...rollupRow(t, hit.inv.w) });
   }
+  // Regression case (Mark Gorovoy, 2026): the vendor returned an impossible January powerToBattery for one
+  // inverter. lib/rollupGuard.js must leave it out and the Year tab must say so.
+  if (hit.site.name === "Wise Naples" && hit.idx === 0 && Data[0]) Data[0].powerToBattery = 4204844;
   return { Data };
 }
 

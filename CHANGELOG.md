@@ -2,6 +2,16 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.1 (2026-10-08): Leave out impossible energy readings
+
+- The vendor's month/year rollups sometimes return an impossible number for one inverter. Mark Gorovoy's
+  Year 2026 showed 4,204,844 kWh of solar in January (4,206.89 MWh charged) because one January row
+  reported that much battery charge.
+- New guard (`lib/rollupGuard.js`): any energy field above 600 kWh per inverter per day (31 days for a
+  monthly row) is left out of the totals. The MN 15-12KW-AIO is rated 15 kW, so real values never come close.
+- Day, Month, Year and the custom range show an amber note naming each value that was left out
+  (inverter, period, field, value). The daily digest email uses the same guard.
+
 ## 1.1.0 (2026-10-06): Download diagnostics (admin)
 
 - Admins get "Download diagnostics" in the "…" menu on any site, including sites shared with them. One click

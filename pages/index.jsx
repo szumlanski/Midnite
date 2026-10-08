@@ -3,6 +3,7 @@ import Head from "next/head";
 import { supabase, supabaseReady } from "../lib/supabaseClient";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
 import { triggerGroups, getTrigger } from "@/lib/notifications/triggers";
+import { sanitizeRollupRow } from "@/lib/rollupGuard";
 import { summarizeRule } from "@/lib/notifications/engine";
 import { usePolling, useLiveGate, POLL } from "../lib/usePolling";
 import { BG, CARD, BORDER, TEXT, MUTED, FAINT, SOLAR, BATTERY, GRID_IN, GRID_OUT, LOAD_C, SOLAR_TEXT, BATTERY_TEXT, GRID_OUT_TEXT, GRID_IN_TEXT, SHADOW, SHADOW_SM, SANS, CHART_PROD, CHART_CONS, CHART_BAT, CHART_GRID, FS, textTone } from "@/components/ui/tokens";
@@ -149,16 +150,37 @@ function aggregateDayMppt(dayResp, excelRows) {
     return row;
   });
 }
-function aggregateMonthData(all) {
-  const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0); } }
-  return Object.values(map).sort((a,b)=>a.day-b.day);
+// Month/year rollups: impossible vendor values (see lib/rollupGuard.js) are zeroed before summing and
+// listed on the returned array's `issues` property ({inv, period, label, value, day?}) so the charts can say
+// exactly what was left out. `labels` are the inverter names, aligned with `all`.
+function aggregateMonthData(all, labels=[]) {
+  const map = {}; const issues = [];
+  all.forEach((inv, idx) => {
+    if(!inv||!inv.Data) return;
+    for(const raw of inv.Data) {
+      const {row:r, bad} = sanitizeRollupRow(raw, 1);
+      for(const x of bad) issues.push({ ...x, inv: labels[idx]||`Inverter ${idx+1}`, day: Number(raw.day), period: `day ${raw.day}` });
+      const k=r.day; if(!map[k]) map[k]={day:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0);
+    }
+  });
+  const out = Object.values(map).sort((a,b)=>a.day-b.day);
+  out.issues = issues;
+  return out;
 }
-function aggregateYearData(all) {
+function aggregateYearData(all, labels=[]) {
   const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const map = {};
-  for(const inv of all) { if(!inv||!inv.Data) continue; for(const r of inv.Data) { const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,_m:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0); } }
-  return Object.values(map).sort((a,b)=>a._m-b._m);
+  const map = {}; const issues = [];
+  all.forEach((inv, idx) => {
+    if(!inv||!inv.Data) return;
+    for(const raw of inv.Data) {
+      const {row:r, bad} = sanitizeRollupRow(raw, 31);
+      for(const x of bad) issues.push({ ...x, inv: labels[idx]||`Inverter ${idx+1}`, period: M[raw.month-1]||`month ${raw.month}` });
+      const k=r.month; if(!map[k]) map[k]={month:M[k-1]||k,_m:k,production:0,consumption:0,fromGrid:0,toGrid:0,batCharge:0,batDischarge:0}; map[k].production+=rollupProduction(r); map[k].consumption+=parseFloat(r.Consumption||0); map[k].fromGrid+=parseFloat(r.powerFromGrid||0); map[k].toGrid+=parseFloat(r.powerToGrid||0); map[k].batCharge+=parseFloat(r.powerToBattery||0); map[k].batDischarge+=parseFloat(r.powerFromBattery||0);
+    }
+  });
+  const out = Object.values(map).sort((a,b)=>a._m-b._m);
+  out.issues = issues;
+  return out;
 }
 // Custom date range (e.g. utility billing period) — list the YYYY-MM months a range spans, and flatten
 // per-month daily rollups into one date-sorted array of {..., _date, day:"M/D"} within [start,end].
@@ -168,14 +190,20 @@ function monthsInRange(start, end){
   return out;
 }
 function aggregateRange(perMonth, start, end){
-  const rows=[];
+  const rows=[]; const issues=[];
   for(const {m, days} of perMonth){
+    for(const x of (days.issues||[])){
+      const date=`${m}-${String(x.day).padStart(2,"0")}`;
+      if(date>=start && date<=end) issues.push({ ...x, period:`${parseInt(m.slice(5),10)}/${x.day}` });
+    }
     for(const d of days){
       const date=`${m}-${String(d.day).padStart(2,"0")}`;
       if(date>=start && date<=end && date<=today) rows.push({ ...d, _date:date, day:`${parseInt(m.slice(5),10)}/${d.day}` });
     }
   }
-  return rows.sort((a,b)=>a._date.localeCompare(b._date));
+  const out = rows.sort((a,b)=>a._date.localeCompare(b._date));
+  out.issues = issues;
+  return out;
 }
 
 // Design tokens live in components/ui/tokens.js (imported above).
@@ -2673,6 +2701,7 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
         {date!==today&&<Button size="sm" variant="plain" onClick={()=>onDateChange(today)}>Today</Button>}
       </PeriodHeader>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged}/>}
+      {!loading&&<RollupIssues issues={summary?.issues}/>}
       <ChartCard loading={loading} minHeight={360}>
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
@@ -2901,6 +2930,7 @@ function MonthChart({month, onMonthChange, data, loading, mode="month", onModeCh
         )}
       </PeriodHeader>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
+      {!loading&&<RollupIssues issues={data.issues}/>}
       <ChartCard loading={loading} minHeight={340}>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_MONTH}>
@@ -2963,6 +2993,7 @@ function YearChart({year, onYearChange, data, loading}) {
         <StepButton dir={1} label="Next year" disabled={yrAtMax} onClick={yrNext}/>
       </PeriodHeader>
       {!loading&&<SummaryStrip produced={produced} consumed={consumed} imported={imported} exported={exported} charged={charged} discharged={discharged} netExported={exported-imported}/>}
+      {!loading&&<RollupIssues issues={data.issues}/>}
       <ChartCard loading={loading} minHeight={320}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} stackOffset="sign" margin={{top:4,right:4,left:0,bottom:0}} {...BAR_YEAR}>
@@ -2997,6 +3028,24 @@ function SeriesToggle({series}) {
           {s.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Says which impossible vendor readings were left out of the totals (lib/rollupGuard.js), so a corrected
+// number never looks like a silent change.
+function RollupIssues({issues}){
+  if(!issues?.length) return null;
+  const shown = issues.slice(0,3);
+  return (
+    <div role="note" style={{display:"flex",gap:10,alignItems:"flex-start",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:12,padding:"10px 14px",marginBottom:16,fontSize:FS.subhead,color:"#92400E"}}>
+      <span style={{fontSize:18,lineHeight:1,marginTop:1}}><Icon name="alert"/></span>
+      <div>
+        <div style={{fontWeight:700}}>Left out {issues.length} impossible reading{issues.length===1?"":"s"} from the inverter{issues.length===1?"":"s"}</div>
+        {shown.map((x,i)=><div key={i} style={{fontVariantNumeric:"tabular-nums"}}>{x.inv} · {x.period} · {x.label} {Math.round(x.value).toLocaleString()} kWh</div>)}
+        {issues.length>shown.length&&<div>and {issues.length-shown.length} more</div>}
+        <div style={{color:MUTED,marginTop:2}}>No inverter can move that much energy, so {issues.length===1?"this value is":"these values are"} not in the totals.</div>
+      </div>
     </div>
   );
 }
@@ -4038,11 +4087,13 @@ export default function Dashboard() {
       // Day summary tiles read straight from the month rollup so Day == Month == Year for every
       // field (export included). If a site's rollup reports 0 export (stuck feed-in register on the
       // inverter), Day shows 0 too — consistent, and the Admin register read-out surfaces the cause.
-      const md = aggregateMonthData(monthAll).find(r=>Number(r.day)===dayNum);
+      const monthAgg = aggregateMonthData(monthAll, chartInverters.map(i=>i.label));
+      const md = monthAgg.find(r=>Number(r.day)===dayNum);
       setDaySummary(md ? {
         produced: md.production*1000, consumed: md.consumption*1000,
         imported: md.fromGrid*1000, exported: md.toGrid*1000,
         charged: md.batCharge*1000, discharged: md.batDischarge*1000,
+        issues: monthAgg.issues.filter(x=>x.day===dayNum),
       } : null);
       setDayLoading(false);
     });
@@ -4053,13 +4104,13 @@ export default function Dashboard() {
     if(monthMode==="range" && rangeStart && rangeEnd && rangeStart<=rangeEnd){
       const months = monthsInRange(rangeStart.slice(0,7), rangeEnd.slice(0,7));
       Promise.all(months.map(m =>
-        Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:m}).catch(()=>null))).then(all=>({m, days:aggregateMonthData(all)}))
+        Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:m}).catch(()=>null))).then(all=>({m, days:aggregateMonthData(all, chartInverters.map(i=>i.label))}))
       )).then(perMonth=>{ setMonthData(aggregateRange(perMonth, rangeStart, rangeEnd)); setMonthLoading(false); });
     } else {
-      Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all));setMonthLoading(false);});
+      Promise.all(chartInverters.map(inv=>api("month",{sn:inv.sn,date:monthDate}).catch(()=>null))).then(all=>{setMonthData(aggregateMonthData(all, chartInverters.map(i=>i.label)));setMonthLoading(false);});
     }
   }, [tab,monthDate,monthMode,rangeStart,rangeEnd,snKey,site]);
-  useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all));setYearLoading(false);}); }, [tab,yearVal,snKey,site]);
+  useEffect(() => { if(tab!=="year"||!site) return; setYearLoading(true); Promise.all(chartInverters.map(inv=>api("year",{sn:inv.sn,date:yearVal}).catch(()=>null))).then(all=>{setYearData(aggregateYearData(all, chartInverters.map(i=>i.label)));setYearLoading(false);}); }, [tab,yearVal,snKey,site]);
   // Explorer: raw per-parameter 5-min series from the dayexcel CSV, for one inverter over a date
   // range (up to 7 days). Each day's rows are tagged with _date and concatenated; the metric catalog
   // is the union across the range.

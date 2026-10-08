@@ -355,6 +355,14 @@ goes), which holds on every inverter — so `rollupProduction(r)` reconstructs i
 straight from `powerToBattery`/`powerFromBattery` (not a net heuristic). **Never revert month/year production to
 `r.Production`.**
 
+### Impossible rollup values are left out (`lib/rollupGuard.js`)
+The month/year rollups occasionally return a physically impossible value for one inverter and one period
+(Mark Gorovoy, Jan 2026: `powerToBattery` ≈ 4,204,844 kWh, so Year showed 4,204,844 kWh of solar).
+`sanitizeRollupRow(row, days)` zeroes any energy field above `MAX_KWH_PER_INVERTER_DAY` (600) × days and reports
+it. `aggregateMonthData`/`aggregateYearData`/`aggregateRange` attach the list as `.issues` on the returned array
+(`summary.issues` on Day) and `RollupIssues` shows an amber note naming each value left out. The digest's
+`aggregateMonth` uses the same guard. Do not remove the guard or hide the note.
+
 ### Day summary totals come from the MONTH rollup (so Day == Month exactly)
 The Day chart shows the intraday power *shape*, but the Day **summary tiles** (Produced/Consumed/etc.) are read
 from `aggregateMonthData(...)`'s entry for that day (`daySummary`), not by integrating power. This guarantees the
