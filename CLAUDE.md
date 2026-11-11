@@ -613,6 +613,8 @@ So the site already auto-starts the gen at 15 % and stops at 35 %. `2136`=0 most
 the first `getDeviceShadowResult` poll returned `data[id].status:false`, a later one returned `status:true` with
 `data.result: {"2136":"0"}`, and the read-back matched (`verified:true`). Took about 4-20 s.
 `2156` AGS 0 Auto -> 2 Off also verified the same day (read-back can come back as a string, `"2"`).
+`2129`/`212A` 15/35 -> 16/36 in one write (two codes in one `ModbusArr`) also verified; Jason restored 15/35 in the
+portal. So multi-register writes work, which the window rewrites need.
 
 So **Run now = `2156`=1, Stop = `2156`=2, back to automatic = `2156`=0**, and the inverter has native SOC
 auto-start (`2129`/`212A`) plus a native exercise cycle. Dotsikas reads `2156`=1 (AGS forced **On**).
