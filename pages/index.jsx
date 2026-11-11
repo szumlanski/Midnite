@@ -13,6 +13,10 @@ import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui
 import { Sheet } from "@/components/ui/Sheet";
 import { confirmAlert, toast } from "@/components/ui/Alert";
 import { InstallHint } from "@/components/ui/InstallHint";
+import { GeneratorTab } from "@/components/generator/GeneratorTab";
+import { GeneratorAdminCard } from "@/components/generator/GeneratorAdminCard";
+import { genApi } from "@/components/generator/shared";
+import { siteKeyOf } from "@/lib/generator/core";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect, usePrefersReducedMotion } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
@@ -3108,11 +3112,13 @@ const TABS = [
   { id:"explorer",label:"Explorer",iconName:"activity" },
 ];
 const ADMIN_TAB = { id:"admin", label:"Admin", iconName:"shield" };
+// Generator tab: only on sites an admin enabled. On phones it takes Explorer's TabBar slot and Explorer moves to "…".
+const GEN_TAB = { id:"generator", label:"Generator", iconName:"generator" };
 
 // Top navigation bar. Desktop: back to Fleet, site name, the section tabs, Share, Settings and a "…"
 // menu. Phone: back (or logo), a compact title that fades in once the large title scrolls away, Share,
 // and a "…" menu that also carries Settings and Admin (the phone tab bar holds the 5 sections only).
-function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSettings, onLogout, accounts, activeAccountId, onSwitchAccount, isShared, isAdmin, subtitle, titleShown, onDiagnostics, diagBusy}){
+function AppHeader({site, multiSite, tabs, menuTabs=[], tab, onTab, onFleet, onShare, onSettings, onLogout, accounts, activeAccountId, onSwitchAccount, isShared, sharedLabel="Shared · view only", isAdmin, subtitle, titleShown, onDiagnostics, diagBusy}){
   const acctItems = accounts.length>1 ? [{header:"Account"}, ...accounts.map(a=>({label:a.label, icon:"user", checked:a.id===activeAccountId, onClick:()=>{ if(a.id!==activeAccountId) onSwitchAccount(a.id); }})), {sep:true}] : [];
   const help = {label:"Help & FAQ", icon:"help", onClick:()=>window.open("/faq","_blank","noopener")};
   // Admin-only raw data capture; works on shared sites too (read-only).
@@ -3120,6 +3126,7 @@ function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSetti
   const desktopMenu = [...acctItems, help, diag, {sep:true}, {label:"Sign out", icon:"logout", destructive:true, onClick:onLogout}];
   const phoneMenu = [
     {label:"Settings…", icon:"sliders", onClick:onSettings},
+    ...menuTabs.map(t=>({label:t.label, icon:t.iconName, checked: tab===t.id ? true : undefined, onClick:()=>onTab(t.id)})),
     ...(isAdmin&&!isShared ? [{label:"Admin", icon:"shield", checked: tab==="admin" ? true : undefined, onClick:()=>onTab("admin")}] : []),
     help, diag,
     ...(acctItems.length?[{sep:true}, ...acctItems.filter(i=>!i.sep)]:[]),
@@ -3137,7 +3144,7 @@ function AppHeader({site, multiSite, tabs, tab, onTab, onFleet, onShare, onSetti
           <div style={{fontSize:FS.callout,fontWeight:700,color:TEXT,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>{site.name}</div>
           <div style={{fontSize:FS.caption,color:MUTED,whiteSpace:"nowrap"}}>{subtitle}</div>
         </div>
-        {isShared&&<span className="ui-pill" style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:SOLAR_TEXT}}>Shared · view only</span>}
+        {isShared&&<span className="ui-pill" style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:SOLAR_TEXT}}>{sharedLabel}</span>}
       </div>
       {/* Phone compact title */}
       <div className="hide-desktop" style={{flex:1,minWidth:0,textAlign:"center"}}>
@@ -3199,7 +3206,7 @@ const CONFIG_CODES = new Set([
 // known live Hz/temp/battery-V codes. Polled every 10s so values can be correlated against the
 // live power-flow screen (which register tracks PV vs grid vs load vs battery).
 const WATCH_CODES = (()=>{ const a=[]; for(let i=0x3000;i<=0x301F;i++) a.push(i.toString(16).toUpperCase()); a.push("2562","2563","212F"); return a; })();
-function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
+function AdminPanel({site, inverters, statuses=[], userEmail="", onGenChanged}) {
   // ── Fleet Overview (new) ────────────────────────────────────────────────────
   const [fleetData, setFleetData] = useState(null);      // null = not loaded yet
   const [fleetErr, setFleetErr] = useState(null);
@@ -3464,6 +3471,7 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
       <div style={{fontSize:FS.caption,color:MUTED,fontFamily:"monospace",textAlign:"right"}}>build {BUILD}</div>
+      <GeneratorAdminCard site={site} onChanged={onGenChanged}/>
 
       {/* ── Fleet Overview ────────────────────────────────────────────────── */}
       <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:16,padding:16,boxShadow:SHADOW_SM}}>
@@ -3930,14 +3938,15 @@ export default function Dashboard() {
     setSites(normalized);
     if(normalized.length===0) { setLoginError("No sites found for this account"); setAuthState("link"); return; }
     // Deep-link: email digest links contain ?site=SiteName — auto-navigate there.
-    // Optional &tab=live|day|month|year|explorer|admin opens that tab (admin only renders for admins).
+    // Optional &tab=live|day|month|year|explorer|generator|admin opens that tab (admin only renders for admins;
+    // generator only once the site turns out to be generator-enabled, else it falls back to Live).
     const dlQs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const dlParam = dlQs ? dlQs.get("site") : null;
     const dlTab = dlQs ? dlQs.get("tab") : null;
     const dlMatch = dlParam && normalized.find(s=>s.name===dlParam);
     if(dlMatch){
       window.history.replaceState({}, "", window.location.pathname); // clean up URL
-      if(dlTab && ["live","day","month","year","explorer","admin"].includes(dlTab)) setTab(dlTab);
+      if(dlTab && ["live","day","month","year","explorer","generator","admin"].includes(dlTab)) setTab(dlTab);
       setSite(dlMatch); setAuthState("dashboard"); return;
     }
     if(normalized.length===1) { setSite(normalized[0]); setAuthState("dashboard"); }
@@ -4021,6 +4030,20 @@ export default function Dashboard() {
 
   // Log site views (admin access log). Fires once per site selection.
   useEffect(() => { if(site) api("logview", { site: site.name }).catch(()=>{}); }, [site]);
+  // Generator control: is this site enabled? (state 403/404 = no). undefined while checking.
+  const [gen, setGen] = useState(undefined);
+  const [genCheck, setGenCheck] = useState(0);
+  const genKey = site ? siteKeyOf(site.inverters.map(i=>i.sn)) : "";
+  useEffect(() => {
+    if(!genKey) { setGen(undefined); return; }
+    let alive = true; setGen(undefined);
+    genApi("state", { site_key: genKey, live: false })
+      .then(r => { if(alive) setGen(r?.site?.enabled ? { enabled:true, state:r } : { enabled:false }); })
+      .catch(() => { if(alive) setGen({ enabled:false }); });
+    return () => { alive = false; };
+  }, [genKey, genCheck, activeAccountId]);
+  const genOn = !!gen?.enabled;
+  useEffect(() => { if(tab==="generator" && gen && !gen.enabled) setTab("live"); }, [tab, gen]);
 
   const fetchLive = useCallback(async () => {
     if(!site) return;
@@ -4289,7 +4312,8 @@ export default function Dashboard() {
     <>
       <PageHead/>
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
-        <AppHeader site={site} multiSite={sites.length>1} tabs={isAdmin&&!activeIsShared?[...TABS,ADMIN_TAB]:TABS} tab={tab} onTab={setTab}
+        <AppHeader site={site} multiSite={sites.length>1} tabs={[...TABS, ...(genOn?[GEN_TAB]:[]), ...(isAdmin&&!activeIsShared?[ADMIN_TAB]:[])]} menuTabs={genOn?TABS.filter(t=>t.id==="explorer"):[]} tab={tab} onTab={setTab}
+          sharedLabel={genOn?"Shared · view only, generator control allowed":"Shared · view only"}
           onFleet={openFleet} onShare={!activeIsShared?()=>setShowShare(true):null} onSettings={()=>setShowAccountSettings(true)} onLogout={handleLogout}
           accounts={switchAccts} activeAccountId={activeAccountId} onSwitchAccount={switchAccount} isShared={activeIsShared} isAdmin={isAdmin}
           subtitle={`${site.inverters.length} inverter${site.inverters.length!==1?"s":""}${lastUpdate?` · ${lastUpdate.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:""}`}
@@ -4301,10 +4325,10 @@ export default function Dashboard() {
             <h1 className="ui-largetitle">{site.name}</h1>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:4,fontSize:FS.subhead,color:MUTED}}>
               <span>{site.inverters.length} inverter{site.inverters.length!==1?"s":""}{lastUpdate?` · ${lastUpdate.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:""}</span>
-              {activeIsShared&&<span className="ui-pill" style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:SOLAR_TEXT}}>Shared · view only</span>}
+              {activeIsShared&&<span className="ui-pill" style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:SOLAR_TEXT,whiteSpace:"normal"}}>{genOn?"Shared · view only, generator control allowed":"Shared · view only"}</span>}
             </div>
           </div>
-          {tab==="explorer"
+          {tab==="generator" ? null : tab==="explorer"
             ? <InverterSelector single value={explorerSn} onPick={setExplorerSn} statuses={statuses} inverters={site.inverters}/>
             : <InverterSelector selectedSns={selectedSns} onToggle={toggleInv} onAll={selectAllInv} allSelected={allSelected} statuses={statuses} inverters={site.inverters}/>}
           {showCompare && <SettingsCompareModal inverters={site.inverters} onClose={()=>setShowCompare(false)}/>}
@@ -4385,14 +4409,15 @@ export default function Dashboard() {
               ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label}/>
               : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:FS.subhead}}>No inverter selected.</div>
           )}
-          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail}/>}
+          {tab==="generator"&&genOn&&<GeneratorTab siteKey={genKey} siteName={site.name} userKey={userEmail} initial={gen.state}/>}
+          {tab==="admin"&&isAdmin&&<AdminPanel site={site} inverters={chartInverters} statuses={statuses} userEmail={userEmail} onGenChanged={()=>setGenCheck(n=>n+1)}/>}
           </div>
         </main>
 
         {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout} readOnly={activeIsShared}/>}
         {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
-        <TabBar tabs={TABS} tab={tab} onTab={setTab}/>
+        <TabBar tabs={genOn?TABS.map(t=>t.id==="explorer"?GEN_TAB:t):TABS} tab={tab} onTab={setTab}/>
         <InstallHint/>
       </div>
     </>

@@ -427,3 +427,18 @@ button, input, select, textarea { font-family: inherit; }
 .ui-install-glyph { display: inline-flex; vertical-align: -0.15em; color: #007AFF; font-size: 1.05em; }
 .ui-install-actions { display: flex; gap: 8px; margin-top: 10px; }
 .ui-install-close { flex-shrink: 0; margin-top: -6px; color: var(--muted); }
+
+/* Generator UI (1.1.7) */
+.gen-spin { width: 16px; height: 16px; flex-shrink: 0; border-radius: 50%; border: 2px solid #DDD6FE; border-top-color: #6D28D9; animation: ui-spin 0.9s linear infinite; }
+.gen-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gen-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.gen-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.gen-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.gen-timeline { position: relative; height: 28px; border-radius: 8px; background: #F5F2EE; border: 1px solid var(--border); overflow: hidden; }
+.gen-timeline-seg { position: absolute; top: 3px; bottom: 3px; border-radius: 5px; }
+.gen-timeline-now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
+@media (max-width: 768px) {
+  .gen-grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gen-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .gen-actions > .ui-btn { flex: 1 1 100%; }
+}

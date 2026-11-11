@@ -54,6 +54,7 @@ const ICONS = {
   logout: P("M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"),
   thermometer: P("M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z"),
   plus: P("M12 5v14M5 12h14"),
+  generator: (<><rect x="3" y="6" width="18" height="12" rx="2" />{P("M13 8.5l-3 4h4l-3 3.5M6 18v2.5M18 18v2.5M8 6V3.5h8V6")}</>),
   bell: P("M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"),
   inverter: (<><rect x="5" y="2.5" width="14" height="19" rx="2.5" /><rect x="8" y="6" width="8" height="4" rx="1" />{P("M5 14h14M9 17.5h.01M12 17.5h.01")}</>),
   gauge: P("M12 14l4-4M3.34 19a10 10 0 1 1 17.32 0"),
