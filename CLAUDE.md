@@ -620,6 +620,24 @@ auto-start (`2129`/`212A`) plus a native exercise cycle. Dotsikas reads `2156`=1
 is not the named master, reads before, writes, polls the result, reads after, returns `verified`. `dry:true`
 reads every generator register and writes nothing. Admin → API Debug → **Gen write (dry)** preset.
 
+## PWA (install + push), generator plan phase 4
+- `public/manifest.webmanifest` (name "Midnite Sentinel", short_name "Sentinel", standalone, background `#F7F4EF`,
+  theme `#0D1F33`). Icons `public/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`
+  are rendered from `public/logo.svg` by `node scripts/pwa/render-icons.mjs` (re-run if the logo changes). Linked in
+  `pages/_document.js` with the apple-mobile-web-app metas.
+- `public/sw.js`: skipWaiting/clients.claim, `push` (JSON `{title, body, url, tag}`), `notificationclick` (focus or
+  open `url`). **No caching of app or API responses**; only `offline.html` + its icon for failed navigations.
+  Registered in `pages/_app.js`, production builds only.
+- `components/ui/InstallHint.jsx` (mounted once in the Dashboard return of `pages/index.jsx`): bottom banner after
+  2.5 s. Chrome/Android gets a real Install button (`beforeinstallprompt`, captured at module load); iOS gets
+  "Tap Share, then Add to Home Screen". Hidden in standalone mode; dismissal in `localStorage.midnite_install_hint_dismissed`.
+  Styles `.ui-install` in `globals.css` (sits above the phone TabBar + safe area).
+- `lib/push/client.js`: `pushSupported()`, `isStandalone()`, `getSubscription()`, `subscribePush(vapidPublicKey)`,
+  `unsubscribePush()`. Client only; VAPID and sending live with the generator server code. iOS allows Web Push only
+  inside the installed app (iOS 16.4+).
+- ui-check: every screen pre-dismisses the banner; the `install` screen shows it (iPhone UA on phone, synthetic
+  `beforeinstallprompt` on desktop).
+
 ## Notifications / Alerts
 Per-device threshold alerts (email) evaluated by a scheduled heartbeat. **A "device" = an inverter (by `sn`).**
 

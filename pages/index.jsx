@@ -12,6 +12,7 @@ import { Logo } from "@/components/ui/Logo";
 import { Button, IconButton, MoreMenu, Segmented, Switch } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { confirmAlert, toast } from "@/components/ui/Alert";
+import { InstallHint } from "@/components/ui/InstallHint";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect, usePrefersReducedMotion } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
@@ -4392,6 +4393,7 @@ export default function Dashboard() {
         {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
         <TabBar tabs={TABS} tab={tab} onTab={setTab}/>
+        <InstallHint/>
       </div>
     </>
   );
