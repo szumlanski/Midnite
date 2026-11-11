@@ -738,4 +738,7 @@ caveat for sub-daily cron — the hourly digest cron is fine on Pro; on Hobby po
 
 Claude Code (CLI) can read and write files directly in the project directory. No need to use `/mnt/user-data/outputs/` or manual `cp` steps. Claude commits and pushes directly via git.
 
-**After every code change, Claude must automatically commit and push to GitHub without waiting to be asked.** Use a clear commit message summarizing what changed. Vercel deploys automatically on push.
+**After every code change, Claude must automatically commit and push to GitHub without waiting to be asked.**
+**Deploy = push to `master`** (Vercel deploys `master` to production). If the session put you on a feature
+branch, merge it into `master` and push `master` yourself (Jason's standing permission, 2026-11-11). Never hand
+Jason a merge command. Use a clear commit message summarizing what changed. Vercel deploys automatically on push.
