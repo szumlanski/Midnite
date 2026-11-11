@@ -1908,6 +1908,7 @@ const SETTINGS_MAP = [
   { code:"2151", label:"Generator Run Cycle",               group:"Generator", enum:{0:"Disable",1:"Weekly Cycle",2:"Month Cycle"} },
   { code:"2152", label:"Generator Run Day",                 group:"Generator", enum:{1:"Monday",2:"Tuesday",3:"Wednesday",4:"Thursday",5:"Friday",6:"Saturday",7:"Sunday"} },
   { code:"2153", label:"Generator Run Date",                group:"Generator" },
+  { code:"219B", label:"Generator Cold Start",              group:"Generator", bool:true },
   // Battery
   { code:"2110", label:"Battery Brand", group:"Battery", enum:{17:"MidNite Battery",33:"Lithium Battery (No BMS)"} },
   // Capacity Mode (0 = SOC %, 1 = Voltage) selects whether the charge/discharge setpoints below are

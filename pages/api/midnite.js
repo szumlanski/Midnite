@@ -451,6 +451,7 @@ const GEN_WRITABLE = {
   "2135": between(400, 640), // Generator End Voltage (V x10), Capacity Mode 2124=1
   "2151": between(0, 2),     // Run cycle: 0 Disable, 1 Weekly, 2 Monthly
   "2152": between(1, 7),     // Run day: 1 Mon .. 7 Sun
+  // NOT writable: 2122 Gen Port ("Adjust In Standby Mode", inverter must be in standby) and 219B Cold Start.
   "2153": between(1, 31),    // Run date (monthly)
   "2154": isTime,            // Cycle start time
   "2155": isTime,            // Cycle end time
@@ -1550,7 +1551,16 @@ export default async function handler(req, res) {
           ModbusArr[code] = String(n);
         }
         if (!dry && (bad.length || !Object.keys(ModbusArr).length)) return res.status(400).json({ error: bad.length ? bad.join("; ") : "no writes given" });
-        const aid = String(autoId);
+        // Resolve the AutoId from the serial on the server. A client AutoId alone once pointed at the
+        // wrong inverter (OffTheHook master 2452-40920023PH is 51400, not INV-1's 51398).
+        let realAid = null;
+        try {
+          const { sites } = await loadSitesCached(auth, acct.id);
+          for (const st of sites) for (const g of (st.GoodsID || [])) if (g.GoodsID === serial) realAid = g.AutoID ? String(g.AutoID) : null;
+        } catch (e) { return res.json({ err: "could not load the inverter list: " + e.message }); }
+        if (!realAid) return res.status(400).json({ error: `Refused: ${serial} not found on this account.` });
+        if (String(autoId) !== realAid) return res.status(400).json({ error: `Refused: AutoId ${autoId} does not belong to ${serial} (it is ${realAid}).` });
+        const aid = realAid;
         // Dry run: read every writable generator register plus Gen Port (2122) and Capacity Mode (2124).
         const codes = dry ? [...Object.keys(GEN_WRITABLE), "2122", "2124", "219B"] : Object.keys(ModbusArr);
         const readNow = async () => {

@@ -10,7 +10,7 @@ Rules from Jason:
 - **Every user who can open the site can control it. This includes view-only share recipients.**
 - The activity log belongs to the site, not to one user.
 - Midnite users get a prompt to install the web app (PWA).
-- Pilot site: **OffTheHook**. **Master inverter: `2452-40920023PH`** (Jason). We will write inverter registers. AutoId `51398` is on record as OffTheHook INV-1. Phase 0 confirms whether that AutoId belongs to `2452-40920023PH`.
+- Pilot site: **OffTheHook**. **Master inverter: `2452-40920023PH`** (Jason). We will write inverter registers. Master AutoId is `51400` (portal capture); `51398` is INV-1, not the master.
 
 The big difference from FourScoped: the hub's low-battery logic runs on an ESP32 at the site, and Midnite has no such box. So either Sentinel's server runs the logic and writes registers, or we program the inverter's own auto-start settings. Phase 0 settles which one.
 
@@ -41,7 +41,7 @@ Nothing gets built until one register write is proven safe.
   - The native exercise cycle (`2151`-`2155`) holds ONE weekly or monthly slot. Use it for the first weekly
     exercise schedule; any others (and one-off runs) are fired by the server cron through `2156`.
 - Still needed from a live test on OffTheHook: (a) `genwrite` dry-run values; (b) a no-op write of `2136` with
-  `verified:true`; (c) confirm `51398` is the AutoId of `2452-40920023PH`; (d) one Run now/Stop with the gen
+  `verified:true`; (c) DONE: the master `2452-40920023PH` is AutoId `51400` (portal capture), not `51398`; (d) one Run now/Stop with the gen
   observed, logging `flowrt.genCurrpac` and gen V/Hz to settle run detection.
 
 ## Phase 1: Data model (Supabase, appended to `supabase/schema.sql`, idempotent)

@@ -194,7 +194,7 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
 - `getDeviceShadowStatus_RA` returns only ~5 cached status flags (`1A18/1A44/1A45/1A46/1A4E`) — NOT the full set.
 - `shadow` action = the quick 5-flag read; `codelookup` searches the installer JS bundle for a code's label
   (note: register labels are NOT in the bundle, so this returns nothing useful — map codes via the UI instead).
-- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`, OffTheHook INV-1 `51398`. **Writes: generator registers only, through the admin `genwrite` action** (see Generator control below). Never write any other register.
+- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`, OffTheHook INV-1 `51398`, OffTheHook master `2452-40920023PH` `51400`. **Writes: generator registers only, through the admin `genwrite` action** (see Generator control below). Never write any other register.
 - **Inverter Settings detail** (`SettingsModal`, opened by a **Settings ›** link on each inverter card / detail panel):
   requests the `SETTINGS_MAP` register codes via `readsettings` and renders a plain-English, grouped list. The
   labels were captured **directly from the Remote-Setting form** (each `<input>` id embeds its register code, e.g.
@@ -600,7 +600,15 @@ and chunk `766.*.async.js`, the Remote-Setting form):
 | `2152` | Run day | 1 Monday .. 7 Sunday |
 | `2153` | Run date (monthly) | 1-31 |
 | `2154` / `2155` | Cycle start / end time | `HH*256+MM` |
-| `219B` | Generator dry contact wake-up | toggle |
+| `219B` | Generator Cold Start (portal label; bundle id says "DryContactWake-Up") | toggle, not writable |
+
+**OffTheHook baseline** (portal Read, 2026-11-11, master `2452-40920023PH` = **AutoId `51400`**; INV-1 `51398` is
+NOT the master): `2122`=1 Generator, `2124`=0 SOC mode, `2129`=15, `212A`=35, `2127`=32000, `2126`=26000,
+`2136`=0, `2137`=0, `2156`=0 Auto, `2151`=0 Disable, `2152`=1, `2153`=1, `2154`=0, `2155`=0, `219B`=1.
+So the site already auto-starts the gen at 15 % and stops at 35 %. `2136`=0 most likely means "no max run time"
+(unverified). Writing `2136` as a Run-now cap also caps the native auto runs, so restore it after each forced run.
+`2122` is "Smart Load 1 (GEN) Adjust In Standby Mode": it needs standby, so it is never written.
+`genwrite` resolves the AutoId from the serial on the server and refuses a mismatch.
 
 So **Run now = `2156`=1, Stop = `2156`=2, back to automatic = `2156`=0**, and the inverter has native SOC
 auto-start (`2129`/`212A`) plus a native exercise cycle. Dotsikas reads `2156`=1 (AGS forced **On**).
