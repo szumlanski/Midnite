@@ -1895,11 +1895,19 @@ const SETTINGS_MAP = [
   // Generator
   { code:"2127", label:"Maximum Input Power From Generator", group:"Generator", unit:"W" },
   { code:"2126", label:"Maximum Generator Charge Power",     group:"Generator", unit:"W" },
-  { code:"2134", label:"Generator Start Voltage",           group:"Generator", unit:"V", scale:0.1 },
-  { code:"2135", label:"Generator End Voltage",             group:"Generator", unit:"V", scale:0.1 },
+  { code:"2134", label:"Generator Start Voltage",           group:"Generator", unit:"V", scale:0.1, mode:"voltage" },
+  { code:"2135", label:"Generator End Voltage",             group:"Generator", unit:"V", scale:0.1, mode:"voltage" },
   { code:"2137", label:"Generator Standby Time",            group:"Generator", unit:"min" },
   { code:"2136", label:"Generator Max Run Time",            group:"Generator", unit:"min" },
   { code:"213F", label:"Generator Input Location (Grid Side)", group:"Generator", bool:true },
+  // From the installer portal's Remote-Setting form (umi bundle option lists), certain.
+  { code:"2122", label:"Gen Port",                          group:"Generator", enum:{0:"Not Enabled",1:"Generator",2:"Smart Load",3:"AC Coupling"} },
+  { code:"2156", label:"AGS (Auto Generator Start)",        group:"Generator", enum:{0:"Auto",1:"On",2:"Off"} },
+  { code:"2129", label:"Generator Start State of Charge",   group:"Generator", unit:"%", mode:"soc" },
+  { code:"212A", label:"Generator Stop State of Charge",    group:"Generator", unit:"%", mode:"soc" },
+  { code:"2151", label:"Generator Run Cycle",               group:"Generator", enum:{0:"Disable",1:"Weekly Cycle",2:"Month Cycle"} },
+  { code:"2152", label:"Generator Run Day",                 group:"Generator", enum:{1:"Monday",2:"Tuesday",3:"Wednesday",4:"Thursday",5:"Friday",6:"Saturday",7:"Sunday"} },
+  { code:"2153", label:"Generator Run Date",                group:"Generator" },
   // Battery
   { code:"2110", label:"Battery Brand", group:"Battery", enum:{17:"MidNite Battery",33:"Lithium Battery (No BMS)"} },
   // Capacity Mode (0 = SOC %, 1 = Voltage) selects whether the charge/discharge setpoints below are
@@ -3442,6 +3450,9 @@ function AdminPanel({site, inverters, statuses=[], userEmail=""}) {
     {label:"Device shadow", action:"shadow", body:{sn, autoId:inverters[0]?.autoId, memberAutoId:site?.memberAutoId}},
     {label:"Lookup codes", action:"codelookup", body:{codes:["1A18","1A44"]}},
     {label:"Read settings", action:"readsettings", body:{autoId:inverters[0]?.autoId, sn, memberAutoId:site?.memberAutoId}},
+    // Generator write test. dry:true only reads the current values; set dry:false to write.
+    // masterSerial must equal serial, or the server refuses. OffTheHook master: 2452-40920023PH.
+    (()=>{ const m = inverters.find(i=>i.sn==="2452-40920023PH") || inverters[0]; return {label:"Gen write (dry)", action:"genwrite", body:{autoId:m?.autoId, serial:m?.sn, masterSerial:m?.sn, writes:{}, dry:true}}; })(),
   ];
   const fmtTs = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 

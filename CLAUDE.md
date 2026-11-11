@@ -194,7 +194,7 @@ The installer app's Remote-Setting dialog reads/writes inverter parameters via *
 - `getDeviceShadowStatus_RA` returns only ~5 cached status flags (`1A18/1A44/1A45/1A46/1A4E`) — NOT the full set.
 - `shadow` action = the quick 5-flag read; `codelookup` searches the installer JS bundle for a code's label
   (note: register labels are NOT in the bundle, so this returns nothing useful — map codes via the UI instead).
-- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`, OffTheHook INV-1 `51398`. Writes would use `setDeviceShadow_WA` — **do not write.**
+- AutoIds seen: Wise INV-1 `65856`, Dotsikas INV-1 `56076`, OffTheHook INV-1 `51398`. **Writes: generator registers only, through the admin `genwrite` action** (see Generator control below). Never write any other register.
 - **Inverter Settings detail** (`SettingsModal`, opened by a **Settings ›** link on each inverter card / detail panel):
   requests the `SETTINGS_MAP` register codes via `readsettings` and renders a plain-English, grouped list. The
   labels were captured **directly from the Remote-Setting form** (each `<input>` id embeds its register code, e.g.
@@ -573,6 +573,40 @@ their shared sites. Degrades gracefully (no shared accounts, "run schema.sql" hi
   app over one site").
 
 ---
+
+## Generator control (in progress, plan: Phase 0)
+Plan of record: `docs/generator-plan.md`. Pilot site **OffTheHook**, master inverter **`2452-40920023PH`**.
+Generator writes go to the master inverter only.
+
+**Write path** (from the installer portal's public bundle `service.midnitepower.com/umi.*.js`, module 26404,
+and chunk `766.*.async.js`, the Remote-Setting form):
+- `POST /Eagle/v1/Inverterapi/setDeviceShadow_WA_New_AutoID` `{AutoId, ModbusArr, sign}`. `ModbusArr` is a JSON
+  string of `{code: rawValueString}` with **only the changed fields**. The reply carries `RequestId`.
+- Confirm: poll `POST /Eagle/v1/Inverterapi/getDeviceShadowResult` `{RequestId: JSON.stringify([id]), sign}` every
+  2 s until `data[id].status === true`. Then read back with `readDeviceShadow_RA_New_AutoID` `Force:1`.
+- Raw encoding (portal function `Is`): voltages x10, times `HH*256+MM`, the rest as typed.
+
+**Generator registers** (labels and option values are certain, from the form and its i18n strings):
+| Code | Meaning | Values |
+|---|---|---|
+| `2122` | Gen Port | 0 Not Enabled, 1 Generator, 2 Smart Load, 3 AC Coupling. The generator block shows only when 1. |
+| `2156` | AGS (Auto Generator Start) dry contact | 0 Auto, 1 On, 2 Off |
+| `2129` / `212A` | Generator Start / Stop SOC (%) | shown when `2124`=0 (SOC mode) |
+| `2134` / `2135` | Generator Start / End battery voltage | x10, shown when `2124`=1 (Voltage mode) |
+| `2136` | Generator Max Run Time (min) | |
+| `2137` | Generator Standby Time (min) | |
+| `2126` / `2127` | Max gen charge power / max input power from gen (W) | |
+| `2151` | Run cycle (exercise) | 0 Disable, 1 Weekly, 2 Monthly |
+| `2152` | Run day | 1 Monday .. 7 Sunday |
+| `2153` | Run date (monthly) | 1-31 |
+| `2154` / `2155` | Cycle start / end time | `HH*256+MM` |
+| `219B` | Generator dry contact wake-up | toggle |
+
+So **Run now = `2156`=1, Stop = `2156`=2, back to automatic = `2156`=0**, and the inverter has native SOC
+auto-start (`2129`/`212A`) plus a native exercise cycle. Dotsikas reads `2156`=1 (AGS forced **On**).
+`genwrite` (admin only): allow-list `GEN_WRITABLE` in `pages/api/midnite.js` with ranges, refuses a serial that
+is not the named master, reads before, writes, polls the result, reads after, returns `verified`. `dry:true`
+reads every generator register and writes nothing. Admin → API Debug → **Gen write (dry)** preset.
 
 ## Notifications / Alerts
 Per-device threshold alerts (email) evaluated by a scheduled heartbeat. **A "device" = an inverter (by `sn`).**

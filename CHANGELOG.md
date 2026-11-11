@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.3 (2026-11-11): Generator control, phase 0
+
+- Admin-only `genwrite` action: the first and only register write path, limited to an allow-list of
+  generator registers with ranges, master inverter only, verified by read-back.
+- Inverter Settings now show Gen Port, AGS mode, generator start/stop SOC, run cycle and run day, with labels
+  and values taken from the installer portal.
+
 ## 1.1.2 (2026-11-11): Share emails report real delivery
 
 - Sharing a site used to say "Invite emailed" even when the email provider rejected it, because the send

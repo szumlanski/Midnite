@@ -437,6 +437,24 @@ async function resolveAccount(userId, accountId) {
 // Data actions a shared (view-only) viewer may call.
 // "diagnostics" is read-only and admin-only (checked in its case); it is allowed here so an admin can capture
 // raw data for a site someone shared with them.
+// Generator registers the app may write (raw device-shadow values), from the installer portal's
+// Remote-Setting form (umi bundle). Anything not listed here can never be written.
+const between = (lo, hi) => ({ ok: (n) => n >= lo && n <= hi, range: `${lo}-${hi}` });
+const isTime = { ok: (n) => Math.floor(n / 256) <= 23 && n % 256 <= 59 && n >= 0, range: "HH*256+MM" };
+const GEN_WRITABLE = {
+  "2156": between(0, 2),     // AGS dry contact: 0 Auto, 1 On, 2 Off
+  "2136": between(0, 1440),  // Generator Max Run Time (min)
+  "2137": between(0, 1440),  // Generator Standby Time (min)
+  "2129": between(0, 100),   // Generator Start SOC (%), Capacity Mode 2124=0
+  "212A": between(0, 100),   // Generator Stop SOC (%), Capacity Mode 2124=0
+  "2134": between(400, 640), // Generator Start Voltage (V x10), Capacity Mode 2124=1
+  "2135": between(400, 640), // Generator End Voltage (V x10), Capacity Mode 2124=1
+  "2151": between(0, 2),     // Run cycle: 0 Disable, 1 Weekly, 2 Monthly
+  "2152": between(1, 7),     // Run day: 1 Mon .. 7 Sun
+  "2153": between(1, 31),    // Run date (monthly)
+  "2154": isTime,            // Cycle start time
+  "2155": isTime,            // Cycle end time
+};
 const SHARED_ALLOWED = new Set(["sites", "status", "flow", "flowrt", "day", "dayexcel", "month", "year", "logsearch", "logview", "diagnostics"]);
 // Reject requests for serials/sites outside what's actually shared with the viewer.
 async function assertSharedScope(auth, accountId, sharedSites, action, body) {
@@ -1510,6 +1528,56 @@ export default async function handler(req, res) {
         catch (e) { return res.json({ autoId: aid, err: e.message }); }
         const data = r?.data?.data || {};
         return res.json({ autoId: aid, ok: r?.status ?? null, requested: REG.length, count: Object.keys(data).length, data, statusFlags: r?.data?.status || {} });
+      }
+      case "genwrite": {
+        // ADMIN-ONLY generator register WRITE (Phase 0 of generator control). The ONLY write path
+        // in the app. Mirrors the installer portal's Remote-Setting save (umi bundle, module 26404):
+        //   setDeviceShadow_WA_New_AutoID {AutoId, ModbusArr: JSON {code: rawString}} -> {RequestId}
+        //   getDeviceShadowResult {RequestId: JSON [id]} -> data[id].status===true when applied
+        // Raw values: voltages x10, times HH*256+MM. Allow-listed codes + ranges only, and the
+        // target must be the serial the caller names as the site's generator master.
+        if (role !== "admin") return res.status(403).json({ error: "forbidden" });
+        const { autoId, serial, masterSerial, writes = {}, dry = false } = req.body || {};
+        if (!autoId || !serial) return res.status(400).json({ error: "autoId and serial required" });
+        if (!masterSerial || serial !== masterSerial) return res.status(400).json({ error: `Refused: ${serial} is not the named generator master (${masterSerial || "none given"}).` });
+        const bad = [];
+        const ModbusArr = {};
+        for (const [code, v] of Object.entries(writes)) {
+          const rule = GEN_WRITABLE[code];
+          const n = Number(v);
+          if (!rule) { bad.push(`${code}: not an allowed generator register`); continue; }
+          if (!Number.isInteger(n) || !rule.ok(n)) { bad.push(`${code}: ${v} out of range (${rule.range})`); continue; }
+          ModbusArr[code] = String(n);
+        }
+        if (!dry && (bad.length || !Object.keys(ModbusArr).length)) return res.status(400).json({ error: bad.length ? bad.join("; ") : "no writes given" });
+        const aid = String(autoId);
+        // Dry run: read every writable generator register plus Gen Port (2122) and Capacity Mode (2124).
+        const codes = dry ? [...Object.keys(GEN_WRITABLE), "2122", "2124", "219B"] : Object.keys(ModbusArr);
+        const readNow = async () => {
+          const rb = { AutoId: aid, ModbusArr: JSON.stringify(codes), Force: 1 }; rb.sign = makeSign(rb);
+          const r = await midnitePost("/Eagle/v1/Inverterapi/readDeviceShadow_RA_New_AutoID", rb, auth.token);
+          return r?.data?.data || {};
+        };
+        const out = { autoId: aid, serial, requested: ModbusArr, dry: !!dry };
+        try { out.before = await readNow(); } catch (e) { return res.json({ ...out, err: "read-before failed: " + e.message }); }
+        if (dry) return res.json(out);
+        const wb = { AutoId: aid, ModbusArr: JSON.stringify(ModbusArr) }; wb.sign = makeSign(wb);
+        try { out.write = await midnitePost("/Eagle/v1/Inverterapi/setDeviceShadow_WA_New_AutoID", wb, auth.token); }
+        catch (e) { return res.json({ ...out, err: "write failed: " + e.message }); }
+        const reqId = out.write?.RequestId;
+        out.result = null;
+        if (reqId) {
+          for (let i = 0; i < 10 && !out.result; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const pb = { RequestId: JSON.stringify([reqId]) }; pb.sign = makeSign(pb);
+            try { const p = await midnitePost("/Eagle/v1/Inverterapi/getDeviceShadowResult", pb, auth.token); if (p?.data?.[reqId]?.status === true) out.result = p.data[reqId]; else out.lastPoll = p; }
+            catch (e) { out.lastPoll = { error: e.message }; }
+          }
+        }
+        try { out.after = await readNow(); } catch (e) { out.after = { error: e.message }; }
+        out.verified = codes.every(c => String(out.after?.[c]) === ModbusArr[c]);
+        console.log("[genwrite]", JSON.stringify({ user: user.email, serial, ModbusArr, verified: out.verified }));
+        return res.json(out);
       }
       case "shadowsweep": {
         // READ-ONLY discovery probe: sweep a hex range of device-shadow attribute codes via
