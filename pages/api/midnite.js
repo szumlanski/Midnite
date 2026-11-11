@@ -2,6 +2,7 @@ import { getTrigger } from "@/lib/notifications/triggers";
 import { send, buildTestMessage, buildShareMessage, buildShareInviteMessage, channelConfigured } from "@/lib/notifications/deliver";
 import { DAILY_CAP } from "@/lib/notifications/server";
 import { buildAndSendDigest } from "@/lib/notifications/digestServer";
+import { GEN_WRITABLE } from "@/lib/generator/registers";
 
 const CryptoJS = require("crypto-js");
 const crypto = require("crypto");
@@ -437,25 +438,7 @@ async function resolveAccount(userId, accountId) {
 // Data actions a shared (view-only) viewer may call.
 // "diagnostics" is read-only and admin-only (checked in its case); it is allowed here so an admin can capture
 // raw data for a site someone shared with them.
-// Generator registers the app may write (raw device-shadow values), from the installer portal's
-// Remote-Setting form (umi bundle). Anything not listed here can never be written.
-const between = (lo, hi) => ({ ok: (n) => n >= lo && n <= hi, range: `${lo}-${hi}` });
-const isTime = { ok: (n) => Math.floor(n / 256) <= 23 && n % 256 <= 59 && n >= 0, range: "HH*256+MM" };
-const GEN_WRITABLE = {
-  "2156": between(0, 2),     // AGS dry contact: 0 Auto, 1 On, 2 Off
-  "2136": between(0, 1440),  // Generator Max Run Time (min)
-  "2137": between(0, 1440),  // Generator Standby Time (min)
-  "2129": between(0, 100),   // Generator Start SOC (%), Capacity Mode 2124=0
-  "212A": between(0, 100),   // Generator Stop SOC (%), Capacity Mode 2124=0
-  "2134": between(400, 640), // Generator Start Voltage (V x10), Capacity Mode 2124=1
-  "2135": between(400, 640), // Generator End Voltage (V x10), Capacity Mode 2124=1
-  "2151": between(0, 2),     // Run cycle: 0 Disable, 1 Weekly, 2 Monthly
-  "2152": between(1, 7),     // Run day: 1 Mon .. 7 Sun
-  // NOT writable: 2122 Gen Port ("Adjust In Standby Mode", inverter must be in standby) and 219B Cold Start.
-  "2153": between(1, 31),    // Run date (monthly)
-  "2154": isTime,            // Cycle start time
-  "2155": isTime,            // Cycle end time
-};
+// Generator registers the app may write: GEN_WRITABLE, shared with writeShadow() in lib/midniteServer.js.
 const SHARED_ALLOWED = new Set(["sites", "status", "flow", "flowrt", "day", "dayexcel", "month", "year", "logsearch", "logview", "diagnostics"]);
 // Reject requests for serials/sites outside what's actually shared with the viewer.
 async function assertSharedScope(auth, accountId, sharedSites, action, body) {
