@@ -580,8 +580,12 @@ export default async function handler(req, res) {
       const { data: ins, error } = await sb.from("site_shares").upsert(row, { onConflict: "owner_account_id,site_name,shared_with_email" }).select("id,site_name,shared_with_email,status").single();
       if (error) return res.status(500).json({ error: schemaMissing(error) ? "Sharing isn't set up yet — run supabase/schema.sql in Supabase." : error.message });
       const ownerName = (await sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle()).data?.display_name || user.email;
-      try { await send({ channel: "email", to: em, message: prof ? buildShareMessage({ ownerName, siteName: site }) : buildShareInviteMessage({ ownerName, siteName: site, email: em }) }); } catch (e) {}
-      return res.json({ share: ins, emailed: channelConfigured("email"), pending: !prof });
+      // Report the REAL send outcome (not just "a transport is configured") so a rejected email is visible.
+      let sent;
+      try { sent = await send({ channel: "email", to: em, message: prof ? buildShareMessage({ ownerName, siteName: site }) : buildShareInviteMessage({ ownerName, siteName: site, email: em }) }); }
+      catch (e) { sent = { ok: false, reason: e.message || String(e) }; }
+      if (!sent?.ok) console.error("[share_create] email to", em, "failed:", sent?.reason);
+      return res.json({ share: ins, emailed: !!sent?.ok, emailError: sent?.ok ? null : (sent?.reason || "unknown error"), emailConfigured: channelConfigured("email"), pending: !prof });
     }
     if (action === "share_list") {
       const sb = supabaseAdmin();

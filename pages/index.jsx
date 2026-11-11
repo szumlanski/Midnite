@@ -1003,9 +1003,10 @@ function ShareModal({ site, accountId, onClose }){
   const load=useCallback(()=>{ api("share_list",{accountId}).then(r=>setShares((r.outgoing||[]).filter(s=>s.site_name===site.name))).catch(()=>setShares([])); },[accountId,site.name]);
   useEffect(()=>{ load(); },[load]);
   const submit=async(e)=>{ e.preventDefault(); setBusy(true);setErr(null);setMsg(null);
-    try{ const r=await api("share_create",{accountId,site:site.name,email}); setMsg(r.pending?`Invite emailed to ${email} — they'll see it after signing up with that address.`:`Shared with ${email}.${r.emailed?"":" (Email isn't configured, so no notification was sent.)"}`); setEmail(""); load(); }
+    try{ const r=await api("share_create",{accountId,site:site.name,email}); (r.emailed?setMsg:setErr)(shareResultMsg(r,email)); setEmail(""); load(); }
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
   const revoke=async(id)=>{ if(!await confirmAlert("Stop sharing this site?", {message:"They lose access right away. You can share it again later.", action:"Revoke", destructive:true})) return; try{ await api("share_revoke",{id}); toast("Access revoked"); load(); }catch(e){ setErr(e.message); } };
+  const resend=async(s)=>{ setErr(null);setMsg(null); try{ const r=await api("share_create",{accountId:s.owner_account_id,site:s.site_name,email:s.shared_with_email}); (r.emailed?setMsg:setErr)(shareResultMsg(r,s.shared_with_email,s.site_name)); load(); }catch(e){ setErr(e.message); } };
   return (
     <Sheet title="Share site" subtitle={site.name} onClose={onClose} maxWidth={480}>
         <div>
@@ -1020,7 +1021,7 @@ function ShareModal({ site, accountId, onClose }){
           <div className="ui-group">
             {shares===null&&<div className="ui-row"><div className="ui-skel" style={{height:20,borderRadius:6,flex:1}}/></div>}
             {shares&&shares.length===0&&<div className="ui-row" style={{fontSize:FS.subhead,color:MUTED}}>Not shared with anyone yet.</div>}
-            {shares&&shares.map(s=><ShareRow key={s.id} title={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)}/>)}
+            {shares&&shares.map(s=><ShareRow key={s.id} title={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)} onResend={()=>resend(s)}/>)}
           </div>
         </div>
     </Sheet>
@@ -1038,9 +1039,10 @@ function SharingSettings({ activeId, sites=[] }){
   const load=useCallback(()=>{ api("share_list").then(setData).catch(e=>setData({outgoing:[],incoming:[],error:e.message})); },[]);
   useEffect(()=>{ load(); },[load]);
   const share=async(e)=>{ e.preventDefault(); if(!site||!email)return; setBusy(true);setErr(null);setMsg(null);
-    try{ const r=await api("share_create",{accountId:activeId,site,email}); setMsg(r.pending?`Invite emailed to ${email} for ${site}.`:`Shared ${site} with ${email}.${r.emailed?"":" (Email isn't configured — no notification sent.)"}`); setEmail(""); load(); }
+    try{ const r=await api("share_create",{accountId:activeId,site,email}); (r.emailed?setMsg:setErr)(shareResultMsg(r,email,site)); setEmail(""); load(); }
     catch(e){ setErr(e.message); } finally{ setBusy(false); } };
   const revoke=async(id)=>{ if(!await confirmAlert("Stop sharing this site?", {message:"They lose access right away. You can share it again later.", action:"Revoke", destructive:true})) return; try{ await api("share_revoke",{id}); toast("Access revoked"); load(); }catch(e){ setErr(e.message); } };
+  const resend=async(s)=>{ setErr(null);setMsg(null); try{ const r=await api("share_create",{accountId:s.owner_account_id,site:s.site_name,email:s.shared_with_email}); (r.emailed?setMsg:setErr)(shareResultMsg(r,s.shared_with_email,s.site_name)); load(); }catch(e){ setErr(e.message); } };
   const out = data?.outgoing||[]; const inc = data?.incoming||[];
   const selStyle={...authInput,padding:"9px 12px",fontSize:FS.subhead,cursor:"pointer"};
   return (
@@ -1063,7 +1065,7 @@ function SharingSettings({ activeId, sites=[] }){
       <div className="ui-group" style={{marginBottom:16}}>
         {data===null&&<div className="ui-row"><div className="ui-skel" style={{height:20,borderRadius:6,flex:1}}/></div>}
         {data&&out.length===0&&<div className="ui-row" style={{fontSize:FS.subhead,color:MUTED}}>You haven’t shared any sites yet.</div>}
-        {out.map(s=><ShareRow key={s.id} title={s.site_name} sub={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)}/>)}
+        {out.map(s=><ShareRow key={s.id} title={s.site_name} sub={s.shared_with_email} status={s.status} onRevoke={()=>revoke(s.id)} onResend={()=>resend(s)}/>)}
       </div>
       {inc.length>0&&<>
         <div className="ui-section-label">Shared with you</div>
@@ -3050,8 +3052,16 @@ function RollupIssues({issues}){
   );
 }
 
+// Human result line for share_create: says plainly when the email did NOT go out, with the reason.
+function shareResultMsg(r, email, site){
+  const what = site ? `${site} with ${email}` : email;
+  if(r.emailed) return r.pending ? `Invite emailed to ${email}${site?` for ${site}`:""}. They'll see it after signing up with that address.` : `Shared ${what} and emailed them.`;
+  const why = r.emailConfigured===false ? "email isn't configured on the server" : (r.emailError||"unknown error");
+  return `${r.pending?"Invite saved":"Shared "+what}, but the email was NOT sent: ${why}`;
+}
+
 // One share in a list: who/what, its status pill, and a "…" menu with the destructive Revoke.
-function ShareRow({title, sub, status, onRevoke}){
+function ShareRow({title, sub, status, onRevoke, onResend}){
   const active = status==="active";
   return (
     <div className="ui-row">
@@ -3063,7 +3073,7 @@ function ShareRow({title, sub, status, onRevoke}){
           <span className="ui-pill" style={{background:active?"#DCFCE7":"#FEF3C7",color:active?BATTERY_TEXT:SOLAR_TEXT}}>{active?"Active":"Pending signup"}</span>
         </div>
       </div>
-      <MoreMenu label="Share options" items={[{label:"Revoke access", icon:"lock", destructive:true, onClick:onRevoke}]}/>
+      <MoreMenu label="Share options" items={[...(onResend?[{label:"Resend email", icon:"mail", onClick:onResend}]:[]),{label:"Revoke access", icon:"lock", destructive:true, onClick:onRevoke}]}/>
     </div>
   );
 }

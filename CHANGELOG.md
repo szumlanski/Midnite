@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.2 (2026-11-11): Share emails report real delivery
+
+- Sharing a site used to say "Invite emailed" even when the email provider rejected it, because the send
+  result was thrown away. It now shows the actual error (red) when the email did not go out, and logs it
+  in Vercel as `[share_create] email to ... failed:`.
+- New **Resend email** item in each share's "..." menu (Settings > Sharing and the Share sheet).
+
 ## 1.1.1 (2026-10-08): Leave out impossible energy readings
 
 - The vendor's month/year rollups sometimes return an impossible number for one inverter. Mark Gorovoy's
