@@ -8,6 +8,8 @@ Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per
   windows, one-off and weekly exercise schedules, run history and a site activity log. Share recipients can
   control the generator on sites an admin has enabled.
 - Writes go only to the site's master inverter, through the shared allow-list, and are verified by read-back.
+- `state` reports whether the generator is wired to the grid terminals (`213F`) and whether the site is
+  Off-Grid (`2100`). Read only.
 - No UI yet, and no cron: nothing runs on its own.
 
 ## 1.1.4 (2026-11-11): Install as an app (generator plan, phase 4)

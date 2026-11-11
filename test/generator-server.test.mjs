@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { summarizeRuns } from "../lib/generator/history.js";
 import { planControl } from "../lib/generator/control.js";
-import { validateGenWrites, GEN_WRITABLE } from "../lib/generator/registers.js";
+import { validateGenWrites, GEN_WRITABLE, GEN_READ_CODES, genWiring } from "../lib/generator/registers.js";
 import { writeShadow, readShadow } from "../lib/midniteServer.js";
 
 test("summarizeRuns: totals, daily split across midnight, monthly, open runs", () => {
@@ -147,4 +147,13 @@ test("readShadow sends Force:1 and returns the code map", async () => {
   const api = fakeApi({ initial: { "2136": "0" } });
   assert.deepEqual(await readShadow(auth, 51400, ["2136", "2156"], { post: api.post }), { "2136": "0" });
   assert.equal(api.calls[0].body.Force, 1);
+});
+
+test("genWiring: 213F location and 2100 off-grid, both read-only", () => {
+  assert.deepEqual(genWiring({ "213F": "1", "2100": "3" }), { genLocation: "grid", offGrid: true });
+  assert.deepEqual(genWiring({ "213F": 0, "2100": 0 }), { genLocation: "gen_port", offGrid: false });
+  assert.deepEqual(genWiring({}), { genLocation: null, offGrid: null });
+  assert.ok(GEN_READ_CODES.includes("213F") && GEN_READ_CODES.includes("2100"));
+  assert.equal(validateGenWrites({ "213F": 1 }).bad.length, 1);
+  assert.equal(validateGenWrites({ "2100": 3 }).bad.length, 1);
 });

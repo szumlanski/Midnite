@@ -22,7 +22,7 @@ import {
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
 import { planControl } from "@/lib/generator/control";
-import { GEN_READ_CODES } from "@/lib/generator/registers";
+import { GEN_READ_CODES, genWiring } from "@/lib/generator/registers";
 
 export const config = { maxDuration: 60 }; // a start = two verified writes, up to ~25 s each
 
@@ -207,13 +207,15 @@ export default async function handler(req, res) {
           live = {};
           try { live.flow = await fetchFlowRt(ctx.auth, ctx.gen.master_sn); } catch (e) { live.flowError = e.message; }
           try { live.registers = await readShadow(ctx.auth, resolveMaster(ctx), GEN_READ_CODES); } catch (e) { live.registersError = e.message; }
+          // 213F = 1: generator on the GRID terminals (its power shows in the grid fields); 2100 = 3: Off-Grid.
+          if (live.registers) Object.assign(live, genWiring(live.registers));
         }
         const lp = localParts(new Date(), tz);
         const soc = live?.flow?.soc > 0 ? live.flow.soc : null;
         const decision = evaluateGen({ config, windows: windows || [], soc, running: !!config.observed_running, minute: lp.minuteOfDay, dow: lp.dow });
         const { master_auto_id: _omit, ...site } = ctx.gen;
         return res.json({
-          site, access: { role: ctx.role }, config, windows: windows || [], schedules: schedules || [],
+          site, access: { role: ctx.role }, genLocation: live?.genLocation ?? null, offGrid: live?.offGrid ?? null, config, windows: windows || [], schedules: schedules || [],
           overlaps: overlappingPairs(windows || []).map(p => ({ a: p.a.id, b: p.b.id, winner: p.winner.id })),
           alerts: alerts || { email: true, push: true }, live, decision,
         });

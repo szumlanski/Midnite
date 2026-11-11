@@ -646,6 +646,8 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
 - **start** = save the inverter's 2136 into `gen_config.saved_max_run_min` (once), write 2136=runMin, then 2156=1,
   set `force_on`/`force_until`. **stop** = 2156=2 then restore 2136. **auto** = 2156=0 then restore 2136.
   Refuses to start if the current 2136 can't be read. Not yet: the tick cron, alerts, push, master re-detection.
+- `state` also reads `213F` (Generator input location) and `2100` (Work Mode) from the master and returns
+  `genLocation: 'grid'|'gen_port'` and `offGrid` (null when unread). Both are read-only; never writable.
 - Tests: `node --test` (files in `test/`, mocks only, no network or DB).
 
 ## PWA (install + push), generator plan phase 4
