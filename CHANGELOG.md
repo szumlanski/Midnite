@@ -2,6 +2,14 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.5 (2026-11-11): Generator control, phase 2 (server)
+
+- New `/api/generator` route: generator state, Run now / Stop / Auto (with `?dry=1`), automatic settings, battery
+  windows, one-off and weekly exercise schedules, run history and a site activity log. Share recipients can
+  control the generator on sites an admin has enabled.
+- Writes go only to the site's master inverter, through the shared allow-list, and are verified by read-back.
+- No UI yet, and no cron: nothing runs on its own.
+
 ## 1.1.4 (2026-11-11): Install as an app (generator plan, phase 4)
 
 - Midnite Sentinel is now an installable app: web manifest, home-screen icons (192, 512, 512 maskable, Apple

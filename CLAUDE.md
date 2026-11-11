@@ -618,9 +618,35 @@ portal. So multi-register writes work, which the window rewrites need.
 
 So **Run now = `2156`=1, Stop = `2156`=2, back to automatic = `2156`=0**, and the inverter has native SOC
 auto-start (`2129`/`212A`) plus a native exercise cycle. Dotsikas reads `2156`=1 (AGS forced **On**).
-`genwrite` (admin only): allow-list `GEN_WRITABLE` in `pages/api/midnite.js` with ranges, refuses a serial that
+`genwrite` (admin only): allow-list `GEN_WRITABLE` (now in `lib/generator/registers.js`, shared) with ranges, refuses a serial that
 is not the named master, reads before, writes, polls the result, reads after, returns `verified`. `dry:true`
 reads every generator register and writes nothing. Admin → API Debug → **Gen write (dry)** preset.
+
+### Generator server (Phase 2, branch `gen-phase2-server`; gen_* tables applied via `supabase/generator.sql`)
+- **`lib/generator/core.js`** (pure, client-safe): `evaluateGen` (force first, even with the master switch off:
+  deadline / target %; then master off = `run:null`; no SOC = `comms_lost_action`; else hysteresis on the active
+  setpoint + max run), `activeSetpoint` (lowest `priority` wins, ties = list order, else defaults),
+  `windowCoversMinute` (start==end = all day; a wrap window's after-midnight part belongs to its start day),
+  `overlappingPairs`, `validateWindow`, `siteKeyOf`, formatters, and `localParts`/`zonedTimeToUtc`/`computeNextRun`
+  (weekly exercise, `days_mask` bit 0 = Sunday, `time_local` HH:MM in the site tz, DST-safe).
+  `history.js` = `summarizeRuns` (totals/daily/monthly/runs, split at local midnight). `control.js` = `planControl`.
+- **`lib/midniteServer.js`**: `readShadow(auth, autoId, codes)`, `writeShadow(auth, {autoId, writes})` (allow-list
+  only, throws 400 otherwise; read, write, poll every 2 s x10, read back, `{verified, before, after}`), plus frozen
+  copies `getSaasUser`, `loadSitesWithAutoIds(Cached)`, `fetchFlowRt`.
+- **`pages/api/generator.js`** `POST ?action=X`, Supabase JWT, `body.site_key` = sorted serials joined with ",".
+  Access = `canControlGen`: `gen_sites.enabled` AND (own linked account holds the site OR active `site_shares` row
+  for `gen_sites.site_name`/`owner_account_id`, verified against the owner's site list). **Share recipients can
+  control the generator** (their only write). Admins always. Writes go only to `gen_sites.master_sn`, AutoId
+  resolved from the serial and checked against `master_auto_id`. Every write adds a `gen_events` row
+  (actor id/email/name, role owner|shared|admin, before/after, success/error).
+- Actions: `state`, `control {op:start|stop|auto, runMin, targetPct}` (`?dry=1` returns the planned writes),
+  `saveConfig`, `setMaster {enabled}`, `setAlerts {email,push}`, `saveWindow`, `deleteWindow {id}`,
+  `reorderWindows {ids}`, `saveSchedule` (oneoff `starts_at` / exercise `days_mask`+`time_local`), `deleteSchedule`,
+  `history`, `events {limit, before}`, admin `siteToggle {site_key, site_name, enabled, master_sn, accountId}`.
+- **start** = save the inverter's 2136 into `gen_config.saved_max_run_min` (once), write 2136=runMin, then 2156=1,
+  set `force_on`/`force_until`. **stop** = 2156=2 then restore 2136. **auto** = 2156=0 then restore 2136.
+  Refuses to start if the current 2136 can't be read. Not yet: the tick cron, alerts, push, master re-detection.
+- Tests: `node --test` (files in `test/`, mocks only, no network or DB).
 
 ## PWA (install + push), generator plan phase 4
 - `public/manifest.webmanifest` (name "Midnite Sentinel", short_name "Sentinel", standalone, background `#F7F4EF`,

@@ -55,6 +55,11 @@ Key every table by **`site_key`** (the site's sorted inverter serials). The inst
 - RLS on with no policies. All access goes through service-role API routes, the same posture as `diagnostics`.
 
 ## Phase 2: Server
+**Status (2026-11-11, branch `gen-phase2-server`):** DONE: `lib/generator/core.js` (+ `history.js`, `control.js`,
+`registers.js`), `readShadow`/`writeShadow` in `lib/midniteServer.js`, `pages/api/generator.js` with every action below
+except `pushSubscribe`/`pushUnsubscribe`, `node --test` unit tests. NOT YET: the tick cron, alerts/push, the 1 h master
+re-check against a parallel-role register (still unknown; writes are checked against the stored master serial and AutoId).
+
 - **New route `pages/api/generator.js`.** Do not grow `pages/api/midnite.js`, which is high-traffic. Reuse `lib/midniteServer.js` (sign/login/post) and add `writeShadow()` + `readShadow()` there. `writeShadow()` checks an **allow-list of generator register codes and value ranges** and always reads the value back. **Writes go only to `gen_sites.master_auto_id`.** Before each write, the master is re-checked against the live parallel-role register (cached 1 h). On a mismatch the write is blocked, the event is logged and the admin gets an alert. Running state and gen V/Hz are read from the master.
 - **Authorization `canControlGen(user, site_key)`:** the site is `enabled` in `gen_sites` AND the user owns a linked account that holds the site OR has an `active` `site_shares` row for it. Reuse the proxy's `resolveAccount` / `sharedSites` logic. This is the only path where a share recipient can write, and it stays limited to generator actions.
 - **Actions:** `state`, `control` (start/stop/force with h:m cap + target %), `saveConfig`, `setMaster`, `setAlerts`, `saveWindow`, `deleteWindow`, `reorderWindows`, `saveSchedule`, `deleteSchedule`, `history`, `events`, `pushSubscribe`, `pushUnsubscribe`. Each write adds a `gen_events` row.
