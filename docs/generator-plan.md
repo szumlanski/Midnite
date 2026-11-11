@@ -91,3 +91,16 @@ Key every table by **`site_key`** (the site's sorted inverter serials). The inst
 - Live test with Jason on site or on the phone: Run now 5 min → gen starts → `gen_runs` opens → push + email arrive → auto-stop at the cap → run closes. Repeat Stop mid-run. Repeat as a share-recipient account.
 - Master check: on OffTheHook, `detectMaster` picks `2452-40920023PH`. A write aimed at a non-master is refused.
 - Check that a share recipient on a site that is **not** enabled gets 403 on every generator action.
+
+## Generator on the grid terminals (`213F` = 1), impact notes (2026-11-11)
+OffTheHook is Off-Grid (`2100`=3), so its grid terminals are free. The portal's "Generator on grid side" panel
+uses the SAME generator registers (`2127`, `2126`, `2129`/`212A`, `2134`/`2135`, `2136`, `2137`, `2156`,
+`2151`-`2153`, `219B`), shown only when `213F`=1. So control (Run now, windows, schedules) is unchanged.
+What changes is where the generator shows up in telemetry:
+- Live flow, hero, Day/Month/Year, Explorer: generator power and energy arrive in the GRID fields (grid import,
+  `powerFromGrid`, CSV `Grid1/Grid2`, `GridFac`); `genCurrpac` and the gen CSV columns read 0.
+- Run detection must read grid V/Hz/W when `213F`=1. On an off-grid site, grid voltage present = generator running.
+- Existing grid alert rules (import above, grid voltage) will fire on generator runs.
+- `gen_sites` stores `gen_location` ('gen_port'|'grid'), refreshed from `213F` on each state read; the UI labels the
+  Grid node and Grid series "Generator" on off-grid sites with `213F`=1.
+- `2122` (Smart Load 1) then becomes free; changing it needs standby, so it is set on site, never by the app.
