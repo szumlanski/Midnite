@@ -3929,10 +3929,14 @@ export default function Dashboard() {
     setSites(normalized);
     if(normalized.length===0) { setLoginError("No sites found for this account"); setAuthState("link"); return; }
     // Deep-link: email digest links contain ?site=SiteName — auto-navigate there.
-    const dlParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("site") : null;
+    // Optional &tab=live|day|month|year|explorer|admin opens that tab (admin only renders for admins).
+    const dlQs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const dlParam = dlQs ? dlQs.get("site") : null;
+    const dlTab = dlQs ? dlQs.get("tab") : null;
     const dlMatch = dlParam && normalized.find(s=>s.name===dlParam);
     if(dlMatch){
       window.history.replaceState({}, "", window.location.pathname); // clean up URL
+      if(dlTab && ["live","day","month","year","explorer","admin"].includes(dlTab)) setTab(dlTab);
       setSite(dlMatch); setAuthState("dashboard"); return;
     }
     if(normalized.length===1) { setSite(normalized[0]); setAuthState("dashboard"); }
