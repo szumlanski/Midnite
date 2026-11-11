@@ -40,7 +40,7 @@ Nothing gets built until one register write is proven safe.
     enforces the active window offline.
   - The native exercise cycle (`2151`-`2155`) holds ONE weekly or monthly slot. Use it for the first weekly
     exercise schedule; any others (and one-off runs) are fired by the server cron through `2156`.
-- Still needed from a live test on OffTheHook: (a) `genwrite` dry-run values; (b) a no-op write of `2136` with
+- Still needed from a live test on OffTheHook: (a) `genwrite` dry-run values; (b) DONE 2026-11-11: no-op write of `2136` returned
   `verified:true`; (c) DONE: the master `2452-40920023PH` is AutoId `51400` (portal capture), not `51398`; (d) one Run now/Stop with the gen
   observed, logging `flowrt.genCurrpac` and gen V/Hz to settle run detection.
 

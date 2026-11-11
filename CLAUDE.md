@@ -609,6 +609,9 @@ So the site already auto-starts the gen at 15 % and stops at 35 %. `2136`=0 most
 (unverified). Writing `2136` as a Run-now cap also caps the native auto runs, so restore it after each forced run.
 `2122` is "Smart Load 1 (GEN) Adjust In Standby Mode": it needs standby, so it is never written.
 `genwrite` resolves the AutoId from the serial on the server and refuses a mismatch.
+**Write path VERIFIED 2026-11-11** on OffTheHook master (`51400`): `2136` 0 -> 0 returned `{status:true, RequestId}`,
+the first `getDeviceShadowResult` poll returned `data[id].status:false`, a later one returned `status:true` with
+`data.result: {"2136":"0"}`, and the read-back matched (`verified:true`). Took about 4-20 s.
 
 So **Run now = `2156`=1, Stop = `2156`=2, back to automatic = `2156`=0**, and the inverter has native SOC
 auto-start (`2129`/`212A`) plus a native exercise cycle. Dotsikas reads `2156`=1 (AGS forced **On**).
