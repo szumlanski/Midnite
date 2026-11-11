@@ -2,6 +2,16 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.6 (2026-11-11): Generator control, phase 2b (cron, alerts, push)
+
+- Every-minute generator cron (`/api/generator/tick`): opens and closes generator runs from the live reading
+  (grid terminals on Off-Grid sites, else the gen port), ends Run now at its time or battery target, starts
+  one-off and weekly exercise schedules, and writes the active battery window's start/stop % to the inverter so
+  its own auto-start enforces them. `?dry=1` shows the decisions without writing.
+- Generator started/stopped alerts by email and push to everyone who can control the site, per their alert choices.
+- Web Push server: VAPID keys made once and kept, `pushKey`, `pushSubscribe`, `pushUnsubscribe` and `pushTest`.
+- Still no generator UI.
+
 ## 1.1.5 (2026-11-11): Generator control, phase 2 (server)
 
 - New `/api/generator` route: generator state, Run now / Stop / Auto (with `?dry=1`), automatic settings, battery

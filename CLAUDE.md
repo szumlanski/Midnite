@@ -639,7 +639,7 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   control the generator** (their only write). Admins always. Writes go only to `gen_sites.master_sn`, AutoId
   resolved from the serial and checked against `master_auto_id`. Every write adds a `gen_events` row
   (actor id/email/name, role owner|shared|admin, before/after, success/error).
-- Actions: `state`, `control {op:start|stop|auto, runMin, targetPct}` (`?dry=1` returns the planned writes),
+- Actions: `state`, `control {op:start|end|stop|auto, runMin, targetPct}` (`?dry=1` returns the planned writes),
   `saveConfig`, `setMaster {enabled}`, `setAlerts {email,push}`, `saveWindow`, `deleteWindow {id}`,
   `reorderWindows {ids}`, `saveSchedule` (oneoff `starts_at` / exercise `days_mask`+`time_local`), `deleteSchedule`,
   `history`, `events {limit, before}`, admin `siteToggle {site_key, site_name, enabled, master_sn, accountId}`.
@@ -648,10 +648,52 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   reached, or the Stop button) = 2156 back to `saved_ags` (**the AGS setting before the run**, Jason 2026-11-12;
   Auto if none saved), then restore 2136. **stop** = 2156=2 (explicit Off) then restore 2136. **auto** = 2156=0
   then restore 2136.
-  Refuses to start if the current 2136 can't be read. Not yet: the tick cron, alerts, push, master re-detection.
+  Refuses to start if the current 2136 or 2156 can't be read. The register writes live in ONE place, `applyControl`
+  in `lib/generator/server.js` (shared by the `control` action and the tick cron). Not yet: master re-detection.
 - `state` also reads `213F` (Generator input location) and `2100` (Work Mode) from the master and returns
   `genLocation: 'grid'|'gen_port'` and `offGrid` (null when unread). Both are read-only; never writable.
 - Tests: `node --test` (files in `test/`, mocks only, no network or DB).
+
+### Generator cron + alerts + push (Phase 2b, branch `gen-phase2b-cron`)
+- **`pages/api/generator/tick.js`**: every minute (`vercel.json` `* * * * *`), `CRON_SECRET` like the heartbeat
+  (Bearer, `x-cron-secret` or `?secret=`). `?dry=1` logs in and reads live data, returns each site's plan, and writes
+  nothing (no inverter writes, no DB writes). Sites run in parallel, each in its own try/catch. Per site: in-memory
+  guard + a column-free lease (`gen_config.updated_at` set ~58 s into the future with an atomic
+  `update ... where updated_at <= now`; a future `updated_at` = another tick holds the site). Logs in with
+  `gen_sites.owner_account_id`, resolves the master AutoId (`resolveMasterAutoId`), reads `213F`/`2100`/`2124`
+  (cached 1 h per instance), `fetchFlowRt` for the master, and the 5-min status only when SOC is missing or a
+  grid-side gen needs grid V. `fetchFlowRt` now also returns `gridV/gridHz/genV/genHz` (field names unverified, null
+  when absent).
+- **`lib/generator/tick.js` `planTick` (pure, tested)** decides; the route only carries the actions out:
+  - Running: `213F`=1 (gen on grid terminals) AND Off-Grid -> grid V > 50 or |grid W| > 200; grid side on a
+    grid-tied site = unknown. Else gen W > 200 or gen V > 50. No usable reading (flow failed or `online:false`) =
+    unknown: runs and `observed_*` are left alone.
+  - Runs: running + no open `gen_runs` row -> open (source `schedule` if a schedule fired in the last 10 min, else
+    `force` if `force_on`, else `auto`; scheduled starts also set `force_on`, hence that order) + start alert.
+    Close only on the 2nd not-running tick in a row, `ended_at` = the first not-running `observed_at` + stop alert.
+    Peaks W/V/Hz kept while open.
+  - Writes, max 2 `writeShadow` calls and one control op per site per tick: (1) forced run past `force_until` or
+    at `force_target_pct` -> `applyControl` op `end` (AGS back to `saved_ags`, 2136 restored; event `cron_force_end`); (2) else the earliest due schedule
+    -> op `start` with `duration_min`/`target_pct` (event `cron_schedule_start`), marked fired (one-off) or
+    `next_run_at` advanced (exercise). A due schedule is skipped and marked (`cron_schedule_skipped`) when the master
+    switch is off, a forced run is already on, or it is > 15 min late; it is deferred (not marked) when a forced
+    run ends in the same tick. (3) else, master switch + `auto_enabled` + no forced run: if `activeSetpoint` for now
+    (site tz) differs from `applied_start_pct/applied_stop_pct`, ONE write of `2129`+`212A` (event
+    `cron_thresholds`), skipped in Voltage capacity mode (`2124`=1), 10-min backoff after a failed write.
+  - Time budget (maxDuration 60): no control op with < 40 s left, no threshold write with < 25 s left.
+- **`lib/generator/alerts.js` `notifyGeneratorEvent(site, 'start'|'stop', {source, socPct, durationSec})`**: never
+  throws; skipped when `gen_config.alerts_enabled` is false. Recipients (deduped): accounts verified to hold the site
+  by logging in (candidates: the owner account, an end-user account whose login is the site name, accounts of users
+  who saved `gen_alert_prefs` for the site), active `site_shares` recipients (verified like `canControlGen`), and
+  admins only when they saved prefs for the site. Channels from `gen_alert_prefs` (email + push default on). Email
+  via `send()` with the shared `shell()` (now exported from `deliver.js`, optional footer); no SVG.
+- **`lib/push/server.js`**: `getVapidKeys` (env `VAPID_PUBLIC_KEY`+`VAPID_PRIVATE_KEY` [+`VAPID_SUBJECT`] win, else the
+  `vapid_keys` row, generated once with a plain insert so a lost race re-reads the winner; never regenerated),
+  `pushToUser(userId, {title, body, url, tag})` (404/410 deletes the row, other errors bump `failure_count`),
+  `parseSubscription`. `web-push` is imported lazily.
+- **Push actions in `/api/generator`** (any signed-in user, no `site_key`, not via `canControlGen`): `pushKey` ->
+  `{publicKey}`, `pushSubscribe {subscription}` (PushSubscription JSON, upsert by endpoint for this user),
+  `pushUnsubscribe {endpoint}`, `pushTest` (test push to the caller; 404 when they have no subscription).
 
 ## PWA (install + push), generator plan phase 4
 - `public/manifest.webmanifest` (name "Midnite Sentinel", short_name "Sentinel", standalone, background `#F7F4EF`,

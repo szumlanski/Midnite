@@ -59,6 +59,13 @@ Key every table by **`site_key`** (the site's sorted inverter serials). The inst
 `registers.js`), `readShadow`/`writeShadow` in `lib/midniteServer.js`, `pages/api/generator.js` with every action below
 except `pushSubscribe`/`pushUnsubscribe`, `node --test` unit tests. NOT YET: the tick cron, alerts/push, the 1 h master
 re-check against a parallel-role register (still unknown; writes are checked against the stored master serial and AutoId).
+**Status (2026-11-11, branch `gen-phase2b-cron`):** DONE: the tick cron `pages/api/generator/tick.js` (every minute,
+`?dry=1`), the pure decision function `lib/generator/tick.js` `planTick`, the shared write path `applyControl`
+(`lib/generator/server.js`), start/stop alerts `lib/generator/alerts.js` (email + push), the push server
+`lib/push/server.js` and the `pushKey`/`pushSubscribe`/`pushUnsubscribe`/`pushTest` actions. Rules in `CLAUDE.md`
+"Generator cron + alerts + push". NOT YET: the master re-check, and a live run on OffTheHook to confirm which
+flowrt fields carry gen/grid V and Hz (run detection falls back to gen W alone until then). Run `?dry=1` for a day
+before turning the master switch on.
 
 - **New route `pages/api/generator.js`.** Do not grow `pages/api/midnite.js`, which is high-traffic. Reuse `lib/midniteServer.js` (sign/login/post) and add `writeShadow()` + `readShadow()` there. `writeShadow()` checks an **allow-list of generator register codes and value ranges** and always reads the value back. **Writes go only to `gen_sites.master_auto_id`.** Before each write, the master is re-checked against the live parallel-role register (cached 1 h). On a mismatch the write is blocked, the event is logged and the admin gets an alert. Running state and gen V/Hz are read from the master.
 - **Authorization `canControlGen(user, site_key)`:** the site is `enabled` in `gen_sites` AND the user owns a linked account that holds the site OR has an `active` `site_shares` row for it. Reuse the proxy's `resolveAccount` / `sharedSites` logic. This is the only path where a share recipient can write, and it stays limited to generator actions.

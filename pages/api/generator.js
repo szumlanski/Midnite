@@ -16,21 +16,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  supabaseAdmin, decryptCred, loginCached, getSaasUser,
-  loadSitesWithAutoIdsCached, fetchFlowRt, readShadow, writeShadow,
+  supabaseAdmin, getSaasUser, fetchFlowRt, readShadow,
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
-import { planControl } from "@/lib/generator/control";
 import { GEN_READ_CODES, genWiring } from "@/lib/generator/registers";
+import {
+  httpErr, dbCheck, findSiteInAccount, resolveMasterAutoId, getConfig, ensureConfig, patchConfig,
+  logEvent, applyControl, pick,
+} from "@/lib/generator/server";
+import { getVapidPublicKey, pushToUser, parseSubscription } from "@/lib/push/server";
 
 export const config = { maxDuration: 60 }; // a start = two verified writes, up to ~25 s each
-
-const SCHEMA_HINT = "Generator tables aren't set up yet: run supabase/schema.sql in the Supabase SQL editor.";
-
-function httpErr(code, msg) { const e = new Error(msg); e.code = code; return e; }
-function schemaMissing(err) { return /PGRST205|42P01|schema cache|does not exist/i.test(`${err?.code || ""} ${err?.message || ""}`); }
-function dbCheck(error) { if (error) throw schemaMissing(error) ? httpErr(503, SCHEMA_HINT) : httpErr(500, error.message); }
 
 function requireSiteKey(body) {
   const k = String(body?.site_key || "");
@@ -39,18 +36,6 @@ function requireSiteKey(body) {
 }
 
 // ── Access ──────────────────────────────────────────────────────────────────
-// Log in with a linked account and find the site whose serial set == site_key.
-async function findSiteInAccount(acct, site_key) {
-  let pw;
-  try { pw = decryptCred(acct.enc_password); } catch { return null; }
-  try {
-    const auth = await loginCached(acct.midnite_username, pw);
-    const { sites } = await loadSitesWithAutoIdsCached(auth, acct.id);
-    const site = (sites || []).find(s => siteKeyOf(s.GoodsID) === site_key);
-    return site ? { auth, site } : null;
-  } catch (e) { console.log("[generator] site lookup failed for account", acct.id, e.message); return null; }
-}
-
 // Returns { role:'owner'|'shared'|'admin', gen, acct, auth, site }. Throws 403 when not allowed.
 // requireEnabled=false is used by siteToggle (admin, before the site exists in gen_sites).
 async function canControlGen(sb, user, appRole, site_key, { requireEnabled = true, accountId = null } = {}) {
@@ -94,51 +79,8 @@ async function canControlGen(sb, user, appRole, site_key, { requireEnabled = tru
   throw httpErr(403, "You don't have access to this site's generator.");
 }
 
-// Master AutoId from the serial, on the server, checked against what the admin stored.
-function resolveMaster(ctx) {
-  const { gen, site, auth } = ctx;
-  if (!gen?.master_sn || !gen?.master_auto_id) throw httpErr(409, "No generator master inverter is set for this site.");
-  if (!auth || !site) throw httpErr(409, "Can't reach this site's Midnite account to send the command.");
-  const keySerials = gen.site_key.split(",");
-  if (!keySerials.includes(gen.master_sn)) throw httpErr(409, `Refused: master ${gen.master_sn} is not part of this site.`);
-  const inv = (site.GoodsID || []).find(g => g.GoodsID === gen.master_sn);
-  const aid = inv?.AutoID ? String(inv.AutoID) : null;
-  if (!aid) throw httpErr(409, `Refused: ${gen.master_sn} not found on the account.`);
-  if (aid !== String(gen.master_auto_id)) throw httpErr(409, `Refused: stored master AutoId ${gen.master_auto_id} does not match ${gen.master_sn} (it is ${aid}).`);
-  return aid;
-}
-
-// ── DB helpers ──────────────────────────────────────────────────────────────
-async function getConfig(sb, site_key) {
-  const { data, error } = await sb.from("gen_config").select("*").eq("site_key", site_key).maybeSingle();
-  dbCheck(error);
-  return data;
-}
-async function ensureConfig(sb, site_key) {
-  let cfg = await getConfig(sb, site_key);
-  if (!cfg) {
-    const { error } = await sb.from("gen_config").upsert({ site_key }, { onConflict: "site_key", ignoreDuplicates: true });
-    dbCheck(error);
-    cfg = await getConfig(sb, site_key);
-  }
-  return cfg;
-}
-async function patchConfig(sb, site_key, patch) {
-  const { data, error } = await sb.from("gen_config").update({ ...patch, updated_at: new Date().toISOString() }).eq("site_key", site_key).select("*").single();
-  dbCheck(error);
-  return data;
-}
-async function logEvent(sb, site_key, actor, action, { before = null, after = null, success = true, error = null } = {}) {
-  try {
-    await sb.from("gen_events").insert({
-      site_key, actor_id: actor.id, actor_email: actor.email, actor_name: actor.name, actor_role: actor.role,
-      action, source: "user", before, after, success, error: error ? String(error).slice(0, 1000) : null,
-    });
-  } catch (e) { console.error("[generator] event log failed", action, e.message); }
-}
-const pick = (o, keys) => (o ? Object.fromEntries(keys.filter(k => k in o).map(k => [k, o[k]])) : null);
+const resolveMaster = (ctx) => resolveMasterAutoId(ctx.gen, ctx.site, ctx.auth);
 const CONFIG_FIELDS = ["enabled", "auto_enabled", "default_start_pct", "default_stop_pct", "default_max_run_min", "force_max_run_min", "comms_lost_action", "alerts_enabled"];
-const FORCE_FIELDS = ["force_on", "force_until", "force_max_run_min", "force_target_pct", "saved_max_run_min", "saved_ags", "applied_ags"];
 const intIn = (v, lo, hi) => Number.isInteger(Number(v)) && v !== "" && v !== null && Number(v) >= lo && Number(v) <= hi;
 
 // ── Handler ─────────────────────────────────────────────────────────────────
@@ -152,6 +94,32 @@ export default async function handler(req, res) {
     const sb = supabaseAdmin();
     const { data: prof } = await sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
     const actorBase = { id: user.id, email: user.email || null, name: prof?.display_name || user.email || null };
+
+    // ── Web Push (any signed-in user; no site_key, no canControlGen) ──
+    if (action === "pushKey") {
+      try { return res.json({ publicKey: await getVapidPublicKey({ sb }) }); }
+      catch (e) { return res.status(503).json({ error: `Push is not available: ${e.message}` }); }
+    }
+    if (action === "pushSubscribe") {
+      const sub = parseSubscription(body.subscription);
+      if (!sub) return res.status(400).json({ error: "subscription must be a PushSubscription JSON ({endpoint, keys:{p256dh, auth}})" });
+      const row = { ...sub, user_id: user.id, user_agent: String(req.headers["user-agent"] || "").slice(0, 400) || null, failure_count: 0 };
+      const { error } = await sb.from("push_subscriptions").upsert(row, { onConflict: "endpoint" });
+      dbCheck(error);
+      return res.json({ ok: true });
+    }
+    if (action === "pushUnsubscribe") {
+      const endpoint = typeof body.endpoint === "string" ? body.endpoint : "";
+      if (!endpoint) return res.status(400).json({ error: "endpoint required" });
+      const { error } = await sb.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", endpoint);
+      dbCheck(error);
+      return res.json({ ok: true });
+    }
+    if (action === "pushTest") {
+      const r = await pushToUser(user.id, { title: "Midnite Sentinel", body: "Test notification: push alerts are working on this device.", url: "/", tag: "sentinel-push-test" }, { sb });
+      if (!r.total) return res.status(404).json({ error: "No push subscriptions for your account. Turn on push on this device first.", ...r });
+      return res.json({ ok: r.sent > 0, ...r });
+    }
 
     // ── Admin: turn a site on/off and set its master inverter ──
     if (action === "siteToggle") {
@@ -228,42 +196,12 @@ export default async function handler(req, res) {
         let autoId;
         try { autoId = resolveMaster(ctx); }
         catch (e) { if (!dry) await logEvent(sb, site_key, actor, `control_${op}`, { after: { op }, success: false, error: e.message }); throw e; }
-        // Current 2136 (and 2156) from the inverter: needed to remember the original max run time.
-        let current = {};
-        try { current = await readShadow(ctx.auth, autoId, ["2136", "2156"]); } catch (e) { current = { error: e.message }; }
-        const plan = planControl(op, { runMin: body.runMin, targetPct: body.targetPct, current2136: current["2136"], current2156: current["2156"], saved: cfg.saved_max_run_min, savedAgs: cfg.saved_ags });
-        if (plan.error) return res.status(400).json({ error: plan.error });
-        if (op === "start" && (plan.saveMaxRun == null || plan.saveAgs == null)) {
-          if (!dry) await logEvent(sb, site_key, actor, "control_start", { after: { op }, success: false, error: "could not read the current max run time (2136) or AGS (2156)" });
-          return res.status(502).json({ error: "Couldn't read the inverter's current max run time and AGS setting, so they couldn't be put back after the run. Nothing was written.", current });
-        }
-        if (dry) return res.json({ dry: true, op, master_sn: ctx.gen.master_sn, current, planned: plan.steps, saveMaxRun: plan.saveMaxRun, force: plan.force });
-
-        const before = pick(cfg, FORCE_FIELDS);
-        // Remember the original 2136 BEFORE changing it, so a failure later can still restore it.
-        if (op === "start" && (cfg.saved_max_run_min == null || cfg.saved_ags == null)) await patchConfig(sb, site_key, { saved_max_run_min: plan.saveMaxRun, saved_ags: plan.saveAgs });
-        const results = [];
-        for (const step of plan.steps) {
-          let r;
-          try { r = await writeShadow(ctx.auth, { autoId, writes: { [step.code]: step.value } }); }
-          catch (e) { r = { err: e.message, verified: false }; }
-          results.push({ code: step.code, value: step.value, verified: !!r.verified, before: r.before?.[step.code], after: r.after?.[step.code], err: r.err || null });
-          if (!r.verified) {
-            const msg = `Write ${step.code}=${step.value} was not confirmed${r.err ? ": " + r.err : ""}.`;
-            // A start whose cap or AGS write failed leaves the original 2136 saved for the next stop/auto.
-            // A stop/auto whose AGS write landed but whose 2136 restore failed records the new AGS state
-            // and keeps saved_max_run_min, so the next stop/auto retries the restore.
-            let cfgAfter = null;
-            if (op !== "start" && results.some(x => x.code === "2156" && x.verified))
-              cfgAfter = await patchConfig(sb, site_key, { ...plan.force, applied_ags: plan.ags, force_started_by: null });
-            await logEvent(sb, site_key, actor, `control_${op}`, { before, after: { op, results }, success: false, error: msg });
-            return res.status(502).json({ error: msg, results, config: cfgAfter });
-          }
-        }
-        const patch = { ...plan.force, applied_ags: plan.ags, ...(plan.clearSaved ? { saved_max_run_min: null, saved_ags: null } : {}), ...(op === "start" ? { force_started_by: user.id } : { force_started_by: null }) };
-        const after = await patchConfig(sb, site_key, patch);
-        await logEvent(sb, site_key, actor, `control_${op}`, { before, after: { ...pick(after, FORCE_FIELDS), results } });
-        return res.json({ ok: true, op, results, config: after });
+        const r = await applyControl({
+          sb, auth: ctx.auth, autoId, site_key, cfg, op, runMin: body.runMin, targetPct: body.targetPct,
+          actor, source: "user", dry, startedBy: user.id,
+        });
+        if (dry && r.status === 200) return res.json({ ...r.body, master_sn: ctx.gen.master_sn });
+        return res.status(r.status).json(r.body);
       }
 
       case "saveConfig": {

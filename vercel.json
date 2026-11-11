@@ -1,6 +1,16 @@
 {
   "crons": [
-    { "path": "/api/notifications/heartbeat", "schedule": "*/5 * * * *" },
-    { "path": "/api/notifications/digest", "schedule": "0 * * * *" }
+    {
+      "path": "/api/notifications/heartbeat",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/notifications/digest",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/generator/tick",
+      "schedule": "* * * * *"
+    }
   ]
 }
