@@ -44,7 +44,7 @@ const VIEWPORTS = [
   { w: 390, h: 844, dsf: 2, mobile: true },
   { w: 1280, h: 800, dsf: 1, mobile: false },
 ];
-const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings", "alert", "toast"];
+const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings", "alert", "toast", "install"];
 
 const log = (...m) => process.stderr.write(m.join(" ") + "\n");
 const summary = { screens: 0, errs: {}, blocked: 0, failedSteps: {} };
@@ -146,8 +146,14 @@ async function main() {
   process.exit(errCount ? 1 : Object.keys(summary.failedSteps).length ? 2 : 0);
 }
 
-async function newContext(browser, vp, withSession) {
+// iPhone Safari user agent for the install-banner screen (iOS gets the Share, Add to Home Screen hint).
+const IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+
+// opts.installHint: leave the install banner on (its own screen). Every other context pre-dismisses it
+// so the 2.5 s banner never covers a screenshot.
+async function newContext(browser, vp, withSession, opts = {}) {
   const ctx = await browser.newContext({
+    ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
     viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, isMobile: vp.mobile, hasTouch: vp.mobile,
     locale: "en-US", timezoneId: "America/New_York", colorScheme: "light",
     reducedMotion: args.reduced ? "reduce" : "no-preference", serviceWorkers: "block",
@@ -156,6 +162,9 @@ async function newContext(browser, vp, withSession) {
     await ctx.addInitScript(({ key, value, accountId }) => {
       try { localStorage.setItem(key, value); localStorage.setItem("midnite_account_id", accountId); } catch { /* opaque origin */ }
     }, { key: STORAGE_KEY, value: JSON.stringify(session()), accountId: ACCOUNT_ID });
+  }
+  if (!opts.installHint) {
+    await ctx.addInitScript(() => { try { localStorage.setItem("midnite_install_hint_dismissed", "ui-check"); } catch { /* opaque origin */ } });
   }
   const abortedUrls = new Set();
   await installRoutes(ctx, abortedUrls);
@@ -447,6 +456,32 @@ async function runViewport(browser, vp) {
   })) await shoot(page, idle, "inv-settings", { full: false });
 
   await ctx.close();
+
+  // Install banner: phone = iPhone Safari (Share, then Add to Home Screen); desktop = a synthetic
+  // beforeinstallprompt, the event Chrome fires when the app is installable (gives the Install button).
+  if (want("install")) {
+    const ic = await newContext(browser, vp, true, { installHint: true, userAgent: vp.mobile ? IOS_UA : undefined });
+    if (!vp.mobile) {
+      await ic.ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const e = new Event("beforeinstallprompt", { cancelable: true });
+          e.prompt = async () => {};
+          e.userChoice = Promise.resolve({ outcome: "dismissed", platform: "" });
+          window.dispatchEvent(e);
+        });
+      });
+    }
+    const ip = await ic.ctx.newPage(); attach(ip, ic.abortedUrls); const iidle = netTracker(ip);
+    screen = "install";
+    if (await step("install", async () => {
+      await ip.goto(BASE, { waitUntil: "load" });
+      await ip.evaluate(() => localStorage.setItem("midnite_selected_site", "Wise Naples"));
+      await ip.goto(BASE, { waitUntil: "load" });
+      await ip.locator(".inv-card").first().waitFor({ timeout: 20000 });
+      await ip.locator(".ui-install").waitFor({ timeout: 8000 });
+    })) await shoot(ip, iidle, "install", { full: false });
+    await ic.ctx.close();
+  }
 }
 
 main().catch((e) => {

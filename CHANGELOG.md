@@ -2,6 +2,16 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.4 (2026-11-11): Install as an app (generator plan, phase 4)
+
+- Midnite Sentinel is now an installable app: web manifest, home-screen icons (192, 512, 512 maskable, Apple
+  180) rendered from `public/logo.svg` by `scripts/pwa/render-icons.mjs`.
+- Service worker `public/sw.js`: shows push notifications and opens the linked page on tap. It caches nothing
+  except an offline page, so inverter data is always live.
+- Install banner on the dashboard after 2.5 s: an Install button on Chrome/Edge/Android, and "Tap Share, then
+  Add to Home Screen" on iPhone and iPad. Hidden once installed or dismissed.
+- `lib/push/client.js`: browser push subscribe/unsubscribe helpers for the generator alerts (server side to follow).
+
 ## 1.1.3 (2026-11-11): Generator control, phase 0
 
 - Admin-only `genwrite` action: the first and only register write path, limited to an allow-list of

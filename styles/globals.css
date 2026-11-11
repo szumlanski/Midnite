@@ -407,3 +407,23 @@ button, input, select, textarea { font-family: inherit; }
 .splash-logo { display: inline-flex; animation: splash 1.6s ease-in-out infinite; }
 @keyframes splash { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.94); opacity: 0.8; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Install banner (components/ui/InstallHint.jsx): bottom right on desktop, above the tab bar on phones */
+.ui-install {
+  position: fixed; z-index: 1100; right: 24px; bottom: 24px; width: min(400px, calc(100vw - 32px));
+  display: flex; align-items: flex-start; gap: 12px; padding: 14px 8px 14px 14px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14); animation: ui-install-in 0.32s ease-out;
+}
+@media (max-width: 768px) {
+  .ui-install { left: 16px; right: 16px; width: auto; bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+@keyframes ui-install-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.ui-install-logo { flex-shrink: 0; display: inline-flex; border-radius: 10px; overflow: hidden; }
+.ui-install-text { flex: 1; min-width: 0; padding-top: 1px; }
+.ui-install-title { font-size: var(--fs-subhead); font-weight: 700; color: var(--text); }
+.ui-install-sub { margin-top: 3px; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.45; }
+.ui-install-sub strong { color: var(--text); font-weight: 600; }
+.ui-install-glyph { display: inline-flex; vertical-align: -0.15em; color: #007AFF; font-size: 1.05em; }
+.ui-install-actions { display: flex; gap: 8px; margin-top: 10px; }
+.ui-install-close { flex-shrink: 0; margin-top: -6px; color: var(--muted); }

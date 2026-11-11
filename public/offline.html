@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D1F33">
+<title>Offline - Midnite Sentinel</title>
+<style>
+  :root { --bg: #F7F4EF; --text: #1C1917; --muted: #716A65; --accent: #D97706; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+  main { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 24px 16px; box-sizing: border-box; text-align: center; }
+  h1 { font-size: 22px; margin: 8px 0 0; }
+  p { color: var(--muted); font-size: 15px; margin: 0; max-width: 320px; line-height: 1.45; }
+  button { margin-top: 12px; min-height: 44px; padding: 0 22px; border: none; border-radius: 12px; background: var(--accent);
+    color: #fff; font: inherit; font-weight: 700; font-size: 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icon-192.png" width="72" height="72" alt="">
+  <h1>You're offline</h1>
+  <p>Midnite Sentinel shows live inverter data, so it needs a connection. Check your signal and try again.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>
