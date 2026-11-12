@@ -173,12 +173,13 @@ test("planControl end: AGS back to its pre-run value, then restore 2136", () => 
 
 test("planControl: SOC mode Run now sets 95/100 and the end puts the normal start/stop SOC back", () => {
   const p = planControl("start", { runMin: 60, current2136: "0", current2156: "0", socMode: true, current2129: "15", current212A: "35" });
-  assert.deepEqual(p.steps.map(s => s.writes || { [s.code]: s.value }), [{ "2136": 60 }, { "2129": 95, "212A": 100 }, { "2156": 1 }]);
+  assert.deepEqual(p.steps.map(s => s.writes || { [s.code]: s.value }), [{ "2136": 60 }, { "212A": 100 }, { "2129": 95 }, { "2156": 1 }]);
   assert.deepEqual(p.seedThresholds, { start: 15, stop: 35 });
   const e = planControl("end", { saved: 0, savedAgs: 0, socMode: true, normalStart: 15, normalStop: 35 });
-  assert.deepEqual(e.steps.map(s => s.writes || { [s.code]: s.value }), [{ "2156": 0 }, { "2136": 0 }, { "2129": 15, "212A": 35 }]);
+  assert.deepEqual(e.steps.map(s => s.writes || { [s.code]: s.value }), [{ "2156": 0 }, { "2136": 0 }, { "2129": 15 }, { "212A": 35 }]);
   // Voltage mode: SOC registers untouched.
   assert.equal(planControl("start", { runMin: 60, current2136: "0", current2156: "0", socMode: false }).steps.length, 2);
+  assert.equal(planControl("start", { runMin: 60, current2136: "0", current2156: "0", socMode: true }).steps.length, 4);
   // No run in progress (nothing saved): auto doesn't touch thresholds.
   assert.equal(planControl("auto", { socMode: true, normalStart: 15, normalStop: 35 }).steps.length, 1);
 });

@@ -2,6 +2,12 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.10 (2026-11-12): Run now SOC writes in a safe order; generator leg voltages
+
+- Run now writes the stop % (100) first and then the start % (95) as separate writes; the combined write left
+  95/35 on OffTheHook. The end lowers the start % first, then the stop %, so start stays below stop throughout.
+- The Generator card shows Gen L1 / Gen L2 voltages (the master's 5-minute reading).
+
 ## 1.2.9 (2026-11-12): Run now charges even when the battery is above the start/stop %
 
 - The inverter will not charge from the generator when the battery is already above its generator start/stop SOC.
