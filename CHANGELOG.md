@@ -2,6 +2,15 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.9 (2026-11-12): Generator activity log covers every change
+
+- Every generator state change is now in the site's Activity log with who made it: each user action records the
+  person, their role, before/after, and their IP and device. Automatic actions name the user they acted for (whose
+  Run now ended, whose schedule started).
+- New entries: generator seen starting and stopping, alerts sent, settings copied from the inverter, AGS changed in
+  the installer portal, and the admin register tool.
+- Activity CSV adds "on behalf of", IP and device columns.
+
 ## 1.1.8 (2026-11-12): Automatic control sets the inverter's AGS
 
 - The Automatic control switch now IS the inverter's AGS mode: on writes AGS Auto, off writes AGS Off (with a

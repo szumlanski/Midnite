@@ -20,7 +20,7 @@ import { DEFAULT_CONFIG, computeNextRun } from "@/lib/generator/core";
 import { genWiring } from "@/lib/generator/registers";
 import { planTick } from "@/lib/generator/tick";
 import {
-  findSiteInAccount, resolveMasterAutoId, ensureConfig, getConfig, patchConfig, logEvent, applyControl, SYSTEM_ACTOR,
+  findSiteInAccount, resolveMasterAutoId, ensureConfig, getConfig, patchConfig, logEvent, applyControl, SYSTEM_ACTOR, whoIs,
 } from "@/lib/generator/server";
 import { notifyGeneratorEvent } from "@/lib/generator/alerts";
 
@@ -147,6 +147,11 @@ async function tickSite(sb, gen, { dry, startedAt }) {
           }).select("id").single();
           if (error) throw new Error(error.message);
           runId = row.id; done.push({ type: a.type, id: runId });
+          await logEvent(sb, site_key, { ...SYSTEM_ACTOR, onBehalfOf: await whoIs(sb, cfg.force_started_by) }, "generator_started", {
+            after: { run_id: runId, cause: a.source, battery_pct: a.soc ?? null, cap_min: a.cap_min ?? null, target_pct: a.target_pct ?? null,
+              reading: { w: a.peak?.w ?? null, v: a.peak?.v ?? null, hz: a.peak?.hz ?? null }, note: "The generator was seen running" },
+            source: "cron",
+          });
         } else if (a.type === "run_update") {
           const { id, type, ...peak } = a;
           await sb.from("gen_runs").update(peak).eq("id", id);
@@ -155,14 +160,25 @@ async function tickSite(sb, gen, { dry, startedAt }) {
           const { error } = await sb.from("gen_runs").update({ ended_at: a.ended_at, duration_sec: a.duration_sec, soc_end: a.soc_end }).eq("id", a.id);
           if (error) throw new Error(error.message);
           done.push({ type: a.type, id: a.id });
+          await logEvent(sb, site_key, SYSTEM_ACTOR, "generator_stopped", {
+            after: { run_id: a.id, ended_at: a.ended_at, duration_sec: a.duration_sec, battery_pct: a.soc_end ?? null, note: "The generator was seen stopped" },
+            source: "cron",
+          });
         } else if (a.type === "notify") {
           const r = await notifyGeneratorEvent({ ...gen, config: cfg }, a.event, { source: a.source, socPct: a.socPct, durationSec: a.durationSec, at: now });
           done.push({ type: a.type, event: a.event, emails: r.emails, pushes: r.pushes, recipients: r.recipients, skipped: r.skipped, errors: r.errors });
+          await logEvent(sb, site_key, SYSTEM_ACTOR, a.event === "start" ? "alert_started_sent" : "alert_stopped_sent", {
+            after: { emails: r.emails ?? 0, pushes: r.pushes ?? 0, recipients: r.recipients ?? null, skipped: r.skipped ?? null },
+            success: !(r.errors && r.errors.length), error: r.errors && r.errors.length ? JSON.stringify(r.errors).slice(0, 900) : null, source: "cron",
+          });
         } else if (a.type === "control") {
           cfg = (await getConfig(sb, site_key)) || cfg;
+          // On whose behalf: the user who pressed Run now (an ending run) or who created the schedule (a start).
+          const sched = a.scheduleId ? (schedules || []).find(x => x.id === a.scheduleId) : null;
+          const behalf = await whoIs(sb, a.op === "end" ? cfg.force_started_by : sched?.created_by);
           const r = await applyControl({
             sb, auth, autoId, site_key, cfg, op: a.op, runMin: a.runMin, targetPct: a.targetPct,
-            actor: SYSTEM_ACTOR, source: "cron", startedBy: null,
+            actor: { ...SYSTEM_ACTOR, onBehalfOf: behalf }, source: "cron", startedBy: null,
             action: a.op === "end" ? "cron_force_end" : "cron_schedule_start",
             extra: { reason: a.reason || null, schedule_id: a.scheduleId || null },
           });

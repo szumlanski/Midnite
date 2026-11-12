@@ -648,6 +648,12 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   reached, or the Stop button) = 2156 back to `saved_ags` (**the AGS setting before the run**, Jason 2026-11-12;
   Auto if none saved), then restore 2136. **stop** = 2156=2 (explicit Off) then restore 2136. **auto** = 2156=0
   then restore 2136.
+  **Activity log = every state change, with who (Jason, 2026-11-12):** `gen_events` rows for every user action
+  (actor id/email/name/role + `after.client` {ip, device}), every cron action (`SYSTEM_ACTOR` + `after.on_behalf_of`
+  = the user whose Run now or schedule caused it), the generator seen starting/stopping (`generator_started`/
+  `generator_stopped`), alerts sent (`alert_*_sent` with counts), settings copied from the inverter
+  (`seed_from_inverter`), AGS changed outside the app (`external_ags_change`), and the admin `genwrite` tool
+  (`admin_register_write`, in `pages/api/midnite.js`). New writes must add a `logEvent` call; no silent changes.
   **Automatic switch = AGS (Jason, 2026-11-12):** `setMaster {enabled}` writes `2156` (on = Auto 0, off = Off 2,
   verified) and only then flips `gen_config.enabled`; during a Run now it doesn't write, it sets `saved_ags` so the
   run's end applies the choice. `state` (live) syncs `enabled` to the real `2156` when no run is active (portal

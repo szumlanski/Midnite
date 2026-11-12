@@ -24,6 +24,17 @@ const ACTION_WORDS = {
   site_enable: "Turned on generator control for this site",
   site_disable: "Turned off generator control for this site",
   site_toggle: "Changed generator control for this site",
+  seed_from_inverter: "Copied the inverter's generator settings into the app",
+  external_ags_change: "AGS was changed outside the app (portal or inverter)",
+  generator_started: "Generator started (seen running)",
+  generator_stopped: "Generator stopped (seen stopped)",
+  alert_started_sent: "Sent the generator-started alert",
+  alert_stopped_sent: "Sent the generator-stopped alert",
+  cron_force_end: "Ended the Run now (time up or target reached)",
+  cron_schedule_start: "Started a scheduled run",
+  cron_schedule_skipped: "Skipped a scheduled run",
+  cron_thresholds: "Wrote the active window's start/stop % to the inverter",
+  admin_register_write: "Wrote generator settings directly (admin tool)",
 };
 export const actionWords = (a) => ACTION_WORDS[a] || String(a || "").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
@@ -60,8 +71,10 @@ export function ActivityView({ siteKey, tz, siteName, refreshKey }) {
   }
 
   function exportCsv() {
-    const rows = [["time", "who", "email", "role", "action", "success", "error", "before", "after"],
-      ...(events || []).map((e) => [e.ts, e.actor_name || "", e.actor_email || "", roleOf(e), e.action, e.success === false ? "no" : "yes", e.error || "", e.before, e.after])];
+    const rows = [["time", "who", "email", "role", "on behalf of", "ip", "device", "action", "success", "error", "before", "after"],
+      ...(events || []).map((e) => [e.ts, e.actor_name || "", e.actor_email || "", roleOf(e),
+        e.after?.on_behalf_of ? (e.after.on_behalf_of.email || e.after.on_behalf_of.name || e.after.on_behalf_of.id) : "",
+        e.after?.client?.ip || "", e.after?.client?.device || "", e.action, e.success === false ? "no" : "yes", e.error || "", e.before, e.after])];
     downloadCsv(`generator-activity-${String(siteName || "site").replace(/[^A-Za-z0-9_-]+/g, "_")}.csv`, rows);
   }
 
@@ -83,7 +96,7 @@ export function ActivityView({ siteKey, tz, siteName, refreshKey }) {
                     {e.success === false && <Icon name="alert" />}{actionWords(e.action)}{e.success === false ? " (failed)" : ""}
                   </div>
                   <div style={{ fontSize: FS.footnote, color: MUTED, overflowWrap: "anywhere" }}>
-                    {e.actor_name || e.actor_email || (e.source === "cron" ? "Automatic" : "Someone")} · {fmtWhen(e.ts, tz)}{d ? ` · ${d}` : ""}
+                    {e.actor_name || e.actor_email || (e.source === "cron" ? "Automatic" : "Someone")}{e.after?.on_behalf_of ? ` for ${e.after.on_behalf_of.name || e.after.on_behalf_of.email || "a user"}` : ""} · {fmtWhen(e.ts, tz)}{d ? ` · ${d}` : ""}
                   </div>
                 </div>
                 <span className="ui-pill" style={{ background: bg, color: fg }}>{ROLE_LABEL[role] || role}</span>
@@ -96,7 +109,7 @@ export function ActivityView({ siteKey, tz, siteName, refreshKey }) {
       {next && <div style={{ marginTop: 12, textAlign: "center" }}><Button disabled={busy} onClick={more}>{busy ? "Loading more…" : "Show more"}</Button></div>}
       <ErrorNote>{err}</ErrorNote>
       {open && (
-        <Sheet title={actionWords(open.action)} subtitle={`${open.actor_name || open.actor_email || "System"} · ${fmtWhen(open.ts, tz)}`} onClose={() => setOpen(null)} maxWidth={640}>
+        <Sheet title={actionWords(open.action)} subtitle={`${open.actor_name || open.actor_email || "System"}${open.after?.on_behalf_of ? ` for ${open.after.on_behalf_of.name || open.after.on_behalf_of.email || "a user"}` : ""}${open.actor_email && open.actor_name !== open.actor_email ? ` (${open.actor_email})` : ""} · ${fmtWhen(open.ts, tz)}`} onClose={() => setOpen(null)} maxWidth={640}>
           {open.error && <ErrorNote>{open.error}</ErrorNote>}
           <div className="gen-grid2" style={{ marginTop: 10 }}>
             <JsonBox title="Before" value={open.before} />

@@ -3,6 +3,7 @@ import { send, buildTestMessage, buildShareMessage, buildShareInviteMessage, cha
 import { DAILY_CAP } from "@/lib/notifications/server";
 import { buildAndSendDigest } from "@/lib/notifications/digestServer";
 import { GEN_WRITABLE } from "@/lib/generator/registers";
+import { siteKeyOf } from "@/lib/generator/core";
 
 const CryptoJS = require("crypto-js");
 const crypto = require("crypto");
@@ -1536,10 +1537,10 @@ export default async function handler(req, res) {
         if (!dry && (bad.length || !Object.keys(ModbusArr).length)) return res.status(400).json({ error: bad.length ? bad.join("; ") : "no writes given" });
         // Resolve the AutoId from the serial on the server. A client AutoId alone once pointed at the
         // wrong inverter (OffTheHook master 2452-40920023PH is 51400, not INV-1's 51398).
-        let realAid = null;
+        let realAid = null, out_siteKey = null;
         try {
           const { sites } = await loadSitesCached(auth, acct.id);
-          for (const st of sites) for (const g of (st.GoodsID || [])) if (g.GoodsID === serial) realAid = g.AutoID ? String(g.AutoID) : null;
+          for (const st of sites) for (const g of (st.GoodsID || [])) if (g.GoodsID === serial) { realAid = g.AutoID ? String(g.AutoID) : null; out_siteKey = siteKeyOf(st.GoodsID); }
         } catch (e) { return res.json({ err: "could not load the inverter list: " + e.message }); }
         if (!realAid) return res.status(400).json({ error: `Refused: ${serial} not found on this account.` });
         if (String(autoId) !== realAid) return res.status(400).json({ error: `Refused: AutoId ${autoId} does not belong to ${serial} (it is ${realAid}).` });
@@ -1570,6 +1571,20 @@ export default async function handler(req, res) {
         try { out.after = await readNow(); } catch (e) { out.after = { error: e.message }; }
         out.verified = codes.every(c => String(out.after?.[c]) === ModbusArr[c]);
         console.log("[genwrite]", JSON.stringify({ user: user.email, serial, ModbusArr, verified: out.verified }));
+        // Site activity log: a direct register write is a state change like any other (who, what, before/after).
+        if (out_siteKey) {
+          try {
+            const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || null;
+            const { data: prof } = await supabaseAdmin().from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+            await supabaseAdmin().from("gen_events").insert({
+              site_key: out_siteKey, actor_id: user.id, actor_email: user.email || null, actor_name: prof?.display_name || user.email || null,
+              actor_role: "admin", action: "admin_register_write", source: "user",
+              before: out.before || null,
+              after: { serial, requested: ModbusArr, inverter_after: out.after || null, client: { ip, device: String(req.headers["user-agent"] || "").slice(0, 200) || null } },
+              success: !!out.verified, error: out.verified ? null : (out.err || "not confirmed by the inverter"),
+            });
+          } catch (e) { console.error("[genwrite] event log failed", e.message); }
+        }
         return res.json(out);
       }
       case "shadowsweep": {

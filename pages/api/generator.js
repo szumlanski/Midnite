@@ -24,7 +24,7 @@ import { GEN_READ_CODES, genWiring } from "@/lib/generator/registers";
 import { agsForAutomatic, automaticFromAgs } from "@/lib/generator/control";
 import {
   httpErr, dbCheck, findSiteInAccount, resolveMasterAutoId, getConfig, ensureConfig, patchConfig,
-  logEvent, applyControl, pick,
+  logEvent, applyControl, pick, SYSTEM_ACTOR,
 } from "@/lib/generator/server";
 import { getVapidPublicKey, pushToUser, parseSubscription } from "@/lib/push/server";
 
@@ -89,7 +89,7 @@ const intIn = (v, lo, hi) => Number.isInteger(Number(v)) && v !== "" && v !== nu
 // run), and mark them as already applied. Otherwise the app's built-in 20/80 defaults would be written over the
 // inverter's own values (OffTheHook: 15/35) the moment someone switches Automatic control on (Jason, 2026-11-12).
 // Runs only while applied_start_pct is null, so it never overrides what a user later saves in the app.
-async function seedFromInverter(sb, site_key, regs) {
+async function seedFromInverter(sb, site_key, regs, actor) {
   const st = Number(regs?.["2129"]), sp = Number(regs?.["212A"]), mr = Number(regs?.["2136"]);
   if (!Number.isFinite(st) || !Number.isFinite(sp) || sp <= st) return null;
   const { data } = await sb.from("gen_config").update({
@@ -97,6 +97,9 @@ async function seedFromInverter(sb, site_key, regs) {
     ...(Number.isFinite(mr) && mr >= 0 && mr <= 1440 ? { default_max_run_min: mr } : {}),
     updated_at: new Date().toISOString(),
   }).eq("site_key", site_key).is("applied_start_pct", null).select("*").maybeSingle();
+  if (data) await logEvent(sb, site_key, { ...(actor || SYSTEM_ACTOR), role: actor?.role || "system" }, "seed_from_inverter", {
+    after: { note: "Copied the inverter's own generator settings into the app", start_pct: st, stop_pct: sp, max_run_min: Number.isFinite(mr) ? mr : null },
+  });
   return data || null;
 }
 
@@ -110,7 +113,9 @@ export default async function handler(req, res) {
     const { user, role: appRole } = await getSaasUser(req);
     const sb = supabaseAdmin();
     const { data: prof } = await sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
-    const actorBase = { id: user.id, email: user.email || null, name: prof?.display_name || user.email || null };
+    const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim() || null;
+    const actorBase = { id: user.id, email: user.email || null, name: prof?.display_name || user.email || null,
+      client: { ip, device: String(req.headers["user-agent"] || "").slice(0, 200) || null } };
 
     // ── Web Push (any signed-in user; no site_key, no canControlGen) ──
     if (action === "pushKey") {
@@ -169,7 +174,7 @@ export default async function handler(req, res) {
       if (error) { await logEvent(sb, site_key, actor, "site_toggle", { before, after: row, success: false, error: error.message }); dbCheck(error); }
       const cfgNow = await ensureConfig(sb, site_key);
       if (cfgNow?.applied_start_pct == null && ctx.auth && master_auto_id) {
-        try { await seedFromInverter(sb, site_key, await readShadow(ctx.auth, master_auto_id, ["2129", "212A", "2136"])); }
+        try { await seedFromInverter(sb, site_key, await readShadow(ctx.auth, master_auto_id, ["2129", "212A", "2136"]), actor); }
         catch (e) { console.log("[generator] seed from inverter failed", e.message); }
       }
       await logEvent(sb, site_key, actor, enabled ? "site_enable" : "site_disable", { before, after: saved });
@@ -203,10 +208,16 @@ export default async function handler(req, res) {
           const realAuto = automaticFromAgs(live.registers?.["2156"]);
           if (realAuto != null && cfgRow && !cfgRow.force_on && (!!cfgRow.enabled !== realAuto || Number(cfgRow.applied_ags) !== Number(live.registers["2156"]))) {
             const synced = await patchConfig(sb, site_key, { enabled: realAuto, applied_ags: Number(live.registers["2156"]) }).catch(() => null);
-            if (synced) Object.assign(config, synced);
+            if (synced) {
+              Object.assign(config, synced);
+              await logEvent(sb, site_key, SYSTEM_ACTOR, "external_ags_change", {
+                before: { automatic: !!cfgRow.enabled, ags: cfgRow.applied_ags ?? null },
+                after: { automatic: realAuto, ags: Number(live.registers["2156"]), note: "AGS changed outside the app (installer portal or at the inverter). Noticed while " + (actor.name || actor.email || "a user") + " viewed the site." },
+              });
+            }
           }
           if (live.registers && cfgRow && cfgRow.applied_start_pct == null) {
-            const seeded = await seedFromInverter(sb, site_key, live.registers).catch(() => null);
+            const seeded = await seedFromInverter(sb, site_key, live.registers, actor).catch(() => null);
             if (seeded) Object.assign(config, seeded);
           }
         }
