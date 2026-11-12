@@ -643,8 +643,11 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   `saveConfig`, `setMaster {enabled}`, `setAlerts {email,push}`, `saveWindow`, `deleteWindow {id}`,
   `reorderWindows {ids}`, `saveSchedule` (oneoff `starts_at` / exercise `days_mask`+`time_local`), `deleteSchedule`,
   `history`, `events {limit, before}`, admin `siteToggle {site_key, site_name, enabled, master_sn, accountId}`.
-- **start** = save the inverter's 2136 into `gen_config.saved_max_run_min` (once), write 2136=runMin, then 2156=1,
-  set `force_on`/`force_until`. **stop** = 2156=2 then restore 2136. **auto** = 2156=0 then restore 2136.
+- **start** = save the inverter's 2136 and 2156 into `gen_config.saved_max_run_min` / `saved_ags` (once per run),
+  write 2136=runMin, then 2156=1, set `force_on`/`force_until`. **end** (the normal end of a Run now: time up, target
+  reached, or the Stop button) = 2156 back to `saved_ags` (**the AGS setting before the run**, Jason 2026-11-12;
+  Auto if none saved), then restore 2136. **stop** = 2156=2 (explicit Off) then restore 2136. **auto** = 2156=0
+  then restore 2136.
   Refuses to start if the current 2136 can't be read. Not yet: the tick cron, alerts, push, master re-detection.
 - `state` also reads `213F` (Generator input location) and `2100` (Work Mode) from the master and returns
   `genLocation: 'grid'|'gen_port'` and `offGrid` (null when unread). Both are read-only; never writable.

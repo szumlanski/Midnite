@@ -138,7 +138,7 @@ async function logEvent(sb, site_key, actor, action, { before = null, after = nu
 }
 const pick = (o, keys) => (o ? Object.fromEntries(keys.filter(k => k in o).map(k => [k, o[k]])) : null);
 const CONFIG_FIELDS = ["enabled", "auto_enabled", "default_start_pct", "default_stop_pct", "default_max_run_min", "force_max_run_min", "comms_lost_action", "alerts_enabled"];
-const FORCE_FIELDS = ["force_on", "force_until", "force_max_run_min", "force_target_pct", "saved_max_run_min", "applied_ags"];
+const FORCE_FIELDS = ["force_on", "force_until", "force_max_run_min", "force_target_pct", "saved_max_run_min", "saved_ags", "applied_ags"];
 const intIn = (v, lo, hi) => Number.isInteger(Number(v)) && v !== "" && v !== null && Number(v) >= lo && Number(v) <= hi;
 
 // ── Handler ─────────────────────────────────────────────────────────────────
@@ -231,17 +231,17 @@ export default async function handler(req, res) {
         // Current 2136 (and 2156) from the inverter: needed to remember the original max run time.
         let current = {};
         try { current = await readShadow(ctx.auth, autoId, ["2136", "2156"]); } catch (e) { current = { error: e.message }; }
-        const plan = planControl(op, { runMin: body.runMin, targetPct: body.targetPct, current2136: current["2136"], saved: cfg.saved_max_run_min });
+        const plan = planControl(op, { runMin: body.runMin, targetPct: body.targetPct, current2136: current["2136"], current2156: current["2156"], saved: cfg.saved_max_run_min, savedAgs: cfg.saved_ags });
         if (plan.error) return res.status(400).json({ error: plan.error });
-        if (op === "start" && plan.saveMaxRun == null && cfg.saved_max_run_min == null) {
-          if (!dry) await logEvent(sb, site_key, actor, "control_start", { after: { op }, success: false, error: "could not read the current max run time (2136)" });
-          return res.status(502).json({ error: "Couldn't read the inverter's current max run time, so it couldn't be restored later. Nothing was written.", current });
+        if (op === "start" && (plan.saveMaxRun == null || plan.saveAgs == null)) {
+          if (!dry) await logEvent(sb, site_key, actor, "control_start", { after: { op }, success: false, error: "could not read the current max run time (2136) or AGS (2156)" });
+          return res.status(502).json({ error: "Couldn't read the inverter's current max run time and AGS setting, so they couldn't be put back after the run. Nothing was written.", current });
         }
         if (dry) return res.json({ dry: true, op, master_sn: ctx.gen.master_sn, current, planned: plan.steps, saveMaxRun: plan.saveMaxRun, force: plan.force });
 
         const before = pick(cfg, FORCE_FIELDS);
         // Remember the original 2136 BEFORE changing it, so a failure later can still restore it.
-        if (op === "start" && cfg.saved_max_run_min == null) await patchConfig(sb, site_key, { saved_max_run_min: plan.saveMaxRun });
+        if (op === "start" && (cfg.saved_max_run_min == null || cfg.saved_ags == null)) await patchConfig(sb, site_key, { saved_max_run_min: plan.saveMaxRun, saved_ags: plan.saveAgs });
         const results = [];
         for (const step of plan.steps) {
           let r;
@@ -260,7 +260,7 @@ export default async function handler(req, res) {
             return res.status(502).json({ error: msg, results, config: cfgAfter });
           }
         }
-        const patch = { ...plan.force, applied_ags: plan.ags, ...(plan.clearSaved ? { saved_max_run_min: null } : {}), ...(op === "start" ? { force_started_by: user.id } : { force_started_by: null }) };
+        const patch = { ...plan.force, applied_ags: plan.ags, ...(plan.clearSaved ? { saved_max_run_min: null, saved_ags: null } : {}), ...(op === "start" ? { force_started_by: user.id } : { force_started_by: null }) };
         const after = await patchConfig(sb, site_key, patch);
         await logEvent(sb, site_key, actor, `control_${op}`, { before, after: { ...pick(after, FORCE_FIELDS), results } });
         return res.json({ ok: true, op, results, config: after });

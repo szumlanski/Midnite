@@ -284,6 +284,7 @@ create table if not exists public.gen_config (
   alerts_enabled      boolean not null default true,
   -- What the inverter held before we touched it, so a forced run can put it back.
   saved_max_run_min   integer,
+  saved_ags           integer,   -- AGS (2156) before a Run now, restored when the run ends
   -- Last values the server wrote, and the last observed state.
   applied_start_pct   integer,
   applied_stop_pct    integer,
@@ -293,6 +294,9 @@ create table if not exists public.gen_config (
   config_rev          integer not null default 1,
   updated_at          timestamptz not null default now()
 );
+
+-- Added 2026-11-12 for databases created before saved_ags existed:
+alter table public.gen_config add column if not exists saved_ags integer;
 
 -- Daily battery windows: lowest priority wins on overlap.
 create table if not exists public.gen_windows (

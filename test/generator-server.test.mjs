@@ -157,3 +157,15 @@ test("genWiring: 213F location and 2100 off-grid, both read-only", () => {
   assert.equal(validateGenWrites({ "213F": 1 }).bad.length, 1);
   assert.equal(validateGenWrites({ "2100": 3 }).bad.length, 1);
 });
+
+test("planControl end: AGS back to its pre-run value, then restore 2136", () => {
+  const start = planControl("start", { runMin: 60, current2136: "0", current2156: "2", saved: null, savedAgs: null });
+  assert.equal(start.saveAgs, 2);
+  // A second Run now during a run keeps the ORIGINAL pre-run AGS, not "On".
+  assert.equal(planControl("start", { runMin: 30, current2136: "60", current2156: "1", saved: 0, savedAgs: 2 }).saveAgs, 2);
+  assert.deepEqual(planControl("end", { saved: 0, savedAgs: 2 }).steps.map(s => [s.code, s.value]), [["2156", 2], ["2136", 0]]);
+  assert.deepEqual(planControl("end", { saved: 0, savedAgs: 0 }).steps.map(s => [s.code, s.value]), [["2156", 0], ["2136", 0]]);
+  // Nothing saved (no run in progress): fall back to Auto.
+  assert.deepEqual(planControl("end", {}).steps.map(s => [s.code, s.value]), [["2156", 0]]);
+  assert.equal(planControl("end", { saved: 0, savedAgs: 1 }).clearSaved, true);
+});
