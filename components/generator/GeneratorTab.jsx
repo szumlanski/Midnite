@@ -46,7 +46,13 @@ export function GeneratorTab({ siteKey, siteName, userKey, initial = null }) {
 
   useEffect(() => { setState(initial); lastTime.current = null; setLiveAt(null); }, [siteKey]); // eslint-disable-line react-hooks/exhaustive-deps
   usePolling(() => load(true), 30000, [siteKey], { enabled: view === "control" });
-  useEffect(() => { if (view !== "control" && !state) load(false); }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (view === "control") return;
+    // Automatic: read the inverter once if the app hasn't copied its start/stop % yet, so the screen shows the
+    // inverter's real values (e.g. 15/35), not the built-in 20/80 defaults.
+    if (view === "automatic" && state?.config?.applied_start_pct == null) load(true);
+    else if (!state) load(false);
+  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onChanged = async (live) => { setRefreshKey((k) => k + 1); await load(live); };
   const tz = state?.site?.timezone || "America/New_York";

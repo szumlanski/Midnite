@@ -83,6 +83,22 @@ const resolveMaster = (ctx) => resolveMasterAutoId(ctx.gen, ctx.site, ctx.auth);
 const CONFIG_FIELDS = ["enabled", "auto_enabled", "default_start_pct", "default_stop_pct", "default_max_run_min", "force_max_run_min", "comms_lost_action", "alerts_enabled"];
 const intIn = (v, lo, hi) => Number.isInteger(Number(v)) && v !== "" && v !== null && Number(v) >= lo && Number(v) <= hi;
 
+
+// First time we see a site's inverter, copy ITS generator settings into the app (2129/212A start/stop %, 2136 max
+// run), and mark them as already applied. Otherwise the app's built-in 20/80 defaults would be written over the
+// inverter's own values (OffTheHook: 15/35) the moment someone switches Automatic control on (Jason, 2026-11-12).
+// Runs only while applied_start_pct is null, so it never overrides what a user later saves in the app.
+async function seedFromInverter(sb, site_key, regs) {
+  const st = Number(regs?.["2129"]), sp = Number(regs?.["212A"]), mr = Number(regs?.["2136"]);
+  if (!Number.isFinite(st) || !Number.isFinite(sp) || sp <= st) return null;
+  const { data } = await sb.from("gen_config").update({
+    default_start_pct: st, default_stop_pct: sp, applied_start_pct: st, applied_stop_pct: sp,
+    ...(Number.isFinite(mr) && mr >= 0 && mr <= 1440 ? { default_max_run_min: mr } : {}),
+    updated_at: new Date().toISOString(),
+  }).eq("site_key", site_key).is("applied_start_pct", null).select("*").maybeSingle();
+  return data || null;
+}
+
 // ── Handler ─────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
@@ -150,7 +166,11 @@ export default async function handler(req, res) {
       };
       const { data: saved, error } = await sb.from("gen_sites").upsert(row, { onConflict: "site_key" }).select("*").single();
       if (error) { await logEvent(sb, site_key, actor, "site_toggle", { before, after: row, success: false, error: error.message }); dbCheck(error); }
-      await ensureConfig(sb, site_key);
+      const cfgNow = await ensureConfig(sb, site_key);
+      if (cfgNow?.applied_start_pct == null && ctx.auth && master_auto_id) {
+        try { await seedFromInverter(sb, site_key, await readShadow(ctx.auth, master_auto_id, ["2129", "212A", "2136"])); }
+        catch (e) { console.log("[generator] seed from inverter failed", e.message); }
+      }
       await logEvent(sb, site_key, actor, enabled ? "site_enable" : "site_disable", { before, after: saved });
       return res.json({ ok: true, site: saved });
     }
@@ -177,6 +197,10 @@ export default async function handler(req, res) {
           try { live.registers = await readShadow(ctx.auth, resolveMaster(ctx), GEN_READ_CODES); } catch (e) { live.registersError = e.message; }
           // 213F = 1: generator on the GRID terminals (its power shows in the grid fields); 2100 = 3: Off-Grid.
           if (live.registers) Object.assign(live, genWiring(live.registers));
+          if (live.registers && cfgRow && cfgRow.applied_start_pct == null) {
+            const seeded = await seedFromInverter(sb, site_key, live.registers).catch(() => null);
+            if (seeded) Object.assign(config, seeded);
+          }
         }
         const lp = localParts(new Date(), tz);
         const soc = live?.flow?.soc > 0 ? live.flow.soc : null;

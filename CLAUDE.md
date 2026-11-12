@@ -648,6 +648,10 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   reached, or the Stop button) = 2156 back to `saved_ags` (**the AGS setting before the run**, Jason 2026-11-12;
   Auto if none saved), then restore 2136. **stop** = 2156=2 (explicit Off) then restore 2136. **auto** = 2156=0
   then restore 2136.
+  **Seeding (Jason, 2026-11-12):** the first time the server reads a site's inverter (`siteToggle` or a live `state`),
+  `seedFromInverter` copies its `2129`/`212A`/`2136` into `default_start_pct`/`default_stop_pct`/`default_max_run_min`
+  AND `applied_start_pct`/`applied_stop_pct`, only while `applied_start_pct` is null. So switching Automatic on never
+  overwrites the inverter's own values (OffTheHook 15/35) with the built-in 20/80.
   Refuses to start if the current 2136 or 2156 can't be read. The register writes live in ONE place, `applyControl`
   in `lib/generator/server.js` (shared by the `control` action and the tick cron). Not yet: master re-detection.
 - `state` also reads `213F` (Generator input location) and `2100` (Work Mode) from the master and returns
