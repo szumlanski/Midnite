@@ -671,6 +671,13 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   cron's threshold writes) goes to EVERY inverter at the site in parallel (`siteAutoIds` master first + `writeAll`):
   on a parallel stack the settings must match or nothing happens. Reads still come from the master. If any
   inverter's AutoId is missing the write is refused. The admin `genwrite` tool stays master-only.
+  **Resync (1.2.12, Jason):** writes don't always stick, so the tick cron (`resyncSite` in tick.js, pure
+  `lib/generator/resync.js` `planResync`) reads `2156/2136/2129/212A` on EVERY inverter each minute and rewrites any that
+  differ from `desiredSettings(cfg)` (Run now: 1 / force_max_run_min / 95 / 100; otherwise applied_ags /
+  saved_max_run_min / applied_start/stop_pct), repeating each minute until all match (`resync_write` events). Outside a
+  run, a master that differs with no app write in the last 5 min = changed outside the app: adopted into the config
+  (`external_setting_change`) and copied to the others. `saved_max_run_min` is now kept after end/stop/auto and
+  cleared only when every inverter is back on it.
   **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `212A`=100 THEN `2129`=95 (separate writes:
   a combined write left 95/35 on OffTheHook; restore lowers 2129 first, then 212A) because the inverter won't charge from the gen above its start/stop %; end/stop/auto put
   back `applied_start_pct`/`applied_stop_pct` (seeded from the inverter's 2129/212A on the first start if null).

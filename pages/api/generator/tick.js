@@ -19,6 +19,8 @@ import { supabaseAdmin, fetchFlowRt, fetchSiteFlowRt, fetchInverterDetail, readS
 import { DEFAULT_CONFIG, computeNextRun } from "@/lib/generator/core";
 import { genWiring } from "@/lib/generator/registers";
 import { planTick } from "@/lib/generator/tick";
+import { planResync, RESYNC_CODES } from "@/lib/generator/resync";
+import { automaticFromAgs } from "@/lib/generator/control";
 import {
   findSiteInAccount, resolveMasterAutoId, siteAutoIds, writeAll, ensureConfig, getConfig, patchConfig, logEvent, applyControl, SYSTEM_ACTOR, whoIs,
 } from "@/lib/generator/server";
@@ -32,6 +34,8 @@ const THRESH_NEEDS_MS = 25000;    // one verified write
 const LEASE_MS = 58000;
 const WIRING_TTL_MS = 60 * 60 * 1000;
 const THRESH_BACKOFF_MS = 10 * 60 * 1000;
+const RESYNC_NEEDS_MS = 20000;    // read every inverter + a few unconfirmed writes
+const APP_WRITE_GRACE_MS = 5 * 60 * 1000; // a master that differs within this long after an app write is rewritten, not adopted
 
 const _ticking = new Set();        // site_keys this instance is working on
 const _wiring = new Map();         // site_key -> { ts, genLocation, offGrid, capacityMode }
@@ -235,6 +239,14 @@ async function tickSite(sb, gen, { dry, startedAt }) {
         console.error("[generator tick]", site_key, a.type, e.message);
       }
     }
+
+    // ── Resync: make every inverter hold the generator settings the app expects, retried every minute until it
+    // sticks (Jason, 2026-11-12). Skipped in a tick that already sent a control op or threshold write.
+    const wrote = done.some(d => d.type === "control" || d.type === "thresholds");
+    if (!wrote && autoIds.length && BUDGET_MS - (Date.now() - startedAt) > RESYNC_NEEDS_MS) {
+      try { out.resync = await resyncSite({ sb, site_key, auth, autoIds, cfg, socMode: wiring.capacityMode === 0 }); if (out.resync.config) cfg = out.resync.config; }
+      catch (e) { out.resync = { error: e.message }; console.error("[generator tick] resync", site_key, e.message); }
+    }
     return { ...out, done };
   } catch (e) {
     console.error("[generator tick]", site_key, e.message);
@@ -244,6 +256,50 @@ async function tickSite(sb, gen, { dry, startedAt }) {
     if (leased) { try { await sb.from("gen_config").update({ updated_at: new Date().toISOString() }).eq("site_key", site_key).gt("updated_at", new Date().toISOString()); } catch { /* ignore */ } }
     _ticking.delete(site_key);
   }
+}
+
+// Read 2156/2136/2129/212A on every inverter, then rewrite whatever differs (planResync). Writes are fire-and-check:
+// each is sent and briefly polled; the next tick's read decides whether it stuck and retries if not.
+async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode }) {
+  const inverters = await Promise.all(autoIds.map(id => readShadow(auth, id, RESYNC_CODES).then(regs => ({ autoId: id, regs }), e => ({ autoId: id, error: e.message }))));
+  const { data: last } = await sb.from("gen_events").select("created_at,action").eq("site_key", site_key)
+    .or("action.like.control_%,action.like.cron_%,action.like.master_%,action.like.resync%").order("created_at", { ascending: false }).limit(1);
+  const lastAt = last?.[0]?.created_at ? new Date(last[0].created_at).getTime() : 0;
+  const plan = planResync({ cfg, socMode, inverters, recentAppWrite: Date.now() - lastAt < APP_WRITE_GRACE_MS });
+  const out = { mismatched: plan.mismatched, adopt: plan.adopt, writes: plan.writes.length, allMatch: plan.allMatch, unreadable: inverters.filter(x => x.error).map(x => x.autoId) };
+  let config = null;
+  // Adopt a change made outside the app (on the master) so the app stops fighting it.
+  if (Object.keys(plan.adopt).length) {
+    const patch = {};
+    if ("2156" in plan.adopt) { patch.applied_ags = plan.adopt["2156"]; const auto = automaticFromAgs(plan.adopt["2156"]); if (auto != null) patch.enabled = auto; }
+    if ("2129" in plan.adopt) { patch.applied_start_pct = plan.adopt["2129"]; patch.applied_stop_pct = plan.adopt["212A"]; }
+    if ("2136" in plan.adopt) patch.saved_max_run_min = null;
+    config = await patchConfig(sb, site_key, patch);
+    await logEvent(sb, site_key, SYSTEM_ACTOR, "external_setting_change", { before: { applied_ags: cfg.applied_ags, applied_start_pct: cfg.applied_start_pct, applied_stop_pct: cfg.applied_stop_pct, saved_max_run_min: cfg.saved_max_run_min },
+      after: { master: plan.adopt, note: "Changed outside the app (installer portal or MNP app). The app now uses this value and copies it to every inverter." }, source: "cron" });
+  }
+  if (plan.writes.length) {
+    // Per inverter in order (start below stop, AGS last); inverters in parallel.
+    const byInv = {};
+    for (const w of plan.writes) (byInv[w.autoId] = byInv[w.autoId] || []).push(w);
+    const fast = (au, w) => writeShadow(au, w, { tries: 2, rereads: 0 });
+    const results = await Promise.all(Object.entries(byInv).map(async ([autoId, list]) => {
+      const r = [];
+      for (const w of list) {
+        try { const x = await fast(auth, { autoId, writes: { [w.code]: w.value } }); r.push({ code: w.code, value: w.value, verified: !!x.verified, accepted: !!x.write?.RequestId, before: x.before?.[w.code] ?? null, err: x.err || null }); }
+        catch (e) { r.push({ code: w.code, value: w.value, verified: false, err: e.message }); }
+      }
+      return { autoId, results: r };
+    }));
+    out.results = results;
+    await logEvent(sb, site_key, SYSTEM_ACTOR, "resync_write", {
+      after: { inverters: results, note: "An inverter did not hold the expected generator setting, so it was sent again. This repeats every minute until every inverter matches." },
+      success: results.every(x => x.results.every(y => y.verified || y.accepted)), source: "cron" });
+  } else if (plan.allMatch && !cfg.force_on && cfg.saved_max_run_min != null) {
+    // Every inverter now holds the pre-run max run time again: the put-back is done.
+    config = await patchConfig(sb, site_key, { saved_max_run_min: null });
+  }
+  return { ...out, config };
 }
 
 export default async function handler(req, res) {

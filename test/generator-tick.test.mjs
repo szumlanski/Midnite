@@ -303,7 +303,7 @@ test("applyControl (shared by the route and the cron): end puts 2156 back to the
   assert.deepEqual(writes, [{ "2156": 2 }, { "2136": 0 }]);
   const cfg = sb.tables.gen_config[0];
   assert.equal(cfg.force_on, false);
-  assert.equal(cfg.saved_max_run_min, null);
+  assert.equal(cfg.saved_max_run_min, 0); // kept until the resync sees every inverter back on it
   assert.equal(cfg.saved_ags, null);
   assert.equal(cfg.applied_ags, 2);
   const ev = sb.tables.gen_events[0];

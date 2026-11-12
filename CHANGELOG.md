@@ -2,6 +2,14 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.12 (2026-11-12): Generator settings are checked every minute until they stick
+
+- Every minute the server reads the generator settings (AGS, max run time, start/stop %) on every inverter and sends
+  again whatever doesn't match what the app expects, until all inverters hold it. During a Run now that is the run's
+  settings; otherwise the normal ones. Each retry is in the Activity log.
+- A setting changed outside the app (installer portal, MNP app) is adopted and copied to the other inverters
+  instead of being reverted, unless the app itself wrote in the last 5 minutes.
+
 ## 1.2.11 (2026-11-12): Generator settings go to every inverter
 
 - On a parallel stack the generator settings must match on all inverters or nothing happens (OffTheHook). Every
