@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow, fetchDayExcel,
+  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow, fetchDayExcel, fetchGenLegs,
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
@@ -225,7 +225,10 @@ export default async function handler(req, res) {
           // 213F = 1: generator on the GRID terminals (its power shows in the grid fields); 2100 = 3: Off-Grid.
           if (live.registers) Object.assign(live, genWiring(live.registers));
           // Per-leg generator voltages (L1/L2) from the master's 5-minute export (the live feed has no per-leg V).
-          try { live.legs = await genLegsCached(ctx.gen.site_name || ctx.site?.MemberID, ctx.gen.master_sn, ctx.gen.timezone || "America/New_York"); }
+          // Live per-leg generator V/A/W + Hz from the rich status (what the MNP app shows); the CSV is the fallback.
+          try { live.genLegs = await fetchGenLegs(ctx.auth, resolveMaster(ctx), ctx.site?.MemberAutoID ?? ctx.auth?.memberAutoId); }
+          catch (e) { live.genLegsError = e.message; }
+          if (!live.genLegs) try { live.legs = await genLegsCached(ctx.gen.site_name || ctx.site?.MemberID, ctx.gen.master_sn, ctx.gen.timezone || "America/New_York"); }
           catch (e) { live.legsError = e.message; }
           // The switch shows the inverter's real AGS (a change made in the portal shows up here). Not during a
           // Run now: AGS is On then and the switch keeps the setting the run's end will restore.

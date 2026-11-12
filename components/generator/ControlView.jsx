@@ -130,6 +130,17 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
           <Stat label="Inverter mode" value={ags != null ? AGS_LABEL[ags] || `Code ${ags}` : "--"} />
           {(() => {
             // Per-leg generator voltage from the master's 5-minute export (grid legs when the gen is on the grid terminals).
+            // Preferred: the rich status call the MNP app uses (V / A / W per leg + Hz).
+            const gl = state.live?.genLegs;
+            if (gl && (gl.l1 || gl.l2)) {
+              const f = (l) => (l?.v != null ? `${l.v.toFixed(1)} V` : "--");
+              const sub = (l) => (l && (l.a != null || l.w != null) ? `${(l.a ?? 0).toFixed(1)} A · ${Math.round(l.w ?? 0)} W` : null);
+              return <>
+                <Stat label="Gen L1" value={f(gl.l1)} sub={sub(gl.l1)} />
+                <Stat label="Gen L2" value={f(gl.l2)} sub={sub(gl.l2)} />
+                {gl.hz != null && <Stat label="Gen frequency" value={`${gl.hz.toFixed(1)} Hz`} />}
+              </>;
+            }
             const lg = state.live?.legs;
             if (!lg) return null;
             const grid = state.genLocation === "grid";
@@ -246,11 +257,12 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
   );
 }
 
-function Stat({ label, value, tone }) {
+function Stat({ label, value, tone, sub }) {
   return (
     <div style={{ background: "#FBF9F6", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 12px", minWidth: 0 }}>
       <div style={{ fontSize: FS.caption, color: MUTED, fontWeight: 600 }}>{label}</div>
       <div style={{ fontSize: FS.headline, fontWeight: 800, color: tone || TEXT, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+      {sub && <div style={{ fontSize: FS.caption, color: MUTED, fontVariantNumeric: "tabular-nums" }}>{sub}</div>}
     </div>
   );
 }

@@ -62,6 +62,7 @@ function state() {
   const live = {
     flow: { sn: GEN_SITE_KEY, online: true, time: new Date().toISOString().slice(0, 19).replace("T", " "), pv: 1200, grid: 5400, load: 2800, eps: 0, gen: 0, battery: 3800, soc: 24 },
     registers: { "2156": "1", "2136": "120", "2129": "15", "212A": "35", "213F": "1", "2100": "3", "2124": "0" },
+    genLegs: { l1: { v: 121.5, a: 0, w: 0 }, l2: { v: 120.7, a: 0, w: 0 }, hz: 60.0, at: "2026-11-12 11:40:00" },
     legs: { at: "2026-11-12 11:35:00", genL1V: 0, genL2V: 0, gridL1V: 121.4, gridL2V: 120.8, genHz: 0, gridHz: 60.0 },
     genLocation: "grid", offGrid: true,
   };

@@ -2,6 +2,12 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.14 (2026-11-12): Generator leg readings from the live status
+
+- Gen L1 / L2 (V, A, W) and generator frequency now come from the same inverter status call the MNP app shows,
+  refreshed on every Control view poll (5 s while a start is pending, else 30 s). The 5-minute export is only a
+  fallback when that call returns nothing.
+
 ## 1.2.13 (2026-11-12): Run now end is checked three times
 
 - After a Run now ends, the server keeps checking all inverters every minute and re-sends anything that is not
