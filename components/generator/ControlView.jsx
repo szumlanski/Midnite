@@ -61,7 +61,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
     setBusy(label);
     try {
       await genApi("control", { site_key: siteKey, op, ...extra });
-      toast(op === "start" ? "Generator start sent" : op === "stop" ? "Generator stop sent" : "Generator back on automatic", { icon: "check" });
+      toast({ start: "Generator start sent", end: "Run ended", stop: "Generator turned off", auto: "Generator back on automatic" }[op], { icon: "check" });
       await onChanged?.(true);
     } catch (e) {
       setErr(e.message);
@@ -91,7 +91,18 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
     confirmStart();
   }
 
+  // "Turn generator off" = AGS Off: no automatic starts either, so say so first.
+  async function turnOff() {
+    if (busy) return;
+    const ok = await confirmAlert("Turn the generator off?", {
+      message: "It stays off, including automatic starts on low battery, until you choose Return to automatic or Run now.",
+      action: "Turn off", destructive: true,
+    });
+    if (ok) send("stop", {}, "Turning the generator off. This can take up to 25 seconds.");
+  }
+
   const sp = state.decision?.setpoint;
+  const savedAgsLabel = cfg.saved_ags != null && AGS_LABEL[Number(cfg.saved_ags)] ? AGS_LABEL[Number(cfg.saved_ags)].toLowerCase() : "its previous setting";
   return (
     <>
       <Card>
@@ -140,8 +151,12 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
             {cfg.force_target_pct != null ? `, or sooner when the battery reaches ${cfg.force_target_pct}%` : ""}
           </div>
           <div className="gen-actions" style={{ marginTop: 14 }}>
-            <Button variant="destructive" size="lg" icon="stop" disabled={!!busy} onClick={() => send("stop", {}, "Stopping the generator. This can take up to 25 seconds.")}>Stop generator</Button>
-            <Button size="lg" icon="refresh" disabled={!!busy} onClick={() => send("auto", {}, "Returning to automatic. This can take up to 25 seconds.")}>Return to automatic</Button>
+            <Button variant="destructive" size="lg" icon="stop" full disabled={!!busy} onClick={() => send("end", {}, "Ending the run. This can take up to 25 seconds.")}>Stop generator</Button>
+          </div>
+          <div style={{ fontSize: FS.footnote, color: MUTED, marginTop: 8 }}>Ends this run and puts the inverter back to how it was before ({savedAgsLabel}).</div>
+          <div className="gen-actions" style={{ marginTop: 12 }}>
+            <Button icon="refresh" disabled={!!busy} onClick={() => send("auto", {}, "Returning to automatic. This can take up to 25 seconds.")}>Return to automatic</Button>
+            <Button icon="x" disabled={!!busy} onClick={turnOff}>Turn generator off</Button>
           </div>
           <PendingNote text={busy} />
           <ErrorNote>{err}</ErrorNote>
@@ -154,8 +169,8 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
           </div>
           <div className="gen-actions" style={{ marginTop: 14 }}>
             <Button variant="primary" size="lg" icon="play" disabled={!!busy} onClick={startPressed}>Run now</Button>
-            {(obs.running || ags === 1) && <Button variant="destructive" size="lg" icon="stop" disabled={!!busy} onClick={() => send("stop", {}, "Stopping the generator. This can take up to 25 seconds.")}>Stop generator</Button>}
-            {ags != null && ags !== 0 && <Button size="lg" icon="refresh" disabled={!!busy} onClick={() => send("auto", {}, "Returning to automatic. This can take up to 25 seconds.")}>Return to automatic</Button>}
+            {ags !== 0 && ags != null && <Button size="lg" icon="refresh" disabled={!!busy} onClick={() => send("auto", {}, "Returning to automatic. This can take up to 25 seconds.")}>Return to automatic</Button>}
+            {(obs.running || (ags != null && ags !== 2)) && <Button variant="destructive" size="lg" icon="stop" disabled={!!busy} onClick={turnOff}>Turn generator off</Button>}
           </div>
           <PendingNote text={busy} />
           <ErrorNote>{err}</ErrorNote>

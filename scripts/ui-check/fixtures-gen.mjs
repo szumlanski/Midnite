@@ -21,7 +21,7 @@ const SITE = {
 };
 const CONFIG = {
   ...DEFAULT_CONFIG, site_key: GEN_SITE_KEY, enabled: true, default_start_pct: 20, default_stop_pct: 80, default_max_run_min: 240,
-  force_on: true, force_until: iso(83), force_max_run_min: 120, force_target_pct: 60, saved_max_run_min: 0, applied_ags: 1,
+  force_on: true, force_until: iso(83), force_max_run_min: 120, force_target_pct: 60, saved_max_run_min: 0, saved_ags: 0, applied_ags: 1,
 };
 const WINDOWS = [
   { id: "a1000000-0000-4000-8000-000000000001", site_key: GEN_SITE_KEY, label: "Night", start_min: 1320, end_min: 360, start_pct: 30, stop_pct: 70, max_run_min: 180, days_mask: 127, priority: 10, enabled: true, created_at: "2026-11-01T12:00:00Z" },

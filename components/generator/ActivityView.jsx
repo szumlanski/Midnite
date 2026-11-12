@@ -9,7 +9,8 @@ import { genApi, Card, ErrorNote, EmptyState, fmtWhen, downloadCsv, ROLE_LABEL }
 
 const ACTION_WORDS = {
   control_start: "Started the generator",
-  control_stop: "Stopped the generator",
+  control_end: "Stopped the generator (ended the run)",
+  control_stop: "Turned the generator off",
   control_auto: "Returned the generator to automatic",
   save_config: "Changed the automatic defaults",
   master_on: "Turned automatic control on",

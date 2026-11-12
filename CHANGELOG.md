@@ -7,7 +7,8 @@ Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per
 - New **Generator** tab, only on sites an admin enabled. On phones it takes Explorer's tab bar slot and
   Explorer moves to the "..." menu. Deep link `?site=X&tab=generator` works.
 - Six views: **Control** (status, live power, Run now with hours + minutes and an optional stop-at %, a
-  one-time safety notice, a countdown, Stop and Return to automatic), **Automatic** (master switch, defaults,
+  one-time safety notice, a countdown, a big Stop that ends the run and puts the inverter back to its
+  pre-run setting, plus Return to automatic and a separate Turn generator off), **Automatic** (master switch, defaults,
   time windows with a 24 h strip, priority order and overlap warning), **Schedules** (one-off and weekly
   exercise runs), **History** (totals, daily chart by source, recent runs), **Activity** (site-wide log with
   CSV export) and **Alerts** (email and push for this user).

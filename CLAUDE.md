@@ -665,7 +665,9 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   error text with `e.status`), form bits, `FreshChip` (stamps only when `live.flow.time` advances).
 - `ControlView.jsx`: running = observed gen W > 20 (grid W when `genLocation==='grid'`), label "Generator (grid
   terminals)". Run now = disclaimer Sheet once per user (`localStorage midnite_gen_disclaimer_v1:<email>`), then
-  `confirmAlert`, then `control start`. A ref blocks double taps; "Sending to the inverter..." shows during the
+  `confirmAlert`, then `control start`. During a run the big **Stop generator** = `control end` (ends the run, AGS back
+  to its pre-run value, `saved_ags`); secondary **Return to automatic** = `auto`, **Turn generator off** = `stop` (AGS
+  Off, no automatic starts; behind a destructive confirm). Inverter mode (AGS 2156) shows in the status card. A ref blocks double taps; "Sending to the inverter..." shows during the
   ~25 s write; server errors are shown verbatim.
 - `AlertsView.jsx`: push via `lib/push/client.js` + `pushKey`/`pushSubscribe`/`pushUnsubscribe`/`pushTest`
   (404/400 = "not switched on yet"). iPhone outside the installed app is told to Add to Home Screen.
