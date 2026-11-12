@@ -4,7 +4,7 @@
 // Bar chart rules (CLAUDE.md): ONE stackId + stackOffset="sign", activeBar={false}, Tooltip cursor={false}.
 import { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Button, Segmented } from "@/components/ui/Button";
+import { Button, IconButton, Segmented } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { toast } from "@/components/ui/Alert";
 import { TEXT, MUTED, BORDER, CARD, BG, FS, SANS, GRID_IN_TEXT, SOLAR_TEXT, stringColor } from "@/components/ui/tokens";
@@ -27,14 +27,33 @@ const TOOLTIP_S = { background: CARD, border: `1px solid ${BORDER}`, borderRadiu
 const th = { textAlign: "right", padding: "8px 8px", fontSize: FS.caption, fontWeight: 700, color: MUTED, borderBottom: `1px solid ${BORDER}`, whiteSpace: "nowrap" };
 const td = { textAlign: "right", padding: "10px 8px", fontSize: FS.footnote, color: TEXT, borderBottom: `1px solid ${BORDER}`, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
 
-export function StringsSection({ site, siteKey, isAdmin }) {
+// period (optional): {kind:"month", value:"YYYY-MM"} or {kind:"year", value:"YYYY"} from the Month / Year tab, with
+// onPeriodChange(nextValue) so the tab's own month/year stays in step. Without it, the old 7d/30d/month/year picker.
+const fullMonth = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+function periodRange(p, today = etToday()) {
+  if (p.kind === "year") {
+    const to = `${p.value}-12-31` > today ? today : `${p.value}-12-31`;
+    return { from: `${p.value}-01-01`, to, label: p.value, year: true };
+  }
+  const last = `${p.value}-${String(fullMonth(p.value)).padStart(2, "0")}`;
+  const [y, m] = p.value.split("-").map(Number);
+  return { from: `${p.value}-01`, to: last > today ? today : last, label: `${MONTHS[m - 1]} ${y}`, year: false };
+}
+function shiftPeriod(p, n) {
+  if (p.kind === "year") return String(Number(p.value) + n);
+  const [y, m] = p.value.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export function StringsSection({ site, siteKey, isAdmin, period = null, onPeriodChange = null }) {
   const motionOK = !usePrefersReducedMotion();
   const { nameOf, customName } = useStringLabels();
   const [range, setRange] = useState("7d");
   const [res, setRes] = useState({ key: null, data: null, err: null });
   const [tick, setTick] = useState(0);
   const [busy, setBusy] = useState(false);
-  const r = rangeFor(range);
+  const r = period ? periodRange(period) : rangeFor(range);
   const reqKey = `${siteKey}|${r.from}|${r.to}|${tick}`;
 
   useEffect(() => {
@@ -54,7 +73,7 @@ export function StringsSection({ site, siteKey, isAdmin }) {
   const displayName = (sn, n) => (multiInv && !customName(sn, n) ? `${invLabel(sn)} ${nameOf(sn, n)}` : nameOf(sn, n));
   const strings = data?.strings || [];
   const series = strings.map((s) => ({ key: mpptKey(s.sn, s.mppt), sn: s.sn, mppt: s.mppt, color: stringColor(s.mppt, invIndex[s.sn] || 0), name: displayName(s.sn, s.mppt) }));
-  const byMonth = range === "year";
+  const byMonth = period ? period.kind === "year" : range === "year";
   const chartData = ((byMonth ? data?.byMonth : data?.byDay) || []).map((b) => ({
     ...b, x: byMonth ? MONTHS[Number(b.month.slice(5, 7)) - 1] : `${Number(b.day.slice(5, 7))}/${Number(b.day.slice(8, 10))}`,
   }));
@@ -92,9 +111,17 @@ export function StringsSection({ site, siteKey, isAdmin }) {
       <div className="period-head">
         <div style={{ minWidth: 0 }}>
           <h2 id="strings-h" style={{ fontSize: FS.title3, fontWeight: 800, color: TEXT, letterSpacing: "-0.3px" }}>Strings</h2>
-          <div style={{ fontSize: FS.subhead, color: MUTED, marginTop: 2 }}>Daily kWh per solar string (MPPT), {r.label}</div>
+          <div style={{ fontSize: FS.subhead, color: MUTED, marginTop: 2 }}>{byMonth ? "Monthly" : "Daily"} kWh per solar string (MPPT){period ? "" : `, ${r.label}`}</div>
         </div>
-        <div className="period-ctrls"><Segmented size="sm" label="Strings range" value={range} onChange={setRange} options={RANGES} /></div>
+        <div className="period-ctrls">
+          {period ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <IconButton icon="back" label={period.kind === "year" ? "Previous year" : "Previous month"} onClick={() => onPeriodChange?.(shiftPeriod(period, -1))} />
+              <span style={{ fontSize: FS.subhead, fontWeight: 700, color: TEXT, minWidth: 84, textAlign: "center" }}>{r.label}</span>
+              <IconButton icon="chevron" label={period.kind === "year" ? "Next year" : "Next month"} disabled={r.to >= etToday()} onClick={() => onPeriodChange?.(shiftPeriod(period, 1))} />
+            </div>
+          ) : <Segmented size="sm" label="Strings range" value={range} onChange={setRange} options={RANGES} />}
+        </div>
       </div>
 
       {err && <div role="alert" className="ui-card" style={{ padding: "12px 16px", marginBottom: 12, fontSize: FS.subhead, color: GRID_IN_TEXT, display: "flex", gap: 8, alignItems: "center" }}><Icon name="alert" />{err.message}</div>}

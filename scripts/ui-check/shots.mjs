@@ -398,15 +398,18 @@ async function runViewport(browser, vp) {
     if (!liveOk) { summary.failedSteps[key(name)] = "skipped: site did not open"; continue; }
     await page.evaluate(() => window.scrollTo(0, 0));
     if (await step(name, async () => { await clickTab(label); await ready(); })) await shoot(page, idle, name);
-    // Strings section at the bottom of the Day tab (viewport shot scrolled to it).
-    if (name === "day") {
+    // Strings view: the Month tab's Site | Strings switch (per-string kWh for the same month).
+    if (name === "month") {
       screen = "strings";
       if (await step("strings", async () => {
+        await page.getByRole("radio", { name: "Strings", exact: true }).or(page.getByRole("button", { name: "Strings", exact: true })).or(page.getByRole("tab", { name: "Strings", exact: true })).first().click();
         const h = page.getByRole("heading", { name: "Strings", exact: true }).first();
         await h.waitFor({ timeout: 10000 });
         await page.getByText("South roof", { exact: true }).first().waitFor({ timeout: 10000 });
         await h.evaluate((el) => { el.scrollIntoView({ block: "start" }); window.scrollBy(0, -72); });
       })) await shoot(page, idle, "strings", { full: false });
+      // The Site | Strings choice is remembered; switch back so the Year screen shows its normal chart.
+      await page.getByRole("radio", { name: "Site", exact: true }).or(page.getByRole("button", { name: "Site", exact: true })).or(page.getByRole("tab", { name: "Site", exact: true })).first().click().catch(() => {});
     }
   }
 

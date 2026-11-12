@@ -3923,6 +3923,9 @@ export default function Dashboard() {
   const [rangeStart, setRangeStart] = useState(thisMonth+"-01");
   const [rangeEnd, setRangeEnd] = useState(today);
   const [yearVal, setYearVal] = useState(thisYear);
+  // Month/Year tabs: "site" (the production chart) or "strings" (per-string kWh for the same month/year). Remembered.
+  const [periodView, setPeriodViewRaw] = useState(()=>{ try { return localStorage.getItem("midnite_period_view")==="strings"?"strings":"site"; } catch { return "site"; } });
+  const setPeriodView = (v)=>{ setPeriodViewRaw(v); try { localStorage.setItem("midnite_period_view", v); } catch { /* storage blocked */ } };
   const [yearData, setYearData] = useState([]);
   const [yearLoading, setYearLoading] = useState(false);
   const [expStart, setExpStart] = useState(today);
@@ -4413,13 +4416,19 @@ export default function Dashboard() {
               prodSeries = chartInverters.map((inv,i)=>({key:`pv${i}`, name:single?"Solar":`${inv.label} Solar`, color:PROD_SHADES[i%PROD_SHADES.length]}));
               consSeries = chartInverters.map((inv,i)=>({key:`loadNeg${i}`, name:single?"Load":`${inv.label} Load`, color:CONS_SHADES[i%CONS_SHADES.length]}));
             }
-            return <>
-              <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>
-              <StringsSection site={site} siteKey={genKey} isAdmin={isAdmin}/>
-            </>;
+            return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>;
           })()}
-          {tab==="month"&&<MonthChart mode={monthMode} onModeChange={setMonthMode} month={monthDate} onMonthChange={setMonthDate} rangeStart={rangeStart} rangeEnd={rangeEnd} onRangeStart={setRangeStart} onRangeEnd={setRangeEnd} data={monthData} loading={monthLoading}/>}
-          {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
+          {(tab==="month"||tab==="year")&&genKey&&(
+            <div style={{display:"flex",justifyContent:"flex-start",marginBottom:12}}>
+              <Segmented size="sm" label="Chart view" value={periodView} onChange={setPeriodView} options={[{value:"site",label:"Site"},{value:"strings",label:"Strings"}]}/>
+            </div>
+          )}
+          {tab==="month"&&(periodView==="strings"&&genKey
+            ? <StringsSection site={site} siteKey={genKey} isAdmin={isAdmin} period={{kind:"month",value:monthDate}} onPeriodChange={setMonthDate}/>
+            : <MonthChart mode={monthMode} onModeChange={setMonthMode} month={monthDate} onMonthChange={setMonthDate} rangeStart={rangeStart} rangeEnd={rangeEnd} onRangeStart={setRangeStart} onRangeEnd={setRangeEnd} data={monthData} loading={monthLoading}/>)}
+          {tab==="year"&&(periodView==="strings"&&genKey
+            ? <StringsSection site={site} siteKey={genKey} isAdmin={isAdmin} period={{kind:"year",value:String(yearVal)}} onPeriodChange={(v)=>setYearVal(typeof yearVal==="number"?Number(v):v)}/>
+            : <YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>)}
           {tab==="explorer"&&(
             explorerSn
               ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label} sn={explorerSn}/>

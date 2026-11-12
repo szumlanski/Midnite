@@ -763,8 +763,11 @@ Schema: `supabase/strings.sql` (`site_mppt_labels`, `mppt_daily`; RLS on, no pol
 - **UI**: names via context (`components/strings/labels.jsx`: `useStringLabelsState(siteKey)` in the Dashboard,
   `StringLabelsContext.Provider`, `useStringLabels().nameOf(sn, n)`, fallback "MPPT n"). Used by InverterCard,
   InverterDetailPanel, the Day chart MPPT bands, Explorer `mppt{n}W/V/A` chip labels. **Settings → Strings**
-  (`StringsSettings.jsx`, only with a site open; Save shows once a row is edited). **Strings section at the bottom of
-  the Day tab** (`StringsSection.jsx`, no new TabBar item): range 7 days / 30 days / This month / This year (by month),
+  (`StringsSettings.jsx`, only with a site open; Save shows once a row is edited). **Strings view on the Month and Year tabs**
+  (Jason, 2026-11-12; moved off the Day tab): a **Site | Strings** `Segmented` above the chart (`periodView`, remembered in
+  `localStorage.midnite_period_view`); Strings renders `StringsSection` with `period={kind:'month'|'year', value}` +
+  `onPeriodChange` so its ‹ › pager and the tab's month/year stay in step (Month = daily bars, Year = monthly bars).
+  Without `period` it falls back to the old range picker: 7 days / 30 days / This month / This year (by month),
   stacked bars by string (Month/Year bar rules: one `stackId`, `stackOffset="sign"`, `activeBar={false}`,
   `cursor={false}`), table (kWh, kWh/kW, share of inverter), cross-check note, admin
   **Backfill 30 days**. **No underperformer warnings in the UI** (Jason, 2026-11-12: strings differ in rating and one

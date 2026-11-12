@@ -2,6 +2,12 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.3 (2026-11-12): Strings moved to the Month and Year tabs
+
+- The Strings chart left the bottom of the Day tab. Month and Year now have a **Site | Strings** switch above the
+  chart: Strings shows each string's kWh for the same month (daily bars) or year (monthly bars), with its own
+  previous/next arrows that stay in step with the tab. The choice is remembered.
+
 ## 1.2.2 (2026-11-12): Strings toggles, live string readings, no warnings
 
 - Strings chart: tap an inverter to hide or show all its strings, or a string chip to hide or show one. Remembered
