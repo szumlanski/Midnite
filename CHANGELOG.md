@@ -2,6 +2,15 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.17 (2026-11-12): Watchdog checks charging and generator voltage separately
+
+- After a run ends, two checks: (1) the inverters stop charging from the generator (power gone); if they are still
+  charging 5 minutes after the end, AGS Off is forced; (2) the generator shuts off (voltage gone), allowing for its
+  cool-down; if voltage is still there 15 minutes after the end, AGS Off is forced. Off is held on every inverter
+  until the generator is confirmed off (no voltage, no power), then the normal setting goes back.
+- During a run: "generator on" (voltage) and "charging" (power) are logged separately, with an alert if there is no
+  voltage 10 minutes after the start, or voltage but no charging 15 minutes after the start.
+
 ## 1.2.16 (2026-11-12): Generator watchdog: check that it really started and really stopped
 
 - Run now, one-off and exercise runs all use the same start and end steps (AGS On + run cap + 95/100, then back).

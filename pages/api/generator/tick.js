@@ -18,7 +18,7 @@
 import { supabaseAdmin, fetchFlowRt, fetchSiteFlowRt, fetchInverterDetail, readShadow, writeShadow, fetchGenLegs } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, computeNextRun } from "@/lib/generator/core";
 import { genWiring } from "@/lib/generator/registers";
-import { planTick } from "@/lib/generator/tick";
+import { planTick, runReading } from "@/lib/generator/tick";
 import { planResync, RESYNC_CODES } from "@/lib/generator/resync";
 import { planWatchdog } from "@/lib/generator/watchdog";
 import { automaticFromAgs } from "@/lib/generator/control";
@@ -257,18 +257,24 @@ async function tickSite(sb, gen, { dry, startedAt }) {
     let overrides = {};
     try {
       const { data: recent } = await sb.from("gen_events").select("action,created_at").eq("site_key", site_key).order("created_at", { ascending: false }).limit(60);
-      const wd = planWatchdog({ cfg, running: plan.running ?? null, now, events: recent || [] });
+      const rr = runReading(live, wiring); // generator-side W and V (grid side when the gen is on the grid terminals)
+      const wd = planWatchdog({ cfg, reading: live?.ok === false ? {} : { w: rr.w, v: rr.v }, now, events: recent || [] });
       out.watchdog = { ...wd.info, forceOff: wd.forceOff, actions: wd.actions.map(a => a.action) };
       if (wd.forceOff) overrides = { "2156": 2 };
       for (const a of wd.actions) {
         const text = {
-          start_confirmed: `The generator is running (seen ${a.minutes} min after the start).`,
-          start_not_confirmed: `The generator has not started ${a.minutes} minutes after the start command. The start settings are being re-sent to every inverter every minute. Check the generator and its start wiring.`,
-          stop_confirmed: `The generator is off (checked ${a.minutes} min after the run ended${a.forced ? ", after forcing AGS Off" : ""}).`,
-          watchdog_stop_sent: `The generator was still running ${a.minutes} minutes after the run ended. AGS Off was sent to every inverter (attempt ${a.attempt}); it stays Off until the generator is seen stopped, then goes back to normal.`,
+          start_confirmed: `The generator is on: voltage seen ${a.minutes} min after the start.`,
+          charge_confirmed: `The inverters are charging from the generator (${a.minutes} min after the start).`,
+          start_not_confirmed: `The generator has not started ${a.minutes} minutes after the start command (no voltage, no power). The start settings are being re-sent to every inverter every minute. Check the generator and its start wiring.`,
+          charge_not_confirmed: `The generator is on (voltage present) but the inverters are still not charging from it ${a.minutes} minutes after the start.`,
+          charge_stop_confirmed: `The inverters stopped charging from the generator (${a.minutes} min after the run ended). Waiting for the generator to finish its cool-down and shut off.`,
+          stop_confirmed: `The generator is off: no voltage and no power (${a.minutes} min after the run ended${a.forced ? ", after forcing AGS Off" : ""}${a.powerOnly ? "; no voltage reading, judged by power only" : ""}).`,
+          watchdog_stop_sent: a.reason === "charging"
+            ? `The inverters were still charging from the generator ${a.minutes} minutes after the run ended. AGS Off was sent to every inverter (attempt ${a.attempt}); it stays Off until the generator is confirmed off, then goes back to normal.`
+            : `The generator still had voltage ${a.minutes} minutes after the run ended (past its cool-down). AGS Off was sent to every inverter (attempt ${a.attempt}); it stays Off until the generator is confirmed off, then goes back to normal.`,
         }[a.action];
-        await logEvent(sb, site_key, SYSTEM_ACTOR, a.action, { after: { minutes: a.minutes ?? null, attempt: a.attempt ?? null, note: text }, success: a.action !== "start_not_confirmed" && a.action !== "watchdog_stop_sent", source: "cron" });
-        if (a.alert) await notifyGeneratorEvent({ ...gen, config: cfg }, "warn", { title: a.action === "start_not_confirmed" ? "did not start" : "did not stop", text, at: now });
+        await logEvent(sb, site_key, SYSTEM_ACTOR, a.action, { after: { minutes: a.minutes ?? null, attempt: a.attempt ?? null, reason: a.reason ?? null, reading: { w: rr.w, v: rr.v }, note: text }, success: !a.alert, source: "cron" });
+        if (a.alert) await notifyGeneratorEvent({ ...gen, config: cfg }, "warn", { title: { start_not_confirmed: "did not start", charge_not_confirmed: "on but not charging", watchdog_stop_sent: "did not stop" }[a.action] || "check needed", text, at: now });
       }
     } catch (e) { out.watchdog = { error: e.message }; console.error("[generator tick] watchdog", site_key, e.message); }
 

@@ -683,12 +683,14 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   **AGS On is never resting (1.2.15):** `restingAgs()` in control.js maps 1 -> 0 for the saved pre-run AGS, the end
   restore, the resync's desired 2156, and the UI "goes back to" text; resync never adopts a master reading 1 and the
   `state` sync ignores 1 outside a run. A leftover On had kept OffTheHook's generator running.
-  **Watchdog (1.2.16, Jason):** pure `lib/generator/watchdog.js` `planWatchdog` runs in the tick before resync. During a
-  run: `start_confirmed` once seen running; `start_not_confirmed` + alert if not running 10 min after the start. After
-  an end (end/stop/cron_force_end; not control_auto) within 60 min: `stop_confirmed` once seen off at >= 5 min; if
-  still running at 5 min, `watchdog_stop_sent` + alert (every 5 min) and resync `overrides` {2156: 2} on every
-  inverter until seen off. Running also counts gen leg V > 50 from `fetchGenLegs` (0 W while the inverter is slow to
-  draw). Alerts use `notifyGeneratorEvent(site,'warn',{title,text})`. One-off/exercise runs share the same path.
+  **Watchdog (1.2.17, Jason):** pure `lib/generator/watchdog.js` `planWatchdog({cfg, reading:{w,v}, now, events})` runs in
+  the tick before resync, from `runReading(live, wiring)`. CHARGING = W > 200, GENERATOR ON = V > 50 (gen keeps voltage
+  through its cool-down). During a run: `start_confirmed` (V or W), `charge_confirmed` (W), alerts `start_not_confirmed`
+  (nothing at 10 min) and `charge_not_confirmed` (V but no W at 15 min). After an end (end/stop/cron_force_end; not
+  control_auto) for 60 min: `charge_stop_confirmed` when W gone; `stop_confirmed` when V and W gone (done). Still charging
+  at 5 min, or voltage still at 15 min -> `watchdog_stop_sent` + alert (every 5 min) and resync `overrides` {2156: 2} on
+  every inverter, held until `stop_confirmed`. Gen leg V comes from `fetchGenLegs` (live status). Alerts use
+  `notifyGeneratorEvent(site,'warn',{title,text})`. One-off/exercise runs share the same path.
   **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `212A`=100 THEN `2129`=95 (separate writes:
   a combined write left 95/35 on OffTheHook; restore lowers 2129 first, then 212A) because the inverter won't charge from the gen above its start/stop %; end/stop/auto put
   back `applied_start_pct`/`applied_stop_pct` (seeded from the inverter's 2129/212A on the first start if null).
