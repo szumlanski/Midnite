@@ -9,7 +9,7 @@ import { useStringLabels, stringsApi, mpptKey } from "./labels";
 
 const mono = { fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace" };
 
-function StringRow({ siteKey, sn, n, invIndex, current, active, onSaved }) {
+function StringRow({ siteKey, sn, n, invIndex, current, active, live, onSaved }) {
   const [label, setLabel] = useState(current?.label || "");
   const [kw, setKw] = useState(current?.kw_dc != null ? String(current.kw_dc) : "");
   const [busy, setBusy] = useState(false);
@@ -33,7 +33,11 @@ function StringRow({ siteKey, sn, n, invIndex, current, active, onSaved }) {
         <label htmlFor={`${idBase}-name`} style={{ fontSize: FS.footnote, color: MUTED, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: stringColor(n, invIndex), flexShrink: 0 }} />
           MPPT {n}
-          {active && <span style={{ color: BATTERY_TEXT, fontWeight: 600 }}>· producing</span>}
+          {live
+            ? <span style={{ color: (live.w || 0) > 0 ? BATTERY_TEXT : MUTED, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                · {Math.round(live.v || 0)} V · {(live.a || 0).toFixed(2)} A · {Math.round(live.w || 0)} W
+              </span>
+            : active && <span style={{ color: BATTERY_TEXT, fontWeight: 600 }}>· producing</span>}
         </label>
         <input id={`${idBase}-name`} className="ui-field" value={label} maxLength={60} placeholder={`MPPT ${n}`} onChange={(e) => setLabel(e.target.value)}
           aria-invalid={tooLong || undefined} style={{ width: "100%", boxSizing: "border-box", fontFamily: SANS }} />
@@ -54,10 +58,15 @@ function StringRow({ siteKey, sn, n, invIndex, current, active, onSaved }) {
   );
 }
 
-export function StringsSettings({ site, siteKey }) {
+// statuses = the Dashboard's live 5-min inverter status (same data as the Live cards), for the per-MPPT V/A/W readout.
+export function StringsSettings({ site, siteKey, statuses = [] }) {
   const { byKey, inverters, loaded, error, setLabels } = useStringLabels();
   if (!site) return <div style={{ fontSize: FS.subhead, color: MUTED }}>Open a site first, then come back here to name its strings.</div>;
   const activeOf = (sn) => new Set(inverters.find((i) => i.sn === sn)?.active || []);
+  const liveOf = (sn, n) => {
+    const m = statuses.find((x) => x.sn === sn)?.data?.photovoltaic?.mppts?.[n - 1];
+    return m ? { v: Number(m.voltage) || 0, a: Number(m.current) || 0, w: Number(m.power) || 0 } : null;
+  };
   return (
     <>
       <div style={{ fontSize: FS.subhead, color: MUTED, marginBottom: 12 }}>
@@ -74,7 +83,7 @@ export function StringsSettings({ site, siteKey }) {
           </div>
           <div className="ui-group" style={{ borderColor: BORDER }}>
             {[1, 2, 3].map((n) => (
-              <StringRow key={`${n}|${byKey[mpptKey(inv.sn, n)]?.label || ""}|${byKey[mpptKey(inv.sn, n)]?.kw_dc ?? ""}`} siteKey={siteKey} sn={inv.sn} n={n} invIndex={i} current={byKey[mpptKey(inv.sn, n)]} active={activeOf(inv.sn).has(n)} onSaved={setLabels} />
+              <StringRow key={`${n}|${byKey[mpptKey(inv.sn, n)]?.label || ""}|${byKey[mpptKey(inv.sn, n)]?.kw_dc ?? ""}`} siteKey={siteKey} sn={inv.sn} n={n} invIndex={i} current={byKey[mpptKey(inv.sn, n)]} active={activeOf(inv.sn).has(n)} live={liveOf(inv.sn, n)} onSaved={setLabels} />
             ))}
           </div>
         </div>

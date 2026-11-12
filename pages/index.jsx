@@ -1091,7 +1091,7 @@ function SharingSettings({ activeId, sites=[] }){
   );
 }
 
-function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},onSetActive,onChanged,onClose,onLogout,readOnly=false}){
+function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selectedSite=null,sitePhotos={},statuses=[],onSetActive,onChanged,onClose,onLogout,readOnly=false}){
   const [sec,setSec]=useState("accounts");
   const [err,setErr]=useState(null); const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false);
   const isAdmin=role==="admin"; const canAdd=isAdmin||accounts.length===0;
@@ -1209,7 +1209,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           </>}
 
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
-          {sec==="strings" && <StringsSettings site={selectedSite} siteKey={selectedSite?siteKeyOf(selectedSite.inverters.map(i=>i.sn)):""}/>}
+          {sec==="strings" && <StringsSettings site={selectedSite} statuses={statuses} siteKey={selectedSite?siteKeyOf(selectedSite.inverters.map(i=>i.sn)):""}/>}
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
     </Sheet>
@@ -4430,7 +4430,7 @@ export default function Dashboard() {
           </div>
         </main>
 
-        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout} readOnly={activeIsShared}/>}
+        {showAccountSettings && <AccountSettings email={userEmail} role={role} accounts={accounts} activeId={activeAccountId} profile={profile} sites={sites} selectedSite={site} sitePhotos={sitePhotos} statuses={statuses} onSetActive={switchAccount} onChanged={reloadAccounts} onClose={()=>setShowAccountSettings(false)} onLogout={handleLogout} readOnly={activeIsShared}/>}
         {showShare && site && <ShareModal site={site} accountId={activeAccountId} onClose={()=>setShowShare(false)}/>}
 
         <TabBar tabs={genOn?TABS.map(t=>t.id==="explorer"?GEN_TAB:t):TABS} tab={tab} onTab={setTab}/>
