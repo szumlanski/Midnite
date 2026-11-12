@@ -114,7 +114,12 @@ async function genLegsCached(memberId, sn, tz) {
   const p = localParts(new Date(), tz);
   const date = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
   const { rows } = await fetchDayExcel(memberId, sn, date);
-  const r = rows[rows.length - 1] || null;
+  // The export sometimes has a single blank sample (gen V and Hz both 0) in the middle of a run (OffTheHook 12:30,
+  // 2026-11-12). When the latest row is blank but the row before had the generator up, show the row before.
+  const blank = (x) => x && !(x.genL1V > 0) && !(x.genL2V > 0) && !(x.genHz > 0);
+  let r = rows[rows.length - 1] || null;
+  const prev = rows[rows.length - 2];
+  if (blank(r) && prev && !blank(prev)) r = prev;
   const data = r ? { at: r.ts, genL1V: r.genL1V, genL2V: r.genL2V, genL1W: r.genL1W, genL2W: r.genL2W, gridL1V: r.gridL1V, gridL2V: r.gridL2V, genHz: r.genHz, gridHz: r.gridHz } : null;
   _legsCache.set(k, { data, ts: Date.now() });
   return data;
