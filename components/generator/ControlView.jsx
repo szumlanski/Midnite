@@ -60,8 +60,9 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
     setErr(null);
     setBusy(label);
     try {
-      await genApi("control", { site_key: siteKey, op, ...extra });
-      toast({ start: "Generator start sent", end: "Run ended", stop: "Generator turned off", auto: "Generator back on automatic" }[op], { icon: "check" });
+      const r = await genApi("control", { site_key: siteKey, op, ...extra });
+      if (r?.pending) toast("Sent. The inverter is slow to confirm; the change usually lands within a minute or two", { icon: "check", ms: 6000 });
+      else toast({ start: "Generator start sent", end: "Run ended", stop: "Generator turned off", auto: "Generator back on automatic" }[op], { icon: "check" });
       await onChanged?.(true);
     } catch (e) {
       setErr(e.message);

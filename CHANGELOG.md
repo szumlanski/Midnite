@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.5 (2026-11-12): Slow inverter confirmations count as sent
+
+- A write the Midnite cloud accepted but the inverter has not confirmed yet is now "pending", not a failure. Run now
+  keeps going, the run is tracked (force_on), so it is labeled Run now in alerts and still ends on time with AGS
+  and 2136 put back. Only a write the cloud refuses stops the run and is rolled back. Seen on OffTheHook: a Run now
+  that reported "not confirmed" started the generator a minute later and was mislabeled "Automatic".
+
 ## 1.2.4 (2026-11-12): Run now write confirmation
 
 - Inverter writes now wait longer for the inverter to confirm (re-reads the value up to 3 more times, 3 s apart),

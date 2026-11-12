@@ -664,6 +664,9 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   `seedFromInverter` copies its `2129`/`212A`/`2136` into `default_start_pct`/`default_stop_pct`/`default_max_run_min`
   AND `applied_start_pct`/`applied_stop_pct`, only while `applied_start_pct` is null. So switching Automatic on never
   overwrites the inverter's own values (OffTheHook 15/35) with the built-in 20/80.
+  **Slow confirmations (1.2.5):** a write the cloud accepted (RequestId) but not confirmed in time is `pending`, not a
+  failure: the op continues and the force state is saved, so a late landing is labeled Run now and ends on time. Only
+  a refused write fails; a failed user `start` puts 2136/AGS back. writeShadow re-reads up to 3x (cron: 0).
   Refuses to start if the current 2136 or 2156 can't be read. The register writes live in ONE place, `applyControl`
   in `lib/generator/server.js` (shared by the `control` action and the tick cron). Not yet: master re-detection.
 - Live generator/grid power in `state` and the tick cron is the SUM over every inverter at the site

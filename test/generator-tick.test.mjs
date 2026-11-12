@@ -350,3 +350,28 @@ test("Automatic switch <-> AGS: on = Auto (0), off = Off (2); On (1) shows as no
   assert.equal(automaticFromAgs(1), false);
   assert.equal(automaticFromAgs(null), null);
 });
+
+test("applyControl start: accepted but unconfirmed writes are pending, the run is still tracked (labeled Run now)", async () => {
+  const sb = mockSb({ gen_config: [{ site_key: "A", saved_max_run_min: null, saved_ags: null }], gen_events: [] });
+  const writes = [];
+  const r = await applyControl({ sb, auth: {}, autoId: "1", site_key: "A", cfg: { ...sb.tables.gen_config[0] }, op: "start", runMin: 2, actor: SYSTEM_ACTOR, source: "user", startedBy: "u1" }, {
+    readShadow: async () => ({ "2136": "0", "2156": "0" }),
+    writeShadow: async (_a, { writes: w }) => { writes.push(w); return { verified: false, write: { RequestId: "x" }, err: "no confirmation" }; },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.pending, true);
+  assert.deepEqual(writes, [{ "2136": 2 }, { "2156": 1 }]);
+  assert.equal(sb.tables.gen_config[0].force_on, true);
+});
+
+test("applyControl start: a refused write fails, and a user start puts 2136 back", async () => {
+  const sb = mockSb({ gen_config: [{ site_key: "A", saved_max_run_min: null, saved_ags: null }], gen_events: [] });
+  const writes = [];
+  const r = await applyControl({ sb, auth: {}, autoId: "1", site_key: "A", cfg: { ...sb.tables.gen_config[0] }, op: "start", runMin: 2, actor: SYSTEM_ACTOR, source: "user" }, {
+    readShadow: async () => ({ "2136": "0", "2156": "0" }),
+    writeShadow: async (_a, { writes: w }) => { writes.push(w); return { verified: false, err: "the inverter did not accept the write" }; },
+  });
+  assert.equal(r.status, 502);
+  assert.deepEqual(writes, [{ "2136": 2 }, { "2136": 0 }]);
+  assert.notEqual(sb.tables.gen_config[0].force_on, true);
+});
