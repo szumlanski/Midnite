@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.2 (2026-11-12): Strings toggles, live string readings, no warnings
+
+- Strings chart: tap an inverter to hide or show all its strings, or a string chip to hide or show one. Remembered
+  per site on this device.
+- The "X% below the other strings" warning is gone (strings differ in rating and some are paralleled).
+- Settings > Strings shows each MPPT's live volts, amps and watts.
+
 ## 1.2.1 (2026-11-12): Generator power summed, grid voltage chips fixed
 
 - Generator power on the Generator tab (and in run records/alerts) is now the total of all inverters, not just the

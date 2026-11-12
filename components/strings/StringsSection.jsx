@@ -1,13 +1,13 @@
 // Day tab → Strings section: daily energy per string (MPPT) from mppt_daily (collected nightly from the
 // 5-minute CSV export). Range picker, a stacked daily bar chart by string, a per-string table with kWh/kW
-// and share, underperformer flags, and the sum-of-strings vs inverter E-Today cross-check.
+// and share, chart toggles per string and per inverter, and the sum-of-strings vs inverter E-Today cross-check.
 // Bar chart rules (CLAUDE.md): ONE stackId + stackOffset="sign", activeBar={false}, Tooltip cursor={false}.
 import { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Button, Segmented } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { toast } from "@/components/ui/Alert";
-import { TEXT, MUTED, BORDER, CARD, BG, FS, SANS, GRID_IN_TEXT, stringColor } from "@/components/ui/tokens";
+import { TEXT, MUTED, BORDER, CARD, BG, FS, SANS, GRID_IN_TEXT, SOLAR_TEXT, stringColor } from "@/components/ui/tokens";
 import { usePrefersReducedMotion } from "@/components/ui/motion";
 import { useStringLabels, stringsApi, mpptKey } from "./labels";
 
@@ -58,9 +58,18 @@ export function StringsSection({ site, siteKey, isAdmin }) {
   const chartData = ((byMonth ? data?.byMonth : data?.byDay) || []).map((b) => ({
     ...b, x: byMonth ? MONTHS[Number(b.month.slice(5, 7)) - 1] : `${Number(b.day.slice(5, 7))}/${Number(b.day.slice(8, 10))}`,
   }));
-  const flags = data?.flags;
-  const flagOf = Object.fromEntries((flags?.strings || []).map((f) => [mpptKey(f.sn, f.mppt), f]));
-  const flagged = (flags?.strings || []).filter((f) => f.flagged);
+  // Underperformer warnings were removed (Jason, 2026-11-12): strings differ in rating and one is paralleled, so a
+  // site-median comparison is meaningless. The server still computes flags; the UI does not show them.
+  // On/off toggles for strings and whole inverters (chart only). Remembered per site in this browser.
+  const hideKey = `midnite_strings_hidden:${siteKey}`;
+  const [hidden, setHidden] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem(hideKey) || "[]")); } catch { return new Set(); } });
+  useEffect(() => { try { setHidden(new Set(JSON.parse(localStorage.getItem(hideKey) || "[]"))); } catch { setHidden(new Set()); } }, [hideKey]);
+  const saveHidden = (next) => { setHidden(next); try { localStorage.setItem(hideKey, JSON.stringify([...next])); } catch { /* storage blocked */ } };
+  const toggleKey = (k) => { const n = new Set(hidden); n.has(k) ? n.delete(k) : n.add(k); saveHidden(n); };
+  const invKeys = (sn) => series.filter((x) => x.sn === sn).map((x) => x.key);
+  const invAllHidden = (sn) => invKeys(sn).length > 0 && invKeys(sn).every((k) => hidden.has(k));
+  const toggleInv = (sn) => { const n = new Set(hidden); const off = !invAllHidden(sn); invKeys(sn).forEach((k) => off ? n.add(k) : n.delete(k)); saveHidden(n); };
+  const shown = series.filter((x) => !hidden.has(x.key));
   const cc = data?.crossCheck;
 
   const backfill = async () => {
@@ -100,16 +109,6 @@ export function StringsSection({ site, siteKey, isAdmin }) {
           </div>
         ) : !err && (
           <>
-            {flagged.length > 0 && (
-              <div className="ui-card" role="status" style={{ padding: "12px 16px", marginBottom: 12, background: "#FFFBEB", borderColor: "#FCD34D" }}>
-                {flagged.map((f) => (
-                  <div key={mpptKey(f.sn, f.mppt)} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: FS.subhead, color: "#92400E", marginBottom: 2 }}>
-                    <Icon name="alert" /><span><b>{displayName(f.sn, f.mppt)}</b> is {Math.round(f.pctBelow * 100)}% below the other strings over {flags.window?.days || 7} days{flags.basis === "kwh" ? " (by raw kWh; add string sizes in Settings for a fair kWh/kW comparison)" : " (kWh per kW)"}.</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="ui-card" style={{ padding: "16px 12px 12px", marginBottom: 12 }}>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={chartData} stackOffset="sign" margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="20%" maxBarSize={byMonth ? 44 : 22}>
@@ -117,11 +116,35 @@ export function StringsSection({ site, siteKey, isAdmin }) {
                   <XAxis dataKey="x" tick={{ fill: MUTED, fontSize: 11, fontFamily: SANS }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={8} />
                   <YAxis tick={{ fill: MUTED, fontSize: 11, fontFamily: SANS }} tickLine={false} axisLine={false} width={38} />
                   <Tooltip contentStyle={TOOLTIP_S} cursor={false} labelStyle={{ color: MUTED, marginBottom: 4 }} formatter={(v, n) => [`${Number(v).toFixed(1)} kWh`, n]} />
-                  {series.map((s) => <Bar key={s.key} dataKey={s.key} name={s.name} stackId="a" fill={s.color} fillOpacity={0.9} activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out" />)}
+                  {shown.map((s) => <Bar key={s.key} dataKey={s.key} name={s.name} stackId="a" fill={s.color} fillOpacity={0.9} activeBar={false} isAnimationActive={motionOK} animationDuration={450} animationEasing="ease-out" />)}
                 </BarChart>
               </ResponsiveContainer>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: "10px 4px 2px", borderTop: `1px solid ${BORDER}`, marginTop: 8 }}>
-                {series.map((s) => <span key={s.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: FS.caption, fontWeight: 600, color: MUTED }}><span style={{ width: 10, height: 10, borderRadius: 3, background: s.color }} />{s.name}</span>)}
+              <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 8, padding: "10px 4px 2px" }}>
+                {multiInv && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }} role="group" aria-label="Show or hide inverters">
+                    {site.inverters.filter((inv) => invKeys(inv.sn).length).map((inv) => {
+                      const on = !invAllHidden(inv.sn);
+                      return (
+                        <button key={inv.sn} type="button" aria-pressed={on} onClick={() => toggleInv(inv.sn)} title={inv.sn}
+                          style={{ minHeight: "var(--tap)", padding: "4px 12px", borderRadius: 999, border: `1px solid ${on ? TEXT : BORDER}`, background: on ? TEXT : CARD, color: on ? CARD : MUTED, fontSize: FS.caption, fontWeight: 700, fontFamily: SANS, cursor: "pointer" }}>
+                          {invLabel(inv.sn)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} role="group" aria-label="Show or hide strings">
+                  {series.map((x) => {
+                    const on = !hidden.has(x.key);
+                    return (
+                      <button key={x.key} type="button" aria-pressed={on} onClick={() => toggleKey(x.key)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, minHeight: "var(--tap)", padding: "4px 10px", borderRadius: 999, border: `1px solid ${BORDER}`, background: on ? CARD : BG, color: on ? TEXT : MUTED, opacity: on ? 1 : 0.55, textDecoration: on ? "none" : "line-through", fontSize: FS.caption, fontWeight: 600, fontFamily: SANS, cursor: "pointer" }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 3, background: on ? x.color : "transparent", border: `2px solid ${x.color}`, boxSizing: "border-box" }} />{x.name}
+                      </button>
+                    );
+                  })}
+                  {hidden.size > 0 && <button type="button" onClick={() => saveHidden(new Set())} style={{ minHeight: "var(--tap)", padding: "4px 10px", border: "none", background: "transparent", color: SOLAR_TEXT, fontSize: FS.caption, fontWeight: 700, fontFamily: SANS, cursor: "pointer" }}>Show all</button>}
+                </div>
               </div>
             </div>
 
@@ -135,16 +158,15 @@ export function StringsSection({ site, siteKey, isAdmin }) {
                 </tr></thead>
                 <tbody>
                   {strings.map((s) => {
-                    const k = mpptKey(s.sn, s.mppt), f = flagOf[k];
+                    const k = mpptKey(s.sn, s.mppt);
                     return (
-                      <tr key={k}>
+                      <tr key={k} style={{ opacity: hidden.has(k) ? 0.45 : 1 }}>
                         <td style={{ ...td, textAlign: "left", whiteSpace: "normal" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <span style={{ width: 10, height: 10, borderRadius: 3, background: stringColor(s.mppt, invIndex[s.sn] || 0), flexShrink: 0 }} />
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontWeight: 700 }}>{nameOf(s.sn, s.mppt)}</div>
                               <div style={{ fontSize: FS.caption, color: MUTED }}>{invLabel(s.sn)} · MPPT {s.mppt}{s.kw_dc ? ` · ${s.kw_dc} kW DC` : ""}</div>
-                              {f?.flagged && <span className="ui-pill" title={`${Math.round(f.pctBelow * 100)}% below the other strings over ${flags.window?.days || 7} days`} style={{ marginTop: 4, background: "#FEF3C7", color: "#92400E", whiteSpace: "normal" }}><Icon name="alert" />{Math.round(f.pctBelow * 100)}% below the others</span>}
                             </div>
                           </div>
                         </td>

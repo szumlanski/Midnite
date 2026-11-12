@@ -766,8 +766,12 @@ Schema: `supabase/strings.sql` (`site_mppt_labels`, `mppt_daily`; RLS on, no pol
   (`StringsSettings.jsx`, only with a site open; Save shows once a row is edited). **Strings section at the bottom of
   the Day tab** (`StringsSection.jsx`, no new TabBar item): range 7 days / 30 days / This month / This year (by month),
   stacked bars by string (Month/Year bar rules: one `stackId`, `stackOffset="sign"`, `activeBar={false}`,
-  `cursor={false}`), table (kWh, kWh/kW, share of inverter), amber underperformer flags, cross-check note, admin
-  **Backfill 30 days**. Colors `STRING_COLORS`/`stringColor(mppt, invIndex)` in tokens.js: teal = MPPT 1, mustard =
+  `cursor={false}`), table (kWh, kWh/kW, share of inverter), cross-check note, admin
+  **Backfill 30 days**. **No underperformer warnings in the UI** (Jason, 2026-11-12: strings differ in rating and one
+  is paralleled, so the site-median comparison is useless; the server still returns `flags`, unused). **Toggles:** inverter
+  pills hide/show all of an inverter's strings, string chips hide/show one; chart only, remembered per site in
+  `localStorage.midnite_strings_hidden:<site_key>`; hidden rows dim in the table. Backfill VERIFIED 2026-11-12 on
+  OffTheHook: 30 days came back (CSV works beyond 7 days); strings summed within 2% of E-Today. Colors `STRING_COLORS`/`stringColor(mppt, invIndex)` in tokens.js: teal = MPPT 1, mustard =
   MPPT 2, indigo = MPPT 3, a shade per inverter (clear of every existing series color).
 - Harness: `scripts/ui-check/fixtures-strings.mjs` (Wise Naples, INV-3 MPPT 2 shaded ~26% low); screens `strings`,
   `settings-strings`.
