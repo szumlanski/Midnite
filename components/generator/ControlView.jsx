@@ -54,7 +54,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
   // A Run now goes Sent (cloud has it, inverter not yet on AGS On) -> Accepted (AGS reads On) -> Running
   // (power seen). It stays in Sent/Accepted, checked every 5 s, until it runs or its time is up.
   const phase = !cfg.force_on ? null : obs.running ? "running" : ags === 1 ? "accepted" : "sent";
-  const statusWord = obs.running ? "Running" : phase === "accepted" ? "Starting" : phase === "sent" ? "Start sent" : obs.known ? "Stopped" : "Unknown";
+  const statusWord = obs.running ? "Running" : phase === "accepted" ? "Starting" : phase === "sent" ? "Start signal sent" : obs.known ? "Stopped" : "Unknown";
   const statusColor = obs.running ? GEN_TEXT : cfg.force_on ? GEN_TEXT : MUTED;
 
   async function send(op, extra = {}, label) {
@@ -64,7 +64,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
     setBusy(label);
     try {
       const r = await genApi("control", { site_key: siteKey, op, ...extra });
-      if (r?.pending) toast(op === "start" ? "Start sent. Waiting for the inverter" : "Sent. Waiting for the inverter to confirm", { icon: "check", ms: 5000 });
+      if (r?.pending) toast(op === "start" ? "Start signal sent, waiting for confirmation" : "Sent. Waiting for the inverter to confirm", { icon: "check", ms: 5000 });
       else toast({ start: "Generator start sent", end: "Run ended", stop: "Generator turned off", auto: "Generator back on automatic" }[op], { icon: "check" });
       await onChanged?.(true);
     } catch (e) {
@@ -86,7 +86,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
       action: "Start",
       destructive: false,
     });
-    if (ok) send("start", { runMin, targetPct: tp }, "Sending to the inverter...");
+    if (ok) send("start", { runMin, targetPct: tp }, "Sending the start signal...");
   }
 
   function startPressed() {
@@ -153,8 +153,8 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
           {phase !== "running" && (
             <div style={{ marginTop: 8 }}>
               <PendingNote text={phase === "sent"
-                ? "Start sent. Waiting for the inverter to accept it (checking every 5 seconds). This can take a few minutes."
-                : "The inverter accepted the start. Waiting for the generator to come on (checking every 5 seconds)."} />
+                ? "Start signal sent, waiting for confirmation from the inverter. Checking every 5 seconds; this can take a few minutes."
+                : "Start confirmed by the inverter, waiting for the generator to come on. Checking every 5 seconds."} />
             </div>
           )}
           <div style={{ fontSize: FS.subhead, color: MUTED, marginTop: 2 }}>
@@ -191,7 +191,8 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
               {(() => {
                 const tpv = pctOrNull(target);
                 const dur = Number.isInteger(runMin) && runMin > 0 ? fmtDuration(runMin * 60) : "the time above";
-                const back = ags != null && AGS_LABEL[ags] ? AGS_LABEL[ags].toLowerCase() : "its current setting";
+                const backCode = cfg.saved_ags != null ? Number(cfg.saved_ags) : ags;
+                const back = backCode != null && AGS_LABEL[backCode] ? AGS_LABEL[backCode].toLowerCase() : "its current setting";
                 return (
                   <>
                     {tpv != null

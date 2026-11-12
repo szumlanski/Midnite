@@ -2,6 +2,12 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.7 (2026-11-12): Run now wording
+
+- Status reads "Start signal sent, waiting for confirmation from the inverter", then "Start confirmed by the
+  inverter, waiting for the generator to come on", then Running.
+- The Run now note names the AGS setting the run returns to from the saved pre-run value, not the live reading.
+
 ## 1.2.6 (2026-11-12): Run now shows Sent, then Starting, then Running
 
 - Run now hands the writes to the Midnite cloud and returns in a few seconds instead of waiting up to a minute.
