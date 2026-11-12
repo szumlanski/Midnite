@@ -15,6 +15,7 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 import { respond, KNOWN_ACTIONS, ACCOUNT_ID, USER } from "./fixtures.mjs";
 import { genRespond } from "./fixtures-gen.mjs";
+import { stringsRespond } from "./fixtures-strings.mjs";
 
 const DEFAULT_OUT = "/tmp/claude-0/-home-user-Midnite/1064332e-dd00-5b3f-aac2-b8d7bf1b365e/scratchpad/shots";
 const SUPABASE_URL = process.env.UI_CHECK_SUPABASE_URL || "https://stub.supabase.co";
@@ -45,7 +46,7 @@ const VIEWPORTS = [
   { w: 390, h: 844, dsf: 2, mobile: true },
   { w: 1280, h: 800, dsf: 1, mobile: false },
 ];
-const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings", "alert", "toast", "install", "gen-control", "gen-automatic", "gen-window", "gen-schedules", "gen-history", "gen-activity", "gen-alerts"];
+const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "settings-strings", "strings", "share", "inverter", "compare", "inv-settings", "alert", "toast", "install", "gen-control", "gen-automatic", "gen-window", "gen-schedules", "gen-history", "gen-activity", "gen-alerts"];
 
 const log = (...m) => process.stderr.write(m.join(" ") + "\n");
 const summary = { screens: 0, errs: {}, blocked: 0, failedSteps: {} };
@@ -97,6 +98,12 @@ async function installRoutes(ctx, abortedUrls) {
           // A 404 for a site without generator control is the expected "hide the tab" answer; the
           // browser still logs it as a failed resource, so count it as noise like our own aborts.
           if (r.status >= 400) abortedUrls.add(req.url());
+          return await route.fulfill({ status: r.status, contentType: "application/json", body: JSON.stringify(r.body) });
+        }
+        if (url.pathname === "/api/strings" && req.method() === "POST") {
+          let body = {};
+          try { body = req.postDataJSON() || {}; } catch { body = {}; }
+          const r = stringsRespond(url.searchParams.get("action") || "", body);
           return await route.fulfill({ status: r.status, contentType: "application/json", body: JSON.stringify(r.body) });
         }
         return await route.continue();
@@ -391,6 +398,16 @@ async function runViewport(browser, vp) {
     if (!liveOk) { summary.failedSteps[key(name)] = "skipped: site did not open"; continue; }
     await page.evaluate(() => window.scrollTo(0, 0));
     if (await step(name, async () => { await clickTab(label); await ready(); })) await shoot(page, idle, name);
+    // Strings section at the bottom of the Day tab (viewport shot scrolled to it).
+    if (name === "day") {
+      screen = "strings";
+      if (await step("strings", async () => {
+        const h = page.getByRole("heading", { name: "Strings", exact: true }).first();
+        await h.waitFor({ timeout: 10000 });
+        await page.getByText("South roof", { exact: true }).first().waitFor({ timeout: 10000 });
+        await h.evaluate((el) => { el.scrollIntoView({ block: "start" }); window.scrollBy(0, -72); });
+      })) await shoot(page, idle, "strings", { full: false });
+    }
   }
 
   // Modals are viewport shots: they are fixed overlays with their own scroll.
@@ -433,6 +450,12 @@ async function runViewport(browser, vp) {
     await clickModalTab("Sharing");
     await page.getByText("Shared by you", { exact: true }).waitFor({ timeout: 10000 });
   })) await shoot(page, idle, "settings-sharing", { full: false });
+
+  screen = "settings-strings";
+  if (settingsOk && await step("settings-strings", async () => {
+    await clickModalTab("Strings");
+    await page.getByText("Size (optional)").first().waitFor({ timeout: 10000 });
+  })) await shoot(page, idle, "settings-strings", { full: false });
 
   screen = "share";
   if (liveOk && await step("share", async () => {

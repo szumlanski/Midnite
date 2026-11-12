@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 import { supabase, supabaseReady } from "../lib/supabaseClient";
 import { AreaChart, Area, BarChart, Bar, ComposedChart, Line, Brush, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from "recharts";
@@ -17,6 +17,9 @@ import { GeneratorTab } from "@/components/generator/GeneratorTab";
 import { GeneratorAdminCard } from "@/components/generator/GeneratorAdminCard";
 import { genApi } from "@/components/generator/shared";
 import { siteKeyOf } from "@/lib/generator/core";
+import { StringLabelsContext, useStringLabelsState, useStringLabels } from "@/components/strings/labels";
+import { StringsSettings } from "@/components/strings/StringsSettings";
+import { StringsSection } from "@/components/strings/StringsSection";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect, usePrefersReducedMotion } from "@/components/ui/motion";
 
 const today = new Date().toISOString().split("T")[0];
@@ -1125,7 +1128,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
       leading={profile.avatar_url
         ? <img src={profile.avatar_url} alt="" style={{width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`1px solid ${BORDER}`,flexShrink:0}}/>
         : <div style={{width:40,height:40,borderRadius:"50%",background:BG,border:`1px solid ${BORDER}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:FS.callout,fontWeight:700,color:MUTED,flexShrink:0}}>{(profile.display_name||email||"?").slice(0,1).toUpperCase()}</div>}
-      toolbar={<div className="seg-scroll"><Segmented label="Settings sections" value={sec} onChange={goSec} options={[{value:"accounts",label:"Midnite"},{value:"profile",label:"Profile"},{value:"security",label:"Security"},{value:"sites",label:"Photos"},{value:"alerts",label:"Alerts"},{value:"sharing",label:"Sharing"}]}/></div>}
+      toolbar={<div className="seg-scroll"><Segmented label="Settings sections" value={sec} onChange={goSec} options={[{value:"accounts",label:"Midnite"},{value:"profile",label:"Profile"},{value:"security",label:"Security"},{value:"sites",label:"Photos"},{value:"alerts",label:"Alerts"},...(selectedSite?[{value:"strings",label:"Strings"}]:[]),{value:"sharing",label:"Sharing"}]}/></div>}
       footer={<>
         <a href="/faq" target="_blank" rel="noopener" className="ui-btn ui-btn--plain"><Icon name="help"/>Help &amp; FAQ</a>
         {onLogout && <Button variant="destructive" icon="logout" onClick={onLogout}>Sign out</Button>}
@@ -1206,6 +1209,7 @@ function AccountSettings({email,role,accounts,activeId,profile={},sites=[],selec
           </>}
 
           {sec==="alerts" && <NotificationsSettings activeId={activeId} site={selectedSite}/>}
+          {sec==="strings" && <StringsSettings site={selectedSite} siteKey={selectedSite?siteKeyOf(selectedSite.inverters.map(i=>i.sn)):""}/>}
           {sec==="sharing" && <SharingSettings activeId={activeId} sites={sites}/>}
         </div>
     </Sheet>
@@ -2128,6 +2132,7 @@ function SettingsCompareModal({inverters, onClose}){
 }
 function InverterCard({inv, status, live}) {
   const [showSettings, setShowSettings] = useState(false);
+  const { nameOf } = useStringLabels();
   const d = status?.data;
   // Prefer live flowrt values (5s) for solar and home load — the 5-min snapshot can be stale by several
   // minutes (or capture a 0W moment) while the inverter is actively producing. live.pv = TotalDCpower;
@@ -2202,7 +2207,7 @@ function InverterCard({inv, status, live}) {
                   const v=m.voltage||0, a=m.current||0, w=m.power||0;
                   return (
                     <div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:FS.footnote,marginBottom:i<mppts.length-1?4:0}}>
-                      <span style={{color:MUTED,fontWeight:600}}>MPPT {i+1}</span>
+                      <span style={{color:MUTED,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={nameOf(inv.sn,i+1)}>{nameOf(inv.sn,i+1)}</span>
                       {v>0||w>0
                         ? <span style={{color:w>0?SOLAR_TEXT:MUTED,fontVariantNumeric:"tabular-nums"}}>{v.toFixed(0)} V · {a.toFixed(2)} A · {fmt(w)}</span>
                         : <span style={{color:MUTED}}>Off</span>}
@@ -2278,6 +2283,7 @@ function PhaseRow({label, line, exportWhenNegative}) {
 }
 
 function InverterDetailPanel({inv, status}) {
+  const { nameOf } = useStringLabels();
   const [showInfo, setShowInfo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const d = status?.data;
@@ -2345,7 +2351,7 @@ function InverterDetailPanel({inv, status}) {
             <div style={{fontSize:FS.footnote,color:MUTED,fontWeight:600,marginBottom:6}}>Strings</div>
             {mppts.map((m,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<mppts.length-1?`1px solid ${BORDER}`:"none"}}>
-                <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED}}>MPPT {i+1}</span>
+                <span style={{fontSize:FS.footnote,fontWeight:600,color:MUTED,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={nameOf(inv.sn,i+1)}>{nameOf(inv.sn,i+1)}</span>
                 {m.power>0
                   ? <span style={{fontSize:FS.footnote,color:SOLAR_TEXT,fontVariantNumeric:"tabular-nums"}}>{(m.voltage||0).toFixed(0)} V · {(m.current||0).toFixed(2)} A · {fmt(m.power)}</span>
                   : <span style={{fontSize:FS.footnote,color:MUTED}}>Off</span>}
@@ -2786,8 +2792,11 @@ function ExplorerTooltip({active, payload, label, byKey}){
     </div>
   );
 }
-function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled, rows, metrics, multi, loading, label}){
+function ExplorerChart({start, end, onStart, onEnd, onPrev, onNext, nextDisabled, rows, metrics:rawMetrics, multi, loading, label, sn}){
   const [sel, setSel] = useState([]);
+  // MPPT readings carry the string's name when it has one ("South roof" instead of "MPPT1").
+  const { customName } = useStringLabels();
+  const metrics = useMemo(()=>rawMetrics.map(m=>{ const mm=/^mppt([123])[WVA]$/.exec(m.key); const nm=mm&&sn?customName(sn,+mm[1]):null; return nm?{...m,label:nm}:m; }), [rawMetrics, customName, sn]);
   const byKey = Object.fromEntries(metrics.map(m=>[m.key,m]));
   const colorOf = (key)=> EXPLORER_COLORS[Math.max(0,metrics.findIndex(m=>m.key===key)) % EXPLORER_COLORS.length];
   // Seed a sensible default and prune the selection whenever the available metrics change.
@@ -4034,6 +4043,8 @@ export default function Dashboard() {
   const [gen, setGen] = useState(undefined);
   const [genCheck, setGenCheck] = useState(0);
   const genKey = site ? siteKeyOf(site.inverters.map(i=>i.sn)) : "";
+  // String (MPPT) names + sizes for this site, shared with every MPPT readout through context.
+  const strLabels = useStringLabelsState(genKey);
   useEffect(() => {
     if(!genKey) { setGen(undefined); return; }
     let alive = true; setGen(undefined);
@@ -4309,7 +4320,7 @@ export default function Dashboard() {
   if(!site) return <LinkMidnite email={userEmail} onLinked={handleLinked} onSignOut={handleLogout} initErr={loginError}/>;
 
   return (
-    <>
+    <StringLabelsContext.Provider value={strLabels}>
       <PageHead/>
       <div style={{minHeight:"100vh",background:BG,fontFamily:SANS}}>
         <AppHeader site={site} multiSite={sites.length>1} tabs={[...TABS, ...(genOn?[GEN_TAB]:[]), ...(isAdmin&&!activeIsShared?[ADMIN_TAB]:[])]} menuTabs={genOn?TABS.filter(t=>t.id==="explorer"):[]} tab={tab} onTab={setTab}
@@ -4393,20 +4404,23 @@ export default function Dashboard() {
           {tab==="day"&&(()=>{
             let prodSeries, consSeries;
             if(dayMode.type==="mppt"){
-              prodSeries = dayMode.active.map((mi,idx)=>({key:`pv${mi}`, name:`MPPT${mi+1}`, color:PROD_SHADES[idx%PROD_SHADES.length]}));
+              prodSeries = dayMode.active.map((mi,idx)=>({key:`pv${mi}`, name:strLabels.nameOf(chartInverters[0]?.sn, mi+1), color:PROD_SHADES[idx%PROD_SHADES.length]}));
               consSeries = [{key:"loadNeg0", name:"Load", color:CONS_SHADES[0]}];
             } else {
               const single = chartInverters.length===1;
               prodSeries = chartInverters.map((inv,i)=>({key:`pv${i}`, name:single?"Solar":`${inv.label} Solar`, color:PROD_SHADES[i%PROD_SHADES.length]}));
               consSeries = chartInverters.map((inv,i)=>({key:`loadNeg${i}`, name:single?"Load":`${inv.label} Load`, color:CONS_SHADES[i%CONS_SHADES.length]}));
             }
-            return <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>;
+            return <>
+              <DayChart date={dayDate} onDateChange={setDayDate} data={dayData} loading={dayLoading} summary={daySummary} prodSeries={prodSeries} consSeries={consSeries} mpptActive={dayMode.type==="mppt"} mpptHint={site.inverters.length>1}/>
+              <StringsSection site={site} siteKey={genKey} isAdmin={isAdmin}/>
+            </>;
           })()}
           {tab==="month"&&<MonthChart mode={monthMode} onModeChange={setMonthMode} month={monthDate} onMonthChange={setMonthDate} rangeStart={rangeStart} rangeEnd={rangeEnd} onRangeStart={setRangeStart} onRangeEnd={setRangeEnd} data={monthData} loading={monthLoading}/>}
           {tab==="year"&&<YearChart year={yearVal} onYearChange={setYearVal} data={yearData} loading={yearLoading}/>}
           {tab==="explorer"&&(
             explorerSn
-              ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label}/>
+              ? <ExplorerChart start={expStart} end={expEnd} onStart={onExpStart} onEnd={onExpEnd} onPrev={()=>expShift(-1)} onNext={()=>expShift(1)} nextDisabled={expEnd>=today} rows={explorerRows} metrics={explorerMetrics} multi={explorerMulti} loading={explorerLoading} label={site.inverters.find(i=>i.sn===explorerSn)?.label} sn={explorerSn}/>
               : <div style={{textAlign:"center",color:MUTED,padding:48,fontSize:FS.subhead}}>No inverter selected.</div>
           )}
           {tab==="generator"&&genOn&&<GeneratorTab siteKey={genKey} siteName={site.name} userKey={userEmail} initial={gen.state}/>}
@@ -4420,6 +4434,6 @@ export default function Dashboard() {
         <TabBar tabs={genOn?TABS.map(t=>t.id==="explorer"?GEN_TAB:t):TABS} tab={tab} onTab={setTab}/>
         <InstallHint/>
       </div>
-    </>
+    </StringLabelsContext.Provider>
   );
 }

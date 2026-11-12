@@ -735,6 +735,43 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
 - Harness: `scripts/ui-check/fixtures-gen.mjs` answers `/api/generator` (OffTheHook enabled mid-run, others 404);
   screens `gen-control`, `gen-automatic`, `gen-window`, `gen-schedules`, `gen-history`, `gen-activity`, `gen-alerts`.
 
+## Strings (per-MPPT names + daily energy), 1.2.0
+Schema: `supabase/strings.sql` (`site_mppt_labels`, `mppt_daily`; RLS on, no policies = service role only).
+- **Labels are per inverter SERIAL + MPPT number (1-3)**, never INV-N. Optional `kw_dc` (0 < x <= 100). Anyone
+  with access to the site can edit: owner account holds it, an active `site_shares` row, or admin (Jason's decision;
+  same rules as `canControlGen` minus `gen_sites.enabled`, in `lib/strings/server.js` `canAccessSite`).
+- **`pages/api/strings.js`** `POST ?action=X`, Supabase JWT, `body.site_key` = `siteKeyOf(serials)`:
+  `get` (labels + inverters in INV order + MPPTs active in the last 14 days of `mppt_daily`), `save {sn, mppt, label,
+  kw_dc}` (label trimmed, max 40, empty label + no size = row deleted; logs a `gen_events` row `string_label_change`
+  with before/after + actor/client like generator.js), `energy {from, to}` (<= 366 days; rows + `summarizeEnergy`;
+  flags always over the 7 days ending at `to`), `backfill {days}` (admin only, <= 60 days, skips stored inverter-days,
+  4 parallel CSV fetches, stops at 45 s and returns `remaining`; the UI loops until 0).
+- **`lib/strings/energy.js`** (pure, tested): `computeMpptDay` (trapezoid over real sample times, gaps > 15 min not
+  bridged, negatives clamp to 0; `samples` = readings > 1 W), `etodayFromRows` (max E-Today), `rowsToStore` (store
+  MPPTs active that day, plus ones active in the last 120 days so a dead string shows 0 kWh), `flagUnderperformers`
+  (median of the site's strings; basis kWh/kW only when EVERY string has a size, else raw kWh; flag > 15% below),
+  `summarizeEnergy` (per string, per day/month, E-Today counted once per inverter-day, cross-check > 10% =
+  mismatch), `nightlyDue`.
+- **`lib/midniteServer.js` `fetchDayExcel` / `parseDayExcelCsv`**: frozen copy of the `dayexcel` CSV fetch + parse
+  (MPPT V/A/W + E-Today only). `pages/api/midnite.js` is unchanged.
+- **Cron `pages/api/strings/daily.js`** (`vercel.json` `15 * * * *`, `CRON_SECRET`, `?dry=1`, `?site_key=` forces one
+  site): sites due when their local hour (gen_sites.timezone, else America/New_York) is 1-5 AM; collects YESTERDAY for
+  inverters with no row yet (so 1 AM does the work, 2-5 AM retry). All linked accounts, deduped by site_key, first
+  account wins; site name = CSV `MemberID`. Skips all Midnite logins when no tz is in its window. Budget 45 s.
+- **UI**: names via context (`components/strings/labels.jsx`: `useStringLabelsState(siteKey)` in the Dashboard,
+  `StringLabelsContext.Provider`, `useStringLabels().nameOf(sn, n)`, fallback "MPPT n"). Used by InverterCard,
+  InverterDetailPanel, the Day chart MPPT bands, Explorer `mppt{n}W/V/A` chip labels. **Settings → Strings**
+  (`StringsSettings.jsx`, only with a site open; Save shows once a row is edited). **Strings section at the bottom of
+  the Day tab** (`StringsSection.jsx`, no new TabBar item): range 7 days / 30 days / This month / This year (by month),
+  stacked bars by string (Month/Year bar rules: one `stackId`, `stackOffset="sign"`, `activeBar={false}`,
+  `cursor={false}`), table (kWh, kWh/kW, share of inverter), amber underperformer flags, cross-check note, admin
+  **Backfill 30 days**. Colors `STRING_COLORS`/`stringColor(mppt, invIndex)` in tokens.js: teal = MPPT 1, mustard =
+  MPPT 2, indigo = MPPT 3, a shade per inverter (clear of every existing series color).
+- Harness: `scripts/ui-check/fixtures-strings.mjs` (Wise Naples, INV-3 MPPT 2 shaded ~26% low); screens `strings`,
+  `settings-strings`.
+- **Unverified:** whether the CSV export returns data for dates more than 7 days back (backfill depends on it; the
+  Explorer only ever asks for <= 7 days). Run Backfill once and check `stored` vs `empty`.
+
 ## PWA (install + push), generator plan phase 4
 - `public/manifest.webmanifest` (name "Midnite Sentinel", short_name "Sentinel", standalone, background `#F7F4EF`,
   theme `#0D1F33`). Icons `public/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`

@@ -2,6 +2,19 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.0 (2026-11-12): String names and daily energy per string
+
+- Name each solar string (MPPT input) and optionally set its DC size in **Settings → Strings**. Names are per
+  inverter serial and MPPT number, and anyone with access to the site can edit them (shared viewers included).
+  Every change is logged with who made it.
+- The names show wherever MPPTs appear: Live inverter cards and the single-inverter view, the Day chart's
+  per-MPPT bands and tooltip, and Explorer's MPPT readings. Unnamed strings still read "MPPT 1".
+- New **Strings** section at the bottom of the Day tab: 7 days / 30 days / this month / this year, a stacked
+  daily bar per string, a table with kWh, kWh per kW and share of the inverter, an amber flag for any string more
+  than 15% below the others over 7 days, and a check that the strings add up to the inverter's own E-Today.
+- Energy per string is collected each night at 1 AM site time from the 5-minute export (a new hourly cron that
+  retries until 5 AM). Admins can backfill 30 days from the Strings section.
+
 ## 1.1.9 (2026-11-12): Generator activity log covers every change
 
 - Every generator state change is now in the site's Activity log with who made it: each user action records the

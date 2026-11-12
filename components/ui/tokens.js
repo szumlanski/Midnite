@@ -46,6 +46,17 @@ export const GEN_FORCE = "#DB2777";    // Run now
 export const GEN_SCHEDULE = "#0891B2"; // one-off and exercise schedules
 export const GEN_MANUAL = "#78716C";   // started at the unit
 
+// Strings / MPPTs (new in 1.2.0). One hue family per MPPT number, a shade per inverter, so the strings of
+// one inverter read as a set. Teal / mustard / indigo stay clear of the series colors above (blue
+// production, orange consumption, green battery, gray grid), the Day chart blue/orange shades and the
+// generator purple/pink/cyan.
+export const STRING_COLORS = {
+  1: ["#0D9488", "#14B8A6", "#0F766E", "#5EEAD4", "#115E59"],
+  2: ["#CA8A04", "#EAB308", "#A16207", "#FDE047", "#854D0E"],
+  3: ["#4F46E5", "#818CF8", "#4338CA", "#A5B4FC", "#3730A3"],
+};
+export const stringColor = (mppt, invIndex = 0) => { const s = STRING_COLORS[mppt] || STRING_COLORS[1]; return s[((invIndex % s.length) + s.length) % s.length]; };
+
 // Type scale and target size. Values switch at 768px in globals.css, so inline styles stay responsive.
 export const FS = {
   caption: "var(--fs-caption)",   // 11 desktop / 12 phone
