@@ -2,6 +2,14 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.11 (2026-11-12): Generator settings go to every inverter
+
+- On a parallel stack the generator settings must match on all inverters or nothing happens (OffTheHook). Every
+  generator write (Run now and its end, Stop, Return to automatic, Turn off, the Automatic switch, the scheduled
+  start/stop % changes) now goes to all inverters at the site at the same time. The Activity log shows each
+  inverter's result. The scheduled start/stop % changes are also written one register at a time now.
+- Generator leg voltages skip a single blank 5-minute sample.
+
 ## 1.2.10 (2026-11-12): Run now SOC writes in a safe order; generator leg voltages
 
 - Run now writes the stop % (100) first and then the start % (95) as separate writes; the combined write left

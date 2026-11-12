@@ -667,6 +667,10 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   **Slow confirmations (1.2.5):** a write the cloud accepted (RequestId) but not confirmed in time is `pending`, not a
   failure: the op continues and the force state is saved, so a late landing is labeled Run now and ends on time. Only
   a refused write fails; a failed user `start` puts 2136/AGS back. writeShadow re-reads up to 3x (cron: 0).
+  **All inverters (1.2.11, Jason):** every generator write (Run now/end/stop/auto steps, the Automatic switch, the
+  cron's threshold writes) goes to EVERY inverter at the site in parallel (`siteAutoIds` master first + `writeAll`):
+  on a parallel stack the settings must match or nothing happens. Reads still come from the master. If any
+  inverter's AutoId is missing the write is refused. The admin `genwrite` tool stays master-only.
   **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `212A`=100 THEN `2129`=95 (separate writes:
   a combined write left 95/35 on OffTheHook; restore lowers 2129 first, then 212A) because the inverter won't charge from the gen above its start/stop %; end/stop/auto put
   back `applied_start_pct`/`applied_stop_pct` (seeded from the inverter's 2129/212A on the first start if null).

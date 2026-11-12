@@ -20,7 +20,7 @@ import { DEFAULT_CONFIG, computeNextRun } from "@/lib/generator/core";
 import { genWiring } from "@/lib/generator/registers";
 import { planTick } from "@/lib/generator/tick";
 import {
-  findSiteInAccount, resolveMasterAutoId, ensureConfig, getConfig, patchConfig, logEvent, applyControl, SYSTEM_ACTOR, whoIs,
+  findSiteInAccount, resolveMasterAutoId, siteAutoIds, writeAll, ensureConfig, getConfig, patchConfig, logEvent, applyControl, SYSTEM_ACTOR, whoIs,
 } from "@/lib/generator/server";
 import { notifyGeneratorEvent } from "@/lib/generator/alerts";
 
@@ -100,6 +100,8 @@ async function tickSite(sb, gen, { dry, startedAt }) {
     const { auth, site } = hit;
     let autoId = null;
     try { autoId = resolveMasterAutoId(gen, site, auth); } catch (e) { out.masterError = e.message; }
+    let autoIds = autoId ? [autoId] : [];
+    try { if (autoId) autoIds = siteAutoIds(gen, site); } catch (e) { out.masterError = e.message; autoId = null; autoIds = []; }
 
     // Wiring, cached 1 h.
     let wiring = _wiring.get(site_key);
@@ -185,11 +187,11 @@ async function tickSite(sb, gen, { dry, startedAt }) {
           const sched = a.scheduleId ? (schedules || []).find(x => x.id === a.scheduleId) : null;
           const behalf = await whoIs(sb, a.op === "end" ? cfg.force_started_by : sched?.created_by);
           const r = await applyControl({
-            sb, auth, autoId, site_key, cfg, op: a.op, runMin: a.runMin, targetPct: a.targetPct,
+            sb, auth, autoId, autoIds, site_key, cfg, op: a.op, runMin: a.runMin, targetPct: a.targetPct,
             actor: { ...SYSTEM_ACTOR, onBehalfOf: behalf }, source: "cron", startedBy: null,
             action: a.op === "end" ? "cron_force_end" : "cron_schedule_start",
             extra: { reason: a.reason || null, schedule_id: a.scheduleId || null },
-          }, { writeShadow: (au, w) => writeShadow(au, w, { rereads: 0 }) });
+          }, { writeShadow: (au, w) => writeShadow(au, w, { tries: 3, rereads: 0 }) }); // up to 4 steps: accepted-but-slow = pending
           if (r.body?.config) cfg = r.body.config;
           done.push({ type: a.type, op: a.op, status: r.status, error: r.body?.error || null });
         } else if (a.type === "schedule_mark") {
@@ -203,8 +205,17 @@ async function tickSite(sb, gen, { dry, startedAt }) {
         } else if (a.type === "thresholds") {
           const before = { applied_start_pct: cfg.applied_start_pct, applied_stop_pct: cfg.applied_stop_pct };
           let r;
-          try { r = await writeShadow(auth, { autoId, writes: { "2129": a.start_pct, "212A": a.stop_pct } }); }
-          catch (e) { r = { verified: false, err: e.message }; }
+          // To every inverter, one register at a time, in the order that keeps start below stop (a combined
+          // 2129+212A write applied only 2129 on OffTheHook).
+          const fast = (au, w) => writeShadow(au, w, { tries: 4, rereads: 0 });
+          const raise = Number(a.stop_pct) >= Number(cfg.applied_stop_pct ?? 0);
+          const order = raise ? [["212A", a.stop_pct], ["2129", a.start_pct]] : [["2129", a.start_pct], ["212A", a.stop_pct]];
+          try {
+            const r1 = await writeAll(fast, auth, autoIds, { [order[0][0]]: order[0][1] });
+            const r2 = await writeAll(fast, auth, autoIds, { [order[1][0]]: order[1][1] });
+            r = { verified: r1.verified && r2.verified, err: [r1.err, r2.err].filter(Boolean).join("; ") || null,
+              before: { ...(r1.before || {}), ...(r2.before || {}) }, after: { ...(r1.after || {}), ...(r2.after || {}) }, per: [r1.per, r2.per] };
+          } catch (e) { r = { verified: false, err: e.message }; }
           const after = { start_pct: a.start_pct, stop_pct: a.stop_pct, from: a.from, window_id: a.window_id, inverter_before: r.before || null, inverter_after: r.after || null };
           if (r.verified) {
             _threshFail.delete(site_key);

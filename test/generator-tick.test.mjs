@@ -375,3 +375,16 @@ test("applyControl start: a refused write fails, and a user start puts 2136 back
   assert.deepEqual(writes, [{ "2136": 2 }, { "2136": 0 }]);
   assert.notEqual(sb.tables.gen_config[0].force_on, true);
 });
+
+import { writeAll, siteAutoIds } from "../lib/generator/server.js";
+test("writeAll: one write to every inverter; verified only when all are; siteAutoIds puts the master first", async () => {
+  const calls = [];
+  const w = async (_a, { autoId, writes }) => { calls.push([autoId, writes]); return autoId === "3" ? { verified: false, write: { RequestId: "r3" }, err: "slow" } : { verified: true, write: { RequestId: "r" + autoId }, after: writes }; };
+  const r = await writeAll(w, {}, ["1", "2", "3"], { "2156": 1 });
+  assert.equal(calls.length, 3);
+  assert.equal(r.verified, false);
+  assert.ok(r.write?.RequestId); // all accepted -> pending, not refused
+  const ids = siteAutoIds({ site_key: "A,B,C", master_sn: "B" }, { GoodsID: [{ GoodsID: "A", AutoID: 1 }, { GoodsID: "B", AutoID: 2 }, { GoodsID: "C", AutoID: 3 }] });
+  assert.deepEqual(ids, ["2", "1", "3"]);
+  assert.throws(() => siteAutoIds({ site_key: "A,B", master_sn: "A" }, { GoodsID: [{ GoodsID: "A", AutoID: 1 }] }), /B not found/);
+});

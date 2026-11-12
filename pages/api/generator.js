@@ -23,7 +23,7 @@ import { summarizeRuns } from "@/lib/generator/history";
 import { GEN_READ_CODES, genWiring } from "@/lib/generator/registers";
 import { agsForAutomatic, automaticFromAgs } from "@/lib/generator/control";
 import {
-  httpErr, dbCheck, findSiteInAccount, resolveMasterAutoId, getConfig, ensureConfig, patchConfig,
+  httpErr, dbCheck, findSiteInAccount, resolveMasterAutoId, siteAutoIds, writeAll, getConfig, ensureConfig, patchConfig,
   logEvent, applyControl, pick, SYSTEM_ACTOR,
 } from "@/lib/generator/server";
 import { getVapidPublicKey, pushToUser, parseSubscription } from "@/lib/push/server";
@@ -265,7 +265,7 @@ export default async function handler(req, res) {
         catch (e) { if (!dry) await logEvent(sb, site_key, actor, `control_${op}`, { after: { op }, success: false, error: e.message }); throw e; }
         const r = await applyControl({
           sb, auth: ctx.auth, autoId, site_key, cfg, op, runMin: body.runMin, targetPct: body.targetPct,
-          actor, source: "user", dry, startedBy: user.id,
+          actor, source: "user", dry, startedBy: user.id, autoIds: siteAutoIds(ctx.gen, ctx.site),
         }, op === "start"
           // Run now: hand the writes to the cloud and return fast (~5 s each). The app then shows "Start sent" and
           // checks every 5 s until the inverter accepts it or the run's time is up (Jason, 2026-11-12).
@@ -306,7 +306,7 @@ export default async function handler(req, res) {
         let autoId;
         try { autoId = resolveMaster(ctx); } catch (e) { await logEvent(sb, site_key, actor, action, { after: { ags }, success: false, error: e.message }); throw e; }
         let r;
-        try { r = await writeShadow(ctx.auth, { autoId, writes: { "2156": ags } }); } catch (e) { r = { verified: false, err: e.message }; }
+        try { r = await writeAll(writeShadow, ctx.auth, siteAutoIds(ctx.gen, ctx.site), { "2156": ags }); } catch (e) { r = { verified: false, err: e.message }; }
         if (!r.verified) {
           const msg = `The inverter did not confirm AGS ${body.enabled ? "Auto" : "Off"}${r.err ? ": " + r.err : ""}. Automatic control was not changed.`;
           await logEvent(sb, site_key, actor, action, { before: { enabled: cfg.enabled }, after: { ags }, success: false, error: msg });
