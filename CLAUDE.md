@@ -648,6 +648,12 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   reached, or the Stop button) = 2156 back to `saved_ags` (**the AGS setting before the run**, Jason 2026-11-12;
   Auto if none saved), then restore 2136. **stop** = 2156=2 (explicit Off) then restore 2136. **auto** = 2156=0
   then restore 2136.
+  **Automatic switch = AGS (Jason, 2026-11-12):** `setMaster {enabled}` writes `2156` (on = Auto 0, off = Off 2,
+  verified) and only then flips `gen_config.enabled`; during a Run now it doesn't write, it sets `saved_ags` so the
+  run's end applies the choice. `state` (live) syncs `enabled` to the real `2156` when no run is active (portal
+  changes show up). `stop` turns the switch off, `auto` on, `end` follows the restored AGS (`automaticAfterOp`).
+  Schedules run whether the switch is on or off (the run restores AGS when it ends). Helpers in `control.js`:
+  `agsForAutomatic`, `automaticFromAgs`.
   **Seeding (Jason, 2026-11-12):** the first time the server reads a site's inverter (`siteToggle` or a live `state`),
   `seedFromInverter` copies its `2129`/`212A`/`2136` into `default_start_pct`/`default_stop_pct`/`default_max_run_min`
   AND `applied_start_pct`/`applied_stop_pct`, only while `applied_start_pct` is null. So switching Automatic on never

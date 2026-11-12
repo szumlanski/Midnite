@@ -2,6 +2,17 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.1.8 (2026-11-12): Automatic control sets the inverter's AGS
+
+- The Automatic control switch now IS the inverter's AGS mode: on writes AGS Auto, off writes AGS Off (with a
+  warning that the generator then never starts on its own). Before, it never touched AGS, so Automatic did nothing
+  while AGS was Off.
+- The switch shows the inverter's real AGS, so a change made in the installer portal shows up in the app.
+- Turn generator off switches Automatic off; Return to automatic switches it on; a Run now ending follows the
+  restored setting. Scheduled runs work with Automatic on or off.
+- The app copies the inverter's own start/stop % and max run the first time it reads the site, so switching
+  Automatic on never overwrites them with the built-in 20/80.
+
 ## 1.1.7 (2026-11-11): Generator control, phase 3 (UI)
 
 - New **Generator** tab, only on sites an admin enabled. On phones it takes Explorer's tab bar slot and

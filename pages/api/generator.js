@@ -16,11 +16,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  supabaseAdmin, getSaasUser, fetchFlowRt, readShadow,
+  supabaseAdmin, getSaasUser, fetchFlowRt, readShadow, writeShadow,
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
 import { GEN_READ_CODES, genWiring } from "@/lib/generator/registers";
+import { agsForAutomatic, automaticFromAgs } from "@/lib/generator/control";
 import {
   httpErr, dbCheck, findSiteInAccount, resolveMasterAutoId, getConfig, ensureConfig, patchConfig,
   logEvent, applyControl, pick,
@@ -197,6 +198,13 @@ export default async function handler(req, res) {
           try { live.registers = await readShadow(ctx.auth, resolveMaster(ctx), GEN_READ_CODES); } catch (e) { live.registersError = e.message; }
           // 213F = 1: generator on the GRID terminals (its power shows in the grid fields); 2100 = 3: Off-Grid.
           if (live.registers) Object.assign(live, genWiring(live.registers));
+          // The switch shows the inverter's real AGS (a change made in the portal shows up here). Not during a
+          // Run now: AGS is On then and the switch keeps the setting the run's end will restore.
+          const realAuto = automaticFromAgs(live.registers?.["2156"]);
+          if (realAuto != null && cfgRow && !cfgRow.force_on && (!!cfgRow.enabled !== realAuto || Number(cfgRow.applied_ags) !== Number(live.registers["2156"]))) {
+            const synced = await patchConfig(sb, site_key, { enabled: realAuto, applied_ags: Number(live.registers["2156"]) }).catch(() => null);
+            if (synced) Object.assign(config, synced);
+          }
           if (live.registers && cfgRow && cfgRow.applied_start_pct == null) {
             const seeded = await seedFromInverter(sb, site_key, live.registers).catch(() => null);
             if (seeded) Object.assign(config, seeded);
@@ -244,10 +252,29 @@ export default async function handler(req, res) {
       }
 
       case "setMaster": {
+        // The Automatic switch IS the inverter's AGS mode: on = Auto (0), off = Off (2). Without AGS on Auto the
+        // inverter ignores its start/stop %, so the switch writes 2156 (Jason, 2026-11-12).
         if (typeof body.enabled !== "boolean") return res.status(400).json({ error: "enabled (true/false) required" });
         const cfg = await ensureConfig(sb, site_key);
-        const after = await patchConfig(sb, site_key, { enabled: body.enabled, config_rev: (cfg.config_rev || 1) + 1 });
-        await logEvent(sb, site_key, actor, body.enabled ? "master_on" : "master_off", { before: { enabled: cfg.enabled }, after: { enabled: after.enabled } });
+        const ags = agsForAutomatic(body.enabled);
+        const action = body.enabled ? "master_on" : "master_off";
+        // During a Run now, AGS is On. Don't cut the run: record the choice as the value the run's end restores.
+        if (cfg.force_on) {
+          const after = await patchConfig(sb, site_key, { enabled: body.enabled, saved_ags: ags, config_rev: (cfg.config_rev || 1) + 1 });
+          await logEvent(sb, site_key, actor, action, { before: { enabled: cfg.enabled, saved_ags: cfg.saved_ags }, after: { enabled: after.enabled, saved_ags: ags, note: "applied when the current run ends" } });
+          return res.json({ ok: true, config: after, deferred: true });
+        }
+        let autoId;
+        try { autoId = resolveMaster(ctx); } catch (e) { await logEvent(sb, site_key, actor, action, { after: { ags }, success: false, error: e.message }); throw e; }
+        let r;
+        try { r = await writeShadow(ctx.auth, { autoId, writes: { "2156": ags } }); } catch (e) { r = { verified: false, err: e.message }; }
+        if (!r.verified) {
+          const msg = `The inverter did not confirm AGS ${body.enabled ? "Auto" : "Off"}${r.err ? ": " + r.err : ""}. Automatic control was not changed.`;
+          await logEvent(sb, site_key, actor, action, { before: { enabled: cfg.enabled }, after: { ags }, success: false, error: msg });
+          return res.status(502).json({ error: msg });
+        }
+        const after = await patchConfig(sb, site_key, { enabled: body.enabled, applied_ags: ags, config_rev: (cfg.config_rev || 1) + 1 });
+        await logEvent(sb, site_key, actor, action, { before: { enabled: cfg.enabled, ags: r.before?.["2156"] ?? null }, after: { enabled: after.enabled, ags } });
         return res.json({ ok: true, config: after });
       }
 

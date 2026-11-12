@@ -119,11 +119,10 @@ test("exercise schedule due -> start and next_run_at moves a week on", () => {
   assert.equal(m.fired, false);
 });
 
-test("schedules: master off, forced run active, or missed -> skipped and marked, no write", () => {
+test("schedules: run with Automatic off; forced run active or missed -> skipped and marked, no write", () => {
   const s = { id: "s1", kind: "oneoff", enabled: true, fired: false, starts_at: "2026-11-11T16:59:00Z", duration_min: 30 };
   let p = planTick(base({ config: { enabled: false }, schedules: [s] }));
-  assert.equal(p.actions.find(a => a.type === "schedule_mark").skipped, "master_off");
-  assert.ok(!p.actions.some(a => a.type === "control"));
+  assert.equal(p.actions.find(a => a.type === "control").op, "start");
   p = planTick(base({ config: { force_on: true, force_until: "2026-11-11T18:00:00Z" }, schedules: [s] }));
   assert.equal(p.actions.find(a => a.type === "schedule_mark").skipped, "force_active");
   p = planTick(base({ schedules: [{ ...s, starts_at: new Date(NOW.getTime() - (MISSED_MIN + 1) * 60000).toISOString() }] }));
@@ -340,4 +339,14 @@ test("applyControl start refuses when 2156 can't be read (nothing written)", asy
   });
   assert.equal(r.status, 502);
   assert.equal(wrote, 0);
+});
+
+import { agsForAutomatic, automaticFromAgs } from "../lib/generator/control.js";
+test("Automatic switch <-> AGS: on = Auto (0), off = Off (2); On (1) shows as not automatic", () => {
+  assert.equal(agsForAutomatic(true), 0);
+  assert.equal(agsForAutomatic(false), 2);
+  assert.equal(automaticFromAgs(0), true);
+  assert.equal(automaticFromAgs("2"), false);
+  assert.equal(automaticFromAgs(1), false);
+  assert.equal(automaticFromAgs(null), null);
 });

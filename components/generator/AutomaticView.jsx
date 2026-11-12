@@ -33,7 +33,14 @@ export function AutomaticView({ state, siteKey, onChanged }) {
     finally { setBusy(false); }
   }
 
-  const setMaster = (on) => run(() => genApi("setMaster", { site_key: siteKey, enabled: on }), on ? "Automatic control on" : "Automatic control off");
+  // The switch IS the inverter's AGS: on = Auto, off = Off (no automatic starts at all). The write takes ~25 s.
+  const setMaster = async (on) => {
+    if (!on && !await confirmAlert("Turn off automatic generator starts?", {
+      message: "The inverter's AGS goes to Off. The generator will not start on its own, even if the battery runs low. Run now and schedules still work.",
+      action: "Turn off", destructive: true,
+    })) return;
+    run(() => genApi("setMaster", { site_key: siteKey, enabled: on }), on ? "Automatic control on (AGS Auto)" : "Automatic control off (AGS Off)");
+  };
   const saveDefaults = () => run(() => genApi("saveConfig", { site_key: siteKey, default_start_pct: Number(startPct), default_stop_pct: Number(stopPct), default_max_run_min: maxRun }), "Defaults saved");
   const move = (i, d) => {
     const ids = windows.map((w) => w.id);
@@ -57,12 +64,12 @@ export function AutomaticView({ state, siteKey, onChanged }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: FS.body, fontWeight: 700, color: TEXT }}>Automatic control</div>
-            <div style={{ fontSize: FS.footnote, color: MUTED, marginTop: 2 }}>Starts and stops the generator from the battery level.</div>
+            <div style={{ fontSize: FS.footnote, color: MUTED, marginTop: 2 }}>{busy ? "Sending to the inverter…" : cfg.force_on ? "A Run now is in progress. A change here takes effect when it ends." : "Sets the inverter\u2019s AGS to Auto (on) or Off (off). On Auto it starts and stops the generator from the battery level."}</div>
           </div>
           <Switch checked={!!cfg.enabled} onChange={setMaster} label="Automatic control" disabled={busy} />
         </div>
         <div style={{ marginTop: 12 }}>
-          <InfoNote>The inverter enforces the active window's start and stop % itself, so it keeps working if the internet drops.</InfoNote>
+          <InfoNote>The inverter enforces the active window's start and stop % itself, so it keeps working if the internet drops. A change made in the installer portal shows up here.</InfoNote>
         </div>
       </Card>
 
