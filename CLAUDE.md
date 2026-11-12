@@ -667,6 +667,9 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   **Slow confirmations (1.2.5):** a write the cloud accepted (RequestId) but not confirmed in time is `pending`, not a
   failure: the op continues and the force state is saved, so a late landing is labeled Run now and ends on time. Only
   a refused write fails; a failed user `start` puts 2136/AGS back. writeShadow re-reads up to 3x (cron: 0).
+  **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `2129`/`212A` = 95/100 (one multi-code
+  write, step `2129+212A`) because the inverter won't charge from the gen above its start/stop %; end/stop/auto put
+  back `applied_start_pct`/`applied_stop_pct` (seeded from the inverter's 2129/212A on the first start if null).
   **Run now phases (1.2.6):** the user `start` writes with `{tries:2, rereads:0}` and returns fast; ControlView shows
   Start sent (force_on, AGS not 1) -> Starting (AGS 1) -> Running (power seen); GeneratorTab polls `state` every 5 s
   while force_on and not running, else 30 s. No re-send: it waits until running or `force_until` (cron ends it).

@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.9 (2026-11-12): Run now charges even when the battery is above the start/stop %
+
+- The inverter will not charge from the generator when the battery is already above its generator start/stop SOC.
+  In SOC capacity mode (2124 = 0) Run now now also sets 2129/212A to 95/100, and the run's end (time up, target %,
+  Stop, Return to automatic, Turn off) puts back the site's normal values (seeded from the inverter on the first run).
+  Voltage capacity mode is unchanged. The Run now card says so.
+
 ## 1.2.8 (2026-11-12): Generator alerts for everyone, with who started it
 
 - Start alerts (email and push) now say who started the run: the person who pressed Run now, or who made the

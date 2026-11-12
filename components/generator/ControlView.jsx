@@ -198,6 +198,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
                     {tpv != null
                       ? <>Runs for <strong>{dur}</strong> or until the battery reaches <strong>{tpv}%</strong>, <strong>whichever comes first</strong>.</>
                       : <>Runs for <strong>{dur}</strong>, then stops.</>}
+                    {" "}While it runs, the generator start/stop battery % is set to <strong>95/100</strong> so the inverter charges from it{cfg.applied_start_pct != null && cfg.applied_stop_pct != null ? <>, then put back to <strong>{cfg.applied_start_pct}/{cfg.applied_stop_pct}</strong></> : ""}.
                     {" "}Afterwards the inverter goes back to <strong>{back}</strong>.
                     {" "}The time limit is also stored on the inverter, so it stops on time even if the internet drops{tpv != null ? "; the battery % needs the internet to be checked" : ""}.
                     {" "}Stop ends it at any time.
