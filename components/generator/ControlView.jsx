@@ -174,7 +174,26 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
           </div>
           <PendingNote text={busy} />
           <ErrorNote>{err}</ErrorNote>
-          <div style={{ marginTop: 12 }}><InfoNote>The run time is also written to the inverter as its own limit, so the generator stops even if the app loses contact.</InfoNote></div>
+          <div style={{ marginTop: 12 }}>
+            {/* Plain-language summary of exactly what this Run now will do, built from the inputs above. */}
+            <InfoNote>
+              {(() => {
+                const tpv = pctOrNull(target);
+                const dur = Number.isInteger(runMin) && runMin > 0 ? fmtDuration(runMin * 60) : "the time above";
+                const back = ags != null && AGS_LABEL[ags] ? AGS_LABEL[ags].toLowerCase() : "its current setting";
+                return (
+                  <>
+                    {tpv != null
+                      ? <>Runs for <strong>{dur}</strong> or until the battery reaches <strong>{tpv}%</strong>, <strong>whichever comes first</strong>.</>
+                      : <>Runs for <strong>{dur}</strong>, then stops.</>}
+                    {" "}Afterwards the inverter goes back to <strong>{back}</strong>.
+                    {" "}The time limit is also stored on the inverter, so it stops on time even if the internet drops{tpv != null ? "; the battery % needs the internet to be checked" : ""}.
+                    {" "}Stop ends it at any time.
+                  </>
+                );
+              })()}
+            </InfoNote>
+          </div>
         </Card>
       )}
 
