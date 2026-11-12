@@ -15,11 +15,12 @@
 //      observed_running/observed_at. Register writes go through applyControl / writeShadow only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { supabaseAdmin, fetchFlowRt, fetchSiteFlowRt, fetchInverterDetail, readShadow, writeShadow } from "@/lib/midniteServer";
+import { supabaseAdmin, fetchFlowRt, fetchSiteFlowRt, fetchInverterDetail, readShadow, writeShadow, fetchGenLegs } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, computeNextRun } from "@/lib/generator/core";
 import { genWiring } from "@/lib/generator/registers";
 import { planTick } from "@/lib/generator/tick";
 import { planResync, RESYNC_CODES } from "@/lib/generator/resync";
+import { planWatchdog } from "@/lib/generator/watchdog";
 import { automaticFromAgs } from "@/lib/generator/control";
 import {
   findSiteInAccount, resolveMasterAutoId, siteAutoIds, writeAll, ensureConfig, getConfig, patchConfig, logEvent, applyControl, SYSTEM_ACTOR, whoIs,
@@ -50,7 +51,7 @@ function authorized(req) {
 
 const avgPos = (xs) => { const v = (xs || []).map(Number).filter(x => Number.isFinite(x) && x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 
-async function readLive(auth, sn, wiring, serials) {
+async function readLive(auth, sn, wiring, serials, master = {}) {
   const live = { ok: false };
   let flow = null, status = null;
   // Generator/grid power summed over every inverter at the site (the master alone shows only its share).
@@ -58,6 +59,16 @@ async function readLive(auth, sn, wiring, serials) {
   if (flow && flow.online !== false) {
     Object.assign(live, { ok: true, soc: flow.soc, genW: flow.gen, genV: flow.genV, genHz: flow.genHz, gridW: flow.grid, gridV: flow.gridV, gridHz: flow.gridHz, time: flow.time });
   } else if (flow) live.offline = true;
+  // Generator leg voltage from the live status call (what the MNP app shows). A generator that is running but not
+  // yet being drawn on reads 0 W, so voltage is what tells "running" apart (Jason: these inverters are slow to
+  // start charging from it).
+  if (wiring?.genLocation !== "grid" && live.genV == null && master.autoId && master.memberAutoId) {
+    try {
+      const g = await fetchGenLegs(auth, master.autoId, master.memberAutoId);
+      const v = avgPos([g?.l1?.v, g?.l2?.v]);
+      if (v != null || g) { live.genV = v ?? 0; live.genHz = live.genHz ?? g?.hz ?? null; live.genLegs = g ? { l1: g.l1, l2: g.l2, hz: g.hz } : null; if (!live.ok && g) live.ok = true; }
+    } catch (e) { live.genLegsError = e.message; }
+  }
   // 5-min status: SOC fallback, and grid V/Hz on grid-side generators when the live feed lacks them.
   const needStatus = !live.ok || !(live.soc > 0) || (wiring?.genLocation === "grid" && live.gridV == null);
   if (needStatus && !live.offline) {
@@ -121,7 +132,7 @@ async function tickSite(sb, gen, { dry, startedAt }) {
     wiring = wiring || { genLocation: null, offGrid: null, capacityMode: null };
     out.wiring = { genLocation: wiring.genLocation, offGrid: wiring.offGrid, capacityMode: wiring.capacityMode };
 
-    const live = gen.master_sn ? await readLive(auth, gen.master_sn, wiring, site_key.split(",")) : { ok: false };
+    const live = gen.master_sn ? await readLive(auth, gen.master_sn, wiring, site_key.split(","), { autoId, memberAutoId: site?.MemberAutoID ?? auth?.memberAutoId }) : { ok: false };
     out.live = live;
 
     const [{ data: windows }, { data: schedules }, { data: openRuns }] = await Promise.all([
@@ -240,11 +251,32 @@ async function tickSite(sb, gen, { dry, startedAt }) {
       }
     }
 
+    // ── Watchdog: did the generator really start / really stop? (Jason, 2026-11-12: slow inverters, so wait and
+    // check.) Same for Run now, one-off and exercise runs. A generator still running 5 min after a run ended gets
+    // AGS Off forced on every inverter until it is seen off.
+    let overrides = {};
+    try {
+      const { data: recent } = await sb.from("gen_events").select("action,created_at").eq("site_key", site_key).order("created_at", { ascending: false }).limit(60);
+      const wd = planWatchdog({ cfg, running: plan.running ?? null, now, events: recent || [] });
+      out.watchdog = { ...wd.info, forceOff: wd.forceOff, actions: wd.actions.map(a => a.action) };
+      if (wd.forceOff) overrides = { "2156": 2 };
+      for (const a of wd.actions) {
+        const text = {
+          start_confirmed: `The generator is running (seen ${a.minutes} min after the start).`,
+          start_not_confirmed: `The generator has not started ${a.minutes} minutes after the start command. The start settings are being re-sent to every inverter every minute. Check the generator and its start wiring.`,
+          stop_confirmed: `The generator is off (checked ${a.minutes} min after the run ended${a.forced ? ", after forcing AGS Off" : ""}).`,
+          watchdog_stop_sent: `The generator was still running ${a.minutes} minutes after the run ended. AGS Off was sent to every inverter (attempt ${a.attempt}); it stays Off until the generator is seen stopped, then goes back to normal.`,
+        }[a.action];
+        await logEvent(sb, site_key, SYSTEM_ACTOR, a.action, { after: { minutes: a.minutes ?? null, attempt: a.attempt ?? null, note: text }, success: a.action !== "start_not_confirmed" && a.action !== "watchdog_stop_sent", source: "cron" });
+        if (a.alert) await notifyGeneratorEvent({ ...gen, config: cfg }, "warn", { title: a.action === "start_not_confirmed" ? "did not start" : "did not stop", text, at: now });
+      }
+    } catch (e) { out.watchdog = { error: e.message }; console.error("[generator tick] watchdog", site_key, e.message); }
+
     // ── Resync: make every inverter hold the generator settings the app expects, retried every minute until it
     // sticks (Jason, 2026-11-12). Skipped in a tick that already sent a control op or threshold write.
     const wrote = done.some(d => d.type === "control" || d.type === "thresholds");
     if (!wrote && autoIds.length && BUDGET_MS - (Date.now() - startedAt) > RESYNC_NEEDS_MS) {
-      try { out.resync = await resyncSite({ sb, site_key, auth, autoIds, cfg, socMode: wiring.capacityMode === 0 }); if (out.resync.config) cfg = out.resync.config; }
+      try { out.resync = await resyncSite({ sb, site_key, auth, autoIds, cfg, socMode: wiring.capacityMode === 0, overrides }); if (out.resync.config) cfg = out.resync.config; }
       catch (e) { out.resync = { error: e.message }; console.error("[generator tick] resync", site_key, e.message); }
     }
     return { ...out, done };
@@ -260,15 +292,15 @@ async function tickSite(sb, gen, { dry, startedAt }) {
 
 // Read 2156/2136/2129/212A on every inverter, then rewrite whatever differs (planResync). Writes are fire-and-check:
 // each is sent and briefly polled; the next tick's read decides whether it stuck and retries if not.
-async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode }) {
+async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode, overrides = {} }) {
   const inverters = await Promise.all(autoIds.map(id => readShadow(auth, id, RESYNC_CODES).then(regs => ({ autoId: id, regs }), e => ({ autoId: id, error: e.message }))));
   const { data: last } = await sb.from("gen_events").select("created_at,action").eq("site_key", site_key)
-    .or("action.like.control_%,action.like.cron_%,action.like.master_%,action.like.resync%").order("created_at", { ascending: false }).limit(1);
+    .or("action.like.control_%,action.like.cron_%,action.like.master_%,action.like.resync%,action.like.watchdog_%").order("created_at", { ascending: false }).limit(1);
   const lastAt = last?.[0]?.created_at ? new Date(last[0].created_at).getTime() : 0;
   // After a Run now ends (saved_max_run_min still set), the normal settings are ENFORCED, never adopted from the
   // master, until three checks in a row find every inverter right (Jason, 2026-11-12).
   const restoring = !cfg.force_on && cfg.saved_max_run_min != null;
-  const plan = planResync({ cfg, socMode, inverters, recentAppWrite: restoring || Date.now() - lastAt < APP_WRITE_GRACE_MS });
+  const plan = planResync({ cfg, socMode, inverters, overrides, recentAppWrite: restoring || Date.now() - lastAt < APP_WRITE_GRACE_MS });
   const out = { mismatched: plan.mismatched, adopt: plan.adopt, writes: plan.writes.length, allMatch: plan.allMatch, unreadable: inverters.filter(x => x.error).map(x => x.autoId) };
   let config = null;
   // Adopt a change made outside the app (on the master) so the app stops fighting it.

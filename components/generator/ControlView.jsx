@@ -23,7 +23,10 @@ export function observedGen(state) {
   if (!f) return { known: false, running: false, watts: null };
   // Generator on the grid terminals (213F = 1): its power arrives in the grid field.
   const watts = state?.genLocation === "grid" ? Math.max(0, Number(f.grid) || 0) : Math.max(0, Number(f.gen) || 0);
-  return { known: true, running: watts > 20, watts };
+  // A running generator the inverter isn't drawing on yet reads 0 W, so leg voltage counts too.
+  const gl = state?.live?.genLegs;
+  const volts = state?.genLocation === "grid" ? null : Math.max(Number(gl?.l1?.v) || 0, Number(gl?.l2?.v) || 0);
+  return { known: true, running: watts > 20 || (volts != null && volts > 50), watts };
 }
 
 function useNow(ms = 1000) {

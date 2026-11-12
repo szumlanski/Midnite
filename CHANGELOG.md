@@ -2,6 +2,17 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.16 (2026-11-12): Generator watchdog: check that it really started and really stopped
+
+- Run now, one-off and exercise runs all use the same start and end steps (AGS On + run cap + 95/100, then back).
+- After a start, the server checks every minute that the generator is running. If it is not running 10 minutes
+  after the start, it logs it and sends an alert (the start settings keep being re-sent every minute).
+- After a run ends, it checks again 5 minutes later. If the generator is still running, AGS Off is forced on every
+  inverter and kept there until the generator is seen off, then the normal setting goes back; an alert is sent,
+  repeated every 5 minutes while it keeps running. "Return to automatic" is left to the inverter's own start/stop.
+- "Running" now also counts generator leg voltage (live status), because the inverters are slow to start drawing
+  on a generator that is already running (0 W but 120 V).
+
 ## 1.2.15 (2026-11-12): AGS "On" is never the normal setting
 
 - An earlier failed start left the inverter on AGS On, and the app then treated On as the setting to go back to,

@@ -52,3 +52,9 @@ test("AGS On is never a resting value: saved, restored, enforced or adopted as A
   assert.deepEqual(p.adopt, {});
   assert.deepEqual(p.writes.map(w => [w.autoId, w.code, w.value]), [["m", "2156", 0], ["a", "2156", 0]]);
 });
+
+test("planResync overrides: the watchdog's forced Off goes to every inverter and is never adopted", () => {
+  const p = planResync({ cfg: { applied_ags: 0 }, overrides: { "2156": 2 }, inverters: [inv("m", { "2156": "0" }), inv("a", { "2156": "1" })] });
+  assert.deepEqual(p.adopt, {});
+  assert.deepEqual(p.writes.map(w => [w.autoId, w.code, w.value]), [["m", "2156", 2], ["a", "2156", 2]]);
+});

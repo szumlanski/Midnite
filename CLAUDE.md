@@ -683,6 +683,12 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   **AGS On is never resting (1.2.15):** `restingAgs()` in control.js maps 1 -> 0 for the saved pre-run AGS, the end
   restore, the resync's desired 2156, and the UI "goes back to" text; resync never adopts a master reading 1 and the
   `state` sync ignores 1 outside a run. A leftover On had kept OffTheHook's generator running.
+  **Watchdog (1.2.16, Jason):** pure `lib/generator/watchdog.js` `planWatchdog` runs in the tick before resync. During a
+  run: `start_confirmed` once seen running; `start_not_confirmed` + alert if not running 10 min after the start. After
+  an end (end/stop/cron_force_end; not control_auto) within 60 min: `stop_confirmed` once seen off at >= 5 min; if
+  still running at 5 min, `watchdog_stop_sent` + alert (every 5 min) and resync `overrides` {2156: 2} on every
+  inverter until seen off. Running also counts gen leg V > 50 from `fetchGenLegs` (0 W while the inverter is slow to
+  draw). Alerts use `notifyGeneratorEvent(site,'warn',{title,text})`. One-off/exercise runs share the same path.
   **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `212A`=100 THEN `2129`=95 (separate writes:
   a combined write left 95/35 on OffTheHook; restore lowers 2129 first, then 212A) because the inverter won't charge from the gen above its start/stop %; end/stop/auto put
   back `applied_start_pct`/`applied_stop_pct` (seeded from the inverter's 2129/212A on the first start if null).
