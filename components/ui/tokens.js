@@ -36,6 +36,16 @@ export const CHART_CONS = "#F97316";
 export const CHART_BAT = "#22C55E";
 export const CHART_GRID = "#94A3B8";
 
+// Generator (new in 1.1.7). Picked to stay clear of the four series colors above and of the semantic
+// solar/battery/grid colors. GEN is the generator's own color (icons, running dot); GEN_TEXT is its
+// text-safe twin (7.1:1). History chart series by run source:
+export const GEN = "#7C3AED";
+export const GEN_TEXT = "#6D28D9";
+export const GEN_AUTO = "#8B5CF6";     // automatic (battery windows / native AGS)
+export const GEN_FORCE = "#DB2777";    // Run now
+export const GEN_SCHEDULE = "#0891B2"; // one-off and exercise schedules
+export const GEN_MANUAL = "#78716C";   // started at the unit
+
 // Type scale and target size. Values switch at 768px in globals.css, so inline styles stay responsive.
 export const FS = {
   caption: "var(--fs-caption)",   // 11 desktop / 12 phone

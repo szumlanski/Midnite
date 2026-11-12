@@ -695,6 +695,30 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   `{publicKey}`, `pushSubscribe {subscription}` (PushSubscription JSON, upsert by endpoint for this user),
   `pushUnsubscribe {endpoint}`, `pushTest` (test push to the caller; 404 when they have no subscription).
 
+### Generator UI (Phase 3, 1.1.7, `components/generator/`)
+- **Tab**: `pages/index.jsx` calls `state {site_key, live:false}` on each site change (`gen` state); `site.enabled`
+  shows `GEN_TAB`. 403/404/any error hides it. Desktop: Segmented gets Generator before Admin. Phone: TabBar stays
+  5 items, Generator replaces Explorer and Explorer moves to the "..." menu (`AppHeader menuTabs`). Deep link
+  `tab=generator` falls back to Live when the site is not enabled. The SHARED badge reads "Shared · view only,
+  generator control allowed" on enabled sites.
+- `GeneratorTab.jsx`: Segmented Control / Automatic / Schedules / History / Activity / Alerts (last view in
+  `localStorage.midnite_gen_view`). Control polls `state` with live reads every 30 s via `usePolling` (hidden tab =
+  no calls); other views reload with `live:false`. `shared.jsx` = `genApi` (JWT + accountId, throws the server's
+  error text with `e.status`), form bits, `FreshChip` (stamps only when `live.flow.time` advances).
+- `ControlView.jsx`: running = observed gen W > 20 (grid W when `genLocation==='grid'`), label "Generator (grid
+  terminals)". Run now = disclaimer Sheet once per user (`localStorage midnite_gen_disclaimer_v1:<email>`), then
+  `confirmAlert`, then `control start`. During a run the big **Stop generator** = `control end` (ends the run, AGS back
+  to its pre-run value, `saved_ags`); secondary **Return to automatic** = `auto`, **Turn generator off** = `stop` (AGS
+  Off, no automatic starts; behind a destructive confirm). Inverter mode (AGS 2156) shows in the status card. A ref blocks double taps; "Sending to the inverter..." shows during the
+  ~25 s write; server errors are shown verbatim.
+- `AlertsView.jsx`: push via `lib/push/client.js` + `pushKey`/`pushSubscribe`/`pushUnsubscribe`/`pushTest`
+  (404/400 = "not switched on yet"). iPhone outside the installed app is told to Add to Home Screen.
+- `GeneratorAdminCard.jsx` (top of AdminPanel): enable Switch + master pills (preselects `2452-40920023PH`),
+  `siteToggle`; shows stored master and who last enabled/disabled it (from `events`).
+- History chart follows the bar rules; colors `GEN_AUTO/GEN_FORCE/GEN_SCHEDULE/GEN_MANUAL` in tokens.js.
+- Harness: `scripts/ui-check/fixtures-gen.mjs` answers `/api/generator` (OffTheHook enabled mid-run, others 404);
+  screens `gen-control`, `gen-automatic`, `gen-window`, `gen-schedules`, `gen-history`, `gen-activity`, `gen-alerts`.
+
 ## PWA (install + push), generator plan phase 4
 - `public/manifest.webmanifest` (name "Midnite Sentinel", short_name "Sentinel", standalone, background `#F7F4EF`,
   theme `#0D1F33`). Icons `public/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`

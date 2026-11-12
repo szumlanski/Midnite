@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 import { respond, KNOWN_ACTIONS, ACCOUNT_ID, USER } from "./fixtures.mjs";
+import { genRespond } from "./fixtures-gen.mjs";
 
 const DEFAULT_OUT = "/tmp/claude-0/-home-user-Midnite/1064332e-dd00-5b3f-aac2-b8d7bf1b365e/scratchpad/shots";
 const SUPABASE_URL = process.env.UI_CHECK_SUPABASE_URL || "https://stub.supabase.co";
@@ -44,7 +45,7 @@ const VIEWPORTS = [
   { w: 390, h: 844, dsf: 2, mobile: true },
   { w: 1280, h: 800, dsf: 1, mobile: false },
 ];
-const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings", "alert", "toast", "install"];
+const APP_SCREENS = ["fleet", "live", "live-scrolled", "menu", "day", "month", "year", "explorer", "admin", "settings", "settings-alerts", "settings-sharing", "share", "inverter", "compare", "inv-settings", "alert", "toast", "install", "gen-control", "gen-automatic", "gen-window", "gen-schedules", "gen-history", "gen-activity", "gen-alerts"];
 
 const log = (...m) => process.stderr.write(m.join(" ") + "\n");
 const summary = { screens: 0, errs: {}, blocked: 0, failedSteps: {} };
@@ -88,6 +89,15 @@ async function installRoutes(ctx, abortedUrls) {
           try { body = req.postDataJSON() || {}; } catch { body = {}; }
           if (!KNOWN_ACTIONS.has(action)) fallbackActions[action] = (fallbackActions[action] || 0) + 1;
           return await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(respond(action, body)) });
+        }
+        if (url.pathname === "/api/generator" && req.method() === "POST") {
+          let body = {};
+          try { body = req.postDataJSON() || {}; } catch { body = {}; }
+          const r = genRespond(url.searchParams.get("action") || "", body);
+          // A 404 for a site without generator control is the expected "hide the tab" answer; the
+          // browser still logs it as a failed resource, so count it as noise like our own aborts.
+          if (r.status >= 400) abortedUrls.add(req.url());
+          return await route.fulfill({ status: r.status, contentType: "application/json", body: JSON.stringify(r.body) });
         }
         return await route.continue();
       }
@@ -454,6 +464,43 @@ async function runViewport(browser, vp) {
     await page.getByRole("button", { name: "Inverter settings" }).first().click();
     await page.locator('[role="dialog"] .ui-group').first().waitFor({ timeout: 15000 });
   })) await shoot(page, idle, "inv-settings", { full: false });
+
+  // ── Generator (OffTheHook is the only generator-enabled fixture site) ──
+  screen = "gen-control";
+  const genOk = liveOk && await step("gen-control", async () => {
+    await page.evaluate(() => localStorage.setItem("midnite_selected_site", "OffTheHook"));
+    await page.goto(BASE, { waitUntil: "load" });
+    await page.locator(".inv-card, .ui-card").first().waitFor({ timeout: 20000 });
+    await page.getByRole("button", { name: "Generator", exact: true }).or(page.getByRole("tab", { name: "Generator", exact: true })).first().waitFor({ timeout: 15000 });
+    await clickTab("Generator");
+    await page.getByText("Run in progress", { exact: true }).first().waitFor({ timeout: 15000 });
+  });
+  if (genOk) await shoot(page, idle, "gen-control");
+  for (const [name, label, ready] of [
+    ["gen-automatic", "Automatic", () => page.getByText("Time windows", { exact: true }).first().waitFor({ timeout: 10000 })],
+    ["gen-schedules", "Schedules", () => page.getByText("One-off runs", { exact: true }).first().waitFor({ timeout: 10000 })],
+    ["gen-history", "History", async () => { await page.getByText("Run time per day", { exact: true }).first().waitFor({ timeout: 10000 }); await page.locator(".recharts-surface").first().waitFor({ timeout: 10000 }); }],
+    ["gen-activity", "Activity", () => page.getByText(/^Everything anyone did/).first().waitFor({ timeout: 10000 })],
+    ["gen-alerts", "Alerts", () => page.getByText(/Push alerts are (on|off) for this device|support push alerts|installed app/).first().waitFor({ timeout: 10000 })],
+  ]) {
+    screen = name;
+    if (!genOk) { summary.failedSteps[key(name)] = "skipped: generator tab did not open"; continue; }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (await step(name, async () => { await page.getByRole("tab", { name: label, exact: true }).first().click(); await ready(); })) await shoot(page, idle, name);
+    if (name === "gen-automatic") {
+      screen = "gen-window";
+      if (await step("gen-window", async () => {
+        await page.getByRole("button", { name: "Add window", exact: true }).first().click();
+        await page.getByRole("heading", { name: "New time window" }).first().waitFor({ timeout: 5000 });
+      })) {
+        await shoot(page, idle, "gen-window", { full: false });
+        await page.keyboard.press("Escape");
+        await page.locator('[role="dialog"]').first().waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      }
+    }
+  }
+  // Leave the next run on the Control view.
+  await page.evaluate(() => { try { localStorage.removeItem("midnite_gen_view"); } catch { /* ignore */ } });
 
   await ctx.close();
 
