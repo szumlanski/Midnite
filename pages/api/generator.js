@@ -28,7 +28,7 @@ import {
 } from "@/lib/generator/server";
 import { getVapidPublicKey, pushToUser, parseSubscription } from "@/lib/push/server";
 
-export const config = { maxDuration: 60 }; // a start = two verified writes, up to ~25 s each
+export const config = { maxDuration: 180 }; // a start = two verified writes, up to ~35 s each, plus a put-back on failure
 
 function requireSiteKey(body) {
   const k = String(body?.site_key || "");

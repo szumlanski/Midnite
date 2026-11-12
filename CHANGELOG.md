@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.4 (2026-11-12): Run now write confirmation
+
+- Inverter writes now wait longer for the inverter to confirm (re-reads the value up to 3 more times, 3 s apart),
+  and a failed write says why (rejected by the cloud, or what the inverter reads back).
+- A failed Run now puts the inverter's own max run time (2136) and AGS (2156) back, so a short cap is never left
+  behind to limit the automatic runs. The cron keeps its old timing.
+
 ## 1.2.3 (2026-11-12): Strings moved to the Month and Year tabs
 
 - The Strings chart left the bottom of the Day tab. Month and Year now have a **Site | Strings** switch above the

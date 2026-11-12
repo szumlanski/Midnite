@@ -133,6 +133,7 @@ test("writeShadow: gives up after 10 polls and reports not verified", async () =
   assert.equal(r.verified, false);
   assert.equal(r.result, null);
   assert.equal(api.calls.filter(c => c.path.endsWith("getDeviceShadowResult")).length, 10);
+  assert.match(r.err, /no confirmation from the inverter.*2156=0/);
 });
 
 test("writeShadow: a failed write call returns err, no polling", async () => {

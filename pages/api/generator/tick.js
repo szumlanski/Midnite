@@ -182,7 +182,7 @@ async function tickSite(sb, gen, { dry, startedAt }) {
             actor: { ...SYSTEM_ACTOR, onBehalfOf: behalf }, source: "cron", startedBy: null,
             action: a.op === "end" ? "cron_force_end" : "cron_schedule_start",
             extra: { reason: a.reason || null, schedule_id: a.scheduleId || null },
-          });
+          }, { writeShadow: (au, w) => writeShadow(au, w, { rereads: 0 }) });
           if (r.body?.config) cfg = r.body.config;
           done.push({ type: a.type, op: a.op, status: r.status, error: r.body?.error || null });
         } else if (a.type === "schedule_mark") {
