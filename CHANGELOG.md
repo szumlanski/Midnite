@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.13 (2026-11-12): Run now end is checked three times
+
+- After a Run now ends, the server keeps checking all inverters every minute and re-sends anything that is not
+  back to normal. It only counts the restore as done after three checks in a row find every inverter right; any
+  re-send restarts the count. Until then the Control card says the normal settings are being put back, and the
+  Activity log shows each check.
+
 ## 1.2.12 (2026-11-12): Generator settings are checked every minute until they stick
 
 - Every minute the server reads the generator settings (AGS, max run time, start/stop %) on every inverter and sends

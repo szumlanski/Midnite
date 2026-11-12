@@ -154,6 +154,9 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
             </InfoNote>
           </div>
         )}
+        {!cfg.force_on && cfg.saved_max_run_min != null && (
+          <div style={{ marginTop: 8 }}><PendingNote text="The run has ended. Putting the normal generator settings back on every inverter and checking each minute until three checks in a row match." /></div>
+        )}
         {state.live?.flowError && <InfoNote icon="alert">Couldn't read live power: {state.live.flowError}</InfoNote>}
         {!state.live && <div style={{ marginTop: 10 }}><InfoNote icon="alert">Live readings are not available for this account right now.</InfoNote></div>}
         {state.offGrid && state.genLocation === "grid" && <div style={{ marginTop: 8 }}><InfoNote>This site is off grid, so grid power here is the generator.</InfoNote></div>}

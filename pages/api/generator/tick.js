@@ -265,7 +265,10 @@ async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode }) {
   const { data: last } = await sb.from("gen_events").select("created_at,action").eq("site_key", site_key)
     .or("action.like.control_%,action.like.cron_%,action.like.master_%,action.like.resync%").order("created_at", { ascending: false }).limit(1);
   const lastAt = last?.[0]?.created_at ? new Date(last[0].created_at).getTime() : 0;
-  const plan = planResync({ cfg, socMode, inverters, recentAppWrite: Date.now() - lastAt < APP_WRITE_GRACE_MS });
+  // After a Run now ends (saved_max_run_min still set), the normal settings are ENFORCED, never adopted from the
+  // master, until three checks in a row find every inverter right (Jason, 2026-11-12).
+  const restoring = !cfg.force_on && cfg.saved_max_run_min != null;
+  const plan = planResync({ cfg, socMode, inverters, recentAppWrite: restoring || Date.now() - lastAt < APP_WRITE_GRACE_MS });
   const out = { mismatched: plan.mismatched, adopt: plan.adopt, writes: plan.writes.length, allMatch: plan.allMatch, unreadable: inverters.filter(x => x.error).map(x => x.autoId) };
   let config = null;
   // Adopt a change made outside the app (on the master) so the app stops fighting it.
@@ -295,9 +298,21 @@ async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode }) {
     await logEvent(sb, site_key, SYSTEM_ACTOR, "resync_write", {
       after: { inverters: results, note: "An inverter did not hold the expected generator setting, so it was sent again. This repeats every minute until every inverter matches." },
       success: results.every(x => x.results.every(y => y.verified || y.accepted)), source: "cron" });
-  } else if (plan.allMatch && !cfg.force_on && cfg.saved_max_run_min != null) {
-    // Every inverter now holds the pre-run max run time again: the put-back is done.
-    config = await patchConfig(sb, site_key, { saved_max_run_min: null });
+  } else if (plan.allMatch && restoring) {
+    // Every inverter is back on the normal settings. Count consecutive good checks since the run ended (or since the
+    // last resend); after the third, the put-back is confirmed and the check stops treating this as a restore.
+    const { data: recent } = await sb.from("gen_events").select("action").eq("site_key", site_key).order("created_at", { ascending: false }).limit(30);
+    let n = 0;
+    for (const e of recent || []) { if (e.action === "end_check_ok") n++; else if (e.action === "resync_write" || /^(control_(end|stop|auto)|cron_force_end)$/.test(e.action)) break; }
+    n += 1;
+    const settings = Object.fromEntries(inverters.map(x => [x.autoId, x.regs]));
+    if (n >= 3) {
+      config = await patchConfig(sb, site_key, { saved_max_run_min: null });
+      await logEvent(sb, site_key, SYSTEM_ACTOR, "end_confirmed", { after: { checks: n, desired: plan.desired, inverters: settings, note: "Three checks in a row found every inverter back on the normal generator settings." }, source: "cron" });
+    } else {
+      await logEvent(sb, site_key, SYSTEM_ACTOR, "end_check_ok", { after: { check: n, of: 3, desired: plan.desired, inverters: settings }, source: "cron" });
+    }
+    out.restoreCheck = n;
   }
   return { ...out, config };
 }
