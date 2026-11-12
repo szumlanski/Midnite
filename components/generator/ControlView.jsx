@@ -106,7 +106,8 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
   }
 
   const sp = state.decision?.setpoint;
-  const savedAgsLabel = cfg.saved_ags != null && AGS_LABEL[Number(cfg.saved_ags)] ? AGS_LABEL[Number(cfg.saved_ags)].toLowerCase() : "its previous setting";
+  const savedBack = cfg.saved_ags != null ? (Number(cfg.saved_ags) === 1 ? 0 : Number(cfg.saved_ags)) : null;
+  const savedAgsLabel = savedBack != null && AGS_LABEL[savedBack] ? AGS_LABEL[savedBack].toLowerCase() : "its previous setting";
   return (
     <>
       <Card>
@@ -219,7 +220,8 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
               {(() => {
                 const tpv = pctOrNull(target);
                 const dur = Number.isInteger(runMin) && runMin > 0 ? fmtDuration(runMin * 60) : "the time above";
-                const backCode = cfg.saved_ags != null ? Number(cfg.saved_ags) : ags;
+                const raw = cfg.saved_ags != null ? Number(cfg.saved_ags) : ags;
+                const backCode = raw === 1 ? 0 : raw; // never "goes back to forced on"; On is only for the run itself
                 const back = backCode != null && AGS_LABEL[backCode] ? AGS_LABEL[backCode].toLowerCase() : "its current setting";
                 return (
                   <>

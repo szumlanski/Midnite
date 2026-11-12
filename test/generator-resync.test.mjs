@@ -39,3 +39,16 @@ test("planResync: lowering start/stop writes start first; all matching = allMatc
   const ok = planResync({ cfg, socMode: true, inverters: [inv("m", { "2156": "0", "2129": "15", "212A": "35" })] });
   assert.equal(ok.allMatch, true);
 });
+
+import { planControl, restingAgs } from "../lib/generator/control.js";
+test("AGS On is never a resting value: saved, restored, enforced or adopted as Auto instead", () => {
+  assert.equal(restingAgs(1), 0); assert.equal(restingAgs(2), 2); assert.equal(restingAgs(null), null);
+  // A start while the inverter was left On saves Auto as the value to go back to.
+  assert.equal(planControl("start", { runMin: 5, current2136: "0", current2156: "1" }).saveAgs, 0);
+  // An end with saved On goes back to Auto.
+  assert.equal(planControl("end", { saved: 0, savedAgs: 1 }).ags, 0);
+  // Outside a run: applied On is enforced as Auto, and a master reading On is rewritten, never adopted.
+  const p = planResync({ cfg: { applied_ags: 1 }, inverters: [inv("m", { "2156": "1" }), inv("a", { "2156": "1" })] });
+  assert.deepEqual(p.adopt, {});
+  assert.deepEqual(p.writes.map(w => [w.autoId, w.code, w.value]), [["m", "2156", 0], ["a", "2156", 0]]);
+});

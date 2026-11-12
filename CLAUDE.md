@@ -680,6 +680,9 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   cleared only after THREE consecutive
   minute checks find every inverter right (`end_check_ok` 1-2, then `end_confirmed`; any resend restarts the count).
   While restoring, the master is never adopted (always enforced). The Control card shows a restoring note.
+  **AGS On is never resting (1.2.15):** `restingAgs()` in control.js maps 1 -> 0 for the saved pre-run AGS, the end
+  restore, the resync's desired 2156, and the UI "goes back to" text; resync never adopts a master reading 1 and the
+  `state` sync ignores 1 outside a run. A leftover On had kept OffTheHook's generator running.
   **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `212A`=100 THEN `2129`=95 (separate writes:
   a combined write left 95/35 on OffTheHook; restore lowers 2129 first, then 212A) because the inverter won't charge from the gen above its start/stop %; end/stop/auto put
   back `applied_start_pct`/`applied_stop_pct` (seeded from the inverter's 2129/212A on the first start if null).

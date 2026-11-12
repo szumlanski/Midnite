@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.15 (2026-11-12): AGS "On" is never the normal setting
+
+- An earlier failed start left the inverter on AGS On, and the app then treated On as the setting to go back to,
+  so the generator kept running ("goes back to forced on"). AGS On is now only ever used during a run: a saved,
+  restored, synced or adopted On becomes Auto, and the every-minute check puts every inverter back to Auto (or the
+  app's Off) when one reads On outside a run.
+
 ## 1.2.14 (2026-11-12): Generator leg readings from the live status
 
 - Gen L1 / L2 (V, A, W) and generator frequency now come from the same inverter status call the MNP app shows,

@@ -233,7 +233,9 @@ export default async function handler(req, res) {
           // The switch shows the inverter's real AGS (a change made in the portal shows up here). Not during a
           // Run now: AGS is On then and the switch keeps the setting the run's end will restore.
           const realAuto = automaticFromAgs(live.registers?.["2156"]);
-          if (realAuto != null && cfgRow && !cfgRow.force_on && (!!cfgRow.enabled !== realAuto || Number(cfgRow.applied_ags) !== Number(live.registers["2156"]))) {
+          // Not when the master reads On (1) outside a run: that is a leftover forced start, never a resting setting;
+          // the tick's resync puts every inverter back to the app's value.
+          if (realAuto != null && cfgRow && !cfgRow.force_on && Number(live.registers["2156"]) !== 1 && (!!cfgRow.enabled !== realAuto || Number(cfgRow.applied_ags) !== Number(live.registers["2156"]))) {
             const synced = await patchConfig(sb, site_key, { enabled: realAuto, applied_ags: Number(live.registers["2156"]) }).catch(() => null);
             if (synced) {
               Object.assign(config, synced);
