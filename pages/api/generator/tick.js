@@ -15,7 +15,7 @@
 //      observed_running/observed_at. Register writes go through applyControl / writeShadow only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { supabaseAdmin, fetchFlowRt, fetchInverterDetail, readShadow, writeShadow } from "@/lib/midniteServer";
+import { supabaseAdmin, fetchFlowRt, fetchSiteFlowRt, fetchInverterDetail, readShadow, writeShadow } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, computeNextRun } from "@/lib/generator/core";
 import { genWiring } from "@/lib/generator/registers";
 import { planTick } from "@/lib/generator/tick";
@@ -46,10 +46,11 @@ function authorized(req) {
 
 const avgPos = (xs) => { const v = (xs || []).map(Number).filter(x => Number.isFinite(x) && x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 
-async function readLive(auth, sn, wiring) {
+async function readLive(auth, sn, wiring, serials) {
   const live = { ok: false };
   let flow = null, status = null;
-  try { flow = await fetchFlowRt(auth, sn); } catch (e) { live.flowError = e.message; }
+  // Generator/grid power summed over every inverter at the site (the master alone shows only its share).
+  try { flow = serials?.length > 1 ? await fetchSiteFlowRt(auth, serials, sn) : await fetchFlowRt(auth, sn); } catch (e) { live.flowError = e.message; }
   if (flow && flow.online !== false) {
     Object.assign(live, { ok: true, soc: flow.soc, genW: flow.gen, genV: flow.genV, genHz: flow.genHz, gridW: flow.grid, gridV: flow.gridV, gridHz: flow.gridHz, time: flow.time });
   } else if (flow) live.offline = true;
@@ -114,7 +115,7 @@ async function tickSite(sb, gen, { dry, startedAt }) {
     wiring = wiring || { genLocation: null, offGrid: null, capacityMode: null };
     out.wiring = { genLocation: wiring.genLocation, offGrid: wiring.offGrid, capacityMode: wiring.capacityMode };
 
-    const live = gen.master_sn ? await readLive(auth, gen.master_sn, wiring) : { ok: false };
+    const live = gen.master_sn ? await readLive(auth, gen.master_sn, wiring, site_key.split(",")) : { ok: false };
     out.live = live;
 
     const [{ data: windows }, { data: schedules }, { data: openRuns }] = await Promise.all([

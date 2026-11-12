@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.1 (2026-11-12): Generator power summed, grid voltage chips fixed
+
+- Generator power on the Generator tab (and in run records/alerts) is now the total of all inverters, not just the
+  master's share.
+- Inverter cards label the leg voltages "Grid L1/L2" and hide them when there is no grid on the terminals (an
+  off-grid site read a meaningless 5 V).
+
 ## 1.2.0 (2026-11-12): String names and daily energy per string
 
 - Name each solar string (MPPT input) and optionally set its DC size in **Settings → Strings**. Names are per

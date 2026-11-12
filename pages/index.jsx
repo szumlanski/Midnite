@@ -2156,8 +2156,10 @@ function InverterCard({inv, status, live}) {
   const gridLabel = gridNet!=null ? (gridNet<0?"Exporting":"Importing") : "Grid";
   const model = d?.inverter?.model||null;
   const gridFreq = d?.grid?.lines?.[0]?.frequency>0 ? d.grid.lines[0].frequency : null;
-  const l1Volt = d?.grid?.lines?.[0]?.voltage>0 ? d.grid.lines[0].voltage : null;
-  const l2Volt = d?.grid?.lines?.[1]?.voltage>0 ? d.grid.lines[1].voltage : null;
+  // Grid leg voltages. Below 50 V there is no grid on the terminals (off-grid sites read a few volts of noise),
+  // so nothing is shown rather than a meaningless "L1 5.3 V".
+  const l1Volt = d?.grid?.lines?.[0]?.voltage>=50 ? d.grid.lines[0].voltage : null;
+  const l2Volt = d?.grid?.lines?.[1]?.voltage>=50 ? d.grid.lines[1].voltage : null;
   const gridInToday = d?.grid?.consumption?.today||0;
   const gridOutToday = d?.grid?.sold?.today||0;
   const mppts = d?.photovoltaic?.mppts||[];
@@ -2224,11 +2226,11 @@ function InverterCard({inv, status, live}) {
               </div>
               {soc!=null&&<SOCBar value={soc}/>}
             </div>
-            {/* L1/L2 voltage pills */}
+            {/* Grid L1/L2 voltage pills (only when a grid or generator is actually on the grid terminals) */}
             {(l1Volt||l2Volt)&&(
               <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-                {l1Volt&&<span style={{fontSize:FS.caption,color:MUTED,background:BG,padding:"3px 8px",borderRadius:6,fontVariantNumeric:"tabular-nums"}}>L1 {l1Volt.toFixed(1)} V</span>}
-                {l2Volt&&<span style={{fontSize:FS.caption,color:MUTED,background:BG,padding:"3px 8px",borderRadius:6,fontVariantNumeric:"tabular-nums"}}>L2 {l2Volt.toFixed(1)} V</span>}
+                {l1Volt&&<span style={{fontSize:FS.caption,color:MUTED,background:BG,padding:"3px 8px",borderRadius:6,fontVariantNumeric:"tabular-nums"}}>Grid L1 {l1Volt.toFixed(1)} V</span>}
+                {l2Volt&&<span style={{fontSize:FS.caption,color:MUTED,background:BG,padding:"3px 8px",borderRadius:6,fontVariantNumeric:"tabular-nums"}}>Grid L2 {l2Volt.toFixed(1)} V</span>}
               </div>
             )}
             {/* Today summary */}

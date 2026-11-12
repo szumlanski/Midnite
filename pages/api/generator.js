@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  supabaseAdmin, getSaasUser, fetchFlowRt, readShadow, writeShadow,
+  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow,
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
@@ -199,7 +199,7 @@ export default async function handler(req, res) {
         let live = null;
         if (body.live !== false && ctx.auth && ctx.gen.master_sn) {
           live = {};
-          try { live.flow = await fetchFlowRt(ctx.auth, ctx.gen.master_sn); } catch (e) { live.flowError = e.message; }
+          try { live.flow = await fetchSiteFlowRt(ctx.auth, site_key.split(","), ctx.gen.master_sn); } catch (e) { live.flowError = e.message; } // summed over all inverters
           try { live.registers = await readShadow(ctx.auth, resolveMaster(ctx), GEN_READ_CODES); } catch (e) { live.registersError = e.message; }
           // 213F = 1: generator on the GRID terminals (its power shows in the grid fields); 2100 = 3: Off-Grid.
           if (live.registers) Object.assign(live, genWiring(live.registers));

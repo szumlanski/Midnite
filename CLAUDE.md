@@ -666,6 +666,8 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   overwrites the inverter's own values (OffTheHook 15/35) with the built-in 20/80.
   Refuses to start if the current 2136 or 2156 can't be read. The register writes live in ONE place, `applyControl`
   in `lib/generator/server.js` (shared by the `control` action and the tick cron). Not yet: master re-detection.
+- Live generator/grid power in `state` and the tick cron is the SUM over every inverter at the site
+  (`fetchSiteFlowRt`); SOC/time/V/Hz come from the master.
 - `state` also reads `213F` (Generator input location) and `2100` (Work Mode) from the master and returns
   `genLocation: 'grid'|'gen_port'` and `offGrid` (null when unread). Both are read-only; never writable.
 - Tests: `node --test` (files in `test/`, mocks only, no network or DB).
