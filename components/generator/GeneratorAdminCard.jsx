@@ -1,5 +1,5 @@
 // Admin > Generator control for the current site: enable toggle + master inverter picker
-// (siteToggle). The site can't be enabled until a master is set. Shows the stored master and who
+// (siteToggle). The master is stored and used by SERIAL only; INV-N labels are display hints that can change. The site can't be enabled until a master is set. Shows the stored master and who
 // last turned the feature on or off (from the site's activity log).
 import { useEffect, useState } from "react";
 import { Button, Switch } from "@/components/ui/Button";
@@ -68,7 +68,7 @@ export function GeneratorAdminCard({ site, onChanged }) {
           <div style={{ fontSize: FS.footnote, color: MUTED, marginBottom: 10 }}>
             {enabled ? "On. The Generator tab shows for everyone who can open this site." : "Off. The Generator tab is hidden on this site."}
           </div>
-          <div className="ui-section-label">Master inverter (all generator writes go here)</div>
+          <div className="ui-section-label">Master inverter by serial number (all generator writes go here)</div>
           <div className="inv-scroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
             {site.inverters.map((inv) => {
               const on = pick === inv.sn;
@@ -82,12 +82,12 @@ export function GeneratorAdminCard({ site, onChanged }) {
             })}
           </div>
           <div style={{ fontSize: FS.footnote, color: TEXT, marginTop: 10, display: "grid", gap: 4 }}>
-            <div>Stored master: {gen?.master_sn ? <strong>{invLabel(gen.master_sn)} · {gen.master_sn}</strong> : <span style={{ color: MUTED }}>none</span>}{gen?.master_source ? <span style={{ color: MUTED }}> (set by {gen.master_source === "admin" ? "an admin" : "detection"}{gen.master_checked_at ? `, ${fmtWhen(gen.master_checked_at)}` : ""})</span> : null}</div>
+            <div>Stored master: {gen?.master_sn ? <><strong style={{ fontFamily: "ui-monospace,monospace" }}>{gen.master_sn}</strong> <span style={{ color: MUTED }}>(shown today as {invLabel(gen.master_sn)})</span></> : <span style={{ color: MUTED }}>none</span>}{gen?.master_source ? <span style={{ color: MUTED }}> (set by {gen.master_source === "admin" ? "an admin" : "detection"}{gen.master_checked_at ? `, ${fmtWhen(gen.master_checked_at)}` : ""})</span> : null}</div>
             {who && <div style={{ color: MUTED }}>{who.action === "site_enable" ? "Turned on" : "Turned off"} by {who.actor_name || who.actor_email || "an admin"}, {fmtWhen(who.ts)}</div>}
           </div>
           {masterChanged && (
             <div style={{ marginTop: 12 }}>
-              <Button variant="primary" disabled={busy} onClick={() => save(enabled, pick)}>{busy ? "Saving…" : `Set ${invLabel(pick)} as master`}</Button>
+              <Button variant="primary" disabled={busy} onClick={() => save(enabled, pick)}>{busy ? "Saving…" : `Set ${pick} as master`}</Button>
             </div>
           )}
           {!site.inverters.some((i) => i.autoId) && <div style={{ marginTop: 10 }}><InfoNote icon="alert">This account doesn't report inverter AutoIds, so the server may not be able to resolve the master. Use the installer account.</InfoNote></div>}
