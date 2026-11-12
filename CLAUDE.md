@@ -667,6 +667,9 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   **Slow confirmations (1.2.5):** a write the cloud accepted (RequestId) but not confirmed in time is `pending`, not a
   failure: the op continues and the force state is saved, so a late landing is labeled Run now and ends on time. Only
   a refused write fails; a failed user `start` puts 2136/AGS back. writeShadow re-reads up to 3x (cron: 0).
+  **Run now phases (1.2.6):** the user `start` writes with `{tries:2, rereads:0}` and returns fast; ControlView shows
+  Start sent (force_on, AGS not 1) -> Starting (AGS 1) -> Running (power seen); GeneratorTab polls `state` every 5 s
+  while force_on and not running, else 30 s. No re-send: it waits until running or `force_until` (cron ends it).
   Refuses to start if the current 2136 or 2156 can't be read. The register writes live in ONE place, `applyControl`
   in `lib/generator/server.js` (shared by the `control` action and the tick cron). Not yet: master re-detection.
 - Live generator/grid power in `state` and the tick cron is the SUM over every inverter at the site

@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.6 (2026-11-12): Run now shows Sent, then Starting, then Running
+
+- Run now hands the writes to the Midnite cloud and returns in a few seconds instead of waiting up to a minute.
+- The Control card then shows **Start sent** (the inverter has not switched AGS to On yet), **Starting** (AGS reads
+  On, no generator power yet) and **Running**, checking every 5 s (30 s otherwise). It stays in Sent until the
+  generator runs or the run's time is up; the cron then ends it and puts AGS and 2136 back.
+
 ## 1.2.5 (2026-11-12): Slow inverter confirmations count as sent
 
 - A write the Midnite cloud accepted but the inverter has not confirmed yet is now "pending", not a failure. Run now

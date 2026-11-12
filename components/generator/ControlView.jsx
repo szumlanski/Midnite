@@ -51,7 +51,10 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
   const inFlight = useRef(false);
 
   const source = state.genLocation === "grid" ? "Generator (grid terminals)" : "Generator";
-  const statusWord = obs.running ? "Running" : cfg.force_on ? "Start requested" : obs.known ? "Stopped" : "Unknown";
+  // A Run now goes Sent (cloud has it, inverter not yet on AGS On) -> Accepted (AGS reads On) -> Running
+  // (power seen). It stays in Sent/Accepted, checked every 5 s, until it runs or its time is up.
+  const phase = !cfg.force_on ? null : obs.running ? "running" : ags === 1 ? "accepted" : "sent";
+  const statusWord = obs.running ? "Running" : phase === "accepted" ? "Starting" : phase === "sent" ? "Start sent" : obs.known ? "Stopped" : "Unknown";
   const statusColor = obs.running ? GEN_TEXT : cfg.force_on ? GEN_TEXT : MUTED;
 
   async function send(op, extra = {}, label) {
@@ -61,7 +64,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
     setBusy(label);
     try {
       const r = await genApi("control", { site_key: siteKey, op, ...extra });
-      if (r?.pending) toast("Sent. The inverter is slow to confirm; the change usually lands within a minute or two", { icon: "check", ms: 6000 });
+      if (r?.pending) toast(op === "start" ? "Start sent. Waiting for the inverter" : "Sent. Waiting for the inverter to confirm", { icon: "check", ms: 5000 });
       else toast({ start: "Generator start sent", end: "Run ended", stop: "Generator turned off", auto: "Generator back on automatic" }[op], { icon: "check" });
       await onChanged?.(true);
     } catch (e) {
@@ -83,7 +86,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
       action: "Start",
       destructive: false,
     });
-    if (ok) send("start", { runMin, targetPct: tp }, "Sending to the inverter. This can take up to 25 seconds.");
+    if (ok) send("start", { runMin, targetPct: tp }, "Sending to the inverter...");
   }
 
   function startPressed() {
@@ -147,6 +150,13 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
           <div style={{ fontSize: FS.title1, fontWeight: 800, color: TEXT, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
             {left != null ? fmtDuration(left) : "--"}
           </div>
+          {phase !== "running" && (
+            <div style={{ marginTop: 8 }}>
+              <PendingNote text={phase === "sent"
+                ? "Start sent. Waiting for the inverter to accept it (checking every 5 seconds). This can take a few minutes."
+                : "The inverter accepted the start. Waiting for the generator to come on (checking every 5 seconds)."} />
+            </div>
+          )}
           <div style={{ fontSize: FS.subhead, color: MUTED, marginTop: 2 }}>
             {until ? `Stops at ${fmtClockAt(cfg.force_until, tz)}` : "No end time set"}
             {cfg.force_target_pct != null ? `, or sooner when the battery reaches ${cfg.force_target_pct}%` : ""}

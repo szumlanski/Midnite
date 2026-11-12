@@ -242,7 +242,11 @@ export default async function handler(req, res) {
         const r = await applyControl({
           sb, auth: ctx.auth, autoId, site_key, cfg, op, runMin: body.runMin, targetPct: body.targetPct,
           actor, source: "user", dry, startedBy: user.id,
-        });
+        }, op === "start"
+          // Run now: hand the writes to the cloud and return fast (~5 s each). The app then shows "Start sent" and
+          // checks every 5 s until the inverter accepts it or the run's time is up (Jason, 2026-11-12).
+          ? { writeShadow: (au, w) => writeShadow(au, w, { tries: 2, rereads: 0 }) }
+          : undefined);
         if (dry && r.status === 200) return res.json({ ...r.body, master_sn: ctx.gen.master_sn });
         return res.status(r.status).json(r.body);
       }

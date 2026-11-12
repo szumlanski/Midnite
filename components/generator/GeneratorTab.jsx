@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Segmented } from "@/components/ui/Button";
 import { usePolling } from "@/lib/usePolling";
 import { genApi, ErrorNote } from "./shared";
-import { ControlView } from "./ControlView";
+import { ControlView, observedGen } from "./ControlView";
 import { AutomaticView } from "./AutomaticView";
 import { SchedulesView } from "./SchedulesView";
 import { HistoryView } from "./HistoryView";
@@ -45,7 +45,9 @@ export function GeneratorTab({ siteKey, siteName, userKey, initial = null }) {
   }, [siteKey]);
 
   useEffect(() => { setState(initial); lastTime.current = null; setLiveAt(null); }, [siteKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  usePolling(() => load(true), 30000, [siteKey], { enabled: view === "control" });
+  // While a Run now is waiting for the inverter (sent, not yet running), check every 5 s instead of 30 s.
+  const waiting = !!state?.config?.force_on && !observedGen(state).running;
+  usePolling(() => load(true), waiting ? 5000 : 30000, [siteKey, waiting], { enabled: view === "control" });
   useEffect(() => {
     if (view === "control") return;
     // Automatic: read the inverter once if the app hasn't copied its start/stop % yet, so the screen shows the
