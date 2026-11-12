@@ -128,7 +128,21 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
           <Stat label="Power" value={obs.known ? fmtW(obs.watts) : "--"} />
           <Stat label="Battery" value={soc != null ? `${soc}%` : "--"} tone={soc != null ? BATTERY_TEXT : undefined} />
           <Stat label="Inverter mode" value={ags != null ? AGS_LABEL[ags] || `Code ${ags}` : "--"} />
-          {state.live?.flow?.genV > 0 && <Stat label="Voltage" value={`${Math.round(state.live.flow.genV)} V`} />}
+          {(() => {
+            // Per-leg generator voltage from the master's 5-minute export (grid legs when the gen is on the grid terminals).
+            const lg = state.live?.legs;
+            if (!lg) return null;
+            const grid = state.genLocation === "grid";
+            const v1 = grid ? lg.gridL1V : lg.genL1V, v2 = grid ? lg.gridL2V : lg.genL2V;
+            const fmt = (v) => (v > 0 ? `${Math.round(v)} V` : "0 V");
+            const at = lg.at ? String(lg.at).slice(11, 16) : null;
+            return <>
+              <Stat label="Gen L1" value={fmt(v1)} />
+              <Stat label="Gen L2" value={fmt(v2)} />
+              {at && <div style={{ gridColumn: "1 / -1", fontSize: FS.caption, color: MUTED, marginTop: -4 }}>Leg voltages are the inverter's 5-minute reading ({at}).</div>}
+            </>;
+          })()}
+          {!state.live?.legs && state.live?.flow?.genV > 0 && <Stat label="Voltage" value={`${Math.round(state.live.flow.genV)} V`} />}
           {state.live?.flow?.genHz > 0 && <Stat label="Frequency" value={`${Number(state.live.flow.genHz).toFixed(1)} Hz`} />}
         </div>
         {sp && (

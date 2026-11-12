@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow,
+  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow, fetchDayExcel,
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
@@ -104,6 +104,22 @@ async function seedFromInverter(sb, site_key, regs, actor) {
 }
 
 // ── Handler ─────────────────────────────────────────────────────────────────
+// Latest 5-min row of the master's day CSV: generator (and grid) leg voltages. Cached 60 s per site, since the
+// Control view polls every 5-30 s and the CSV only changes every 5 minutes.
+const _legsCache = new Map();
+async function genLegsCached(memberId, sn, tz) {
+  if (!memberId || !sn) return null;
+  const k = `${memberId}|${sn}`, hit = _legsCache.get(k);
+  if (hit && Date.now() - hit.ts < 60000) return hit.data;
+  const p = localParts(new Date(), tz);
+  const date = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+  const { rows } = await fetchDayExcel(memberId, sn, date);
+  const r = rows[rows.length - 1] || null;
+  const data = r ? { at: r.ts, genL1V: r.genL1V, genL2V: r.genL2V, genL1W: r.genL1W, genL2W: r.genL2W, gridL1V: r.gridL1V, gridL2V: r.gridL2V, genHz: r.genHz, gridHz: r.gridHz } : null;
+  _legsCache.set(k, { data, ts: Date.now() });
+  return data;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   const action = req.query.action;
@@ -203,6 +219,9 @@ export default async function handler(req, res) {
           try { live.registers = await readShadow(ctx.auth, resolveMaster(ctx), GEN_READ_CODES); } catch (e) { live.registersError = e.message; }
           // 213F = 1: generator on the GRID terminals (its power shows in the grid fields); 2100 = 3: Off-Grid.
           if (live.registers) Object.assign(live, genWiring(live.registers));
+          // Per-leg generator voltages (L1/L2) from the master's 5-minute export (the live feed has no per-leg V).
+          try { live.legs = await genLegsCached(ctx.gen.site_name || ctx.site?.MemberID, ctx.gen.master_sn, ctx.gen.timezone || "America/New_York"); }
+          catch (e) { live.legsError = e.message; }
           // The switch shows the inverter's real AGS (a change made in the portal shows up here). Not during a
           // Run now: AGS is On then and the switch keeps the setting the run's end will restore.
           const realAuto = automaticFromAgs(live.registers?.["2156"]);
