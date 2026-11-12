@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.8 (2026-11-12): Generator alerts for everyone, with who started it
+
+- Start alerts (email and push) now say who started the run: the person who pressed Run now, or who made the
+  schedule.
+- Admins now get generator alerts for every enabled site by default, like owners and share recipients. Anyone can
+  turn theirs off in Generator, Alerts.
+
 ## 1.2.7 (2026-11-12): Run now wording
 
 - Status reads "Start signal sent, waiting for confirmation from the inverter", then "Start confirmed by the

@@ -709,7 +709,8 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   throws; skipped when `gen_config.alerts_enabled` is false. Recipients (deduped): accounts verified to hold the site
   by logging in (candidates: the owner account, an end-user account whose login is the site name, accounts of users
   who saved `gen_alert_prefs` for the site), active `site_shares` recipients (verified like `canControlGen`), and
-  admins only when they saved prefs for the site. Channels from `gen_alert_prefs` (email + push default on). Email
+  all admins (Jason, 2026-11-12: everyone with access gets alerts; each turns theirs off in Alerts). Start alerts
+  name who started a run (`info.initiator`: the Run now user `force_started_by`, or the schedule's `created_by`). Channels from `gen_alert_prefs` (email + push default on). Email
   via `send()` with the shared `shell()` (now exported from `deliver.js`, optional footer); no SVG.
 - **`lib/push/server.js`**: `getVapidKeys` (env `VAPID_PUBLIC_KEY`+`VAPID_PRIVATE_KEY` [+`VAPID_SUBJECT`] win, else the
   `vapid_keys` row, generated once with a plain insert so a lost race re-reads the winner; never regenerated),

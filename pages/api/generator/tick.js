@@ -166,7 +166,14 @@ async function tickSite(sb, gen, { dry, startedAt }) {
             source: "cron",
           });
         } else if (a.type === "notify") {
-          const r = await notifyGeneratorEvent({ ...gen, config: cfg }, a.event, { source: a.source, socPct: a.socPct, durationSec: a.durationSec, at: now });
+          // Who started it: the Run now user, or the person who made the schedule (Jason, 2026-11-12).
+          let initiator = null;
+          if (a.source === "force") initiator = await whoIs(sb, cfg.force_started_by);
+          else if (a.source === "schedule") {
+            const last = (schedules || []).filter(x => x.last_run_at).sort((x, y) => String(y.last_run_at).localeCompare(String(x.last_run_at)))[0];
+            initiator = await whoIs(sb, last?.created_by);
+          }
+          const r = await notifyGeneratorEvent({ ...gen, config: cfg }, a.event, { source: a.source, socPct: a.socPct, durationSec: a.durationSec, at: now, initiator: initiator?.name || initiator?.email || null });
           done.push({ type: a.type, event: a.event, emails: r.emails, pushes: r.pushes, recipients: r.recipients, skipped: r.skipped, errors: r.errors });
           await logEvent(sb, site_key, SYSTEM_ACTOR, a.event === "start" ? "alert_started_sent" : "alert_stopped_sent", {
             after: { emails: r.emails ?? 0, pushes: r.pushes ?? 0, recipients: r.recipients ?? null, skipped: r.skipped ?? null },
