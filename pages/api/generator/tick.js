@@ -256,7 +256,7 @@ async function tickSite(sb, gen, { dry, startedAt }) {
     // AGS Off forced on every inverter until it is seen off.
     let overrides = {};
     try {
-      const { data: recent } = await sb.from("gen_events").select("action,created_at").eq("site_key", site_key).order("created_at", { ascending: false }).limit(60);
+      const { data: recent } = await sb.from("gen_events").select("action,created_at:ts").eq("site_key", site_key).not("action", "like", "prop_%").order("ts", { ascending: false }).limit(60);
       const rr = runReading(live, wiring); // generator-side W and V (grid side when the gen is on the grid terminals)
       const wd = planWatchdog({ cfg, reading: live?.ok === false ? {} : { w: rr.w, v: rr.v }, now, events: recent || [] });
       out.watchdog = { ...wd.info, forceOff: wd.forceOff, actions: wd.actions.map(a => a.action) };
@@ -300,8 +300,8 @@ async function tickSite(sb, gen, { dry, startedAt }) {
 // each is sent and briefly polled; the next tick's read decides whether it stuck and retries if not.
 async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode, overrides = {} }) {
   const inverters = await Promise.all(autoIds.map(id => readShadow(auth, id, RESYNC_CODES).then(regs => ({ autoId: id, regs }), e => ({ autoId: id, error: e.message }))));
-  const { data: last } = await sb.from("gen_events").select("created_at,action").eq("site_key", site_key)
-    .or("action.like.control_%,action.like.cron_%,action.like.master_%,action.like.resync%,action.like.watchdog_%").order("created_at", { ascending: false }).limit(1);
+  const { data: last } = await sb.from("gen_events").select("created_at:ts,action").eq("site_key", site_key)
+    .or("action.like.control_%,action.like.cron_%,action.like.master_%,action.like.resync%,action.like.watchdog_%").order("ts", { ascending: false }).limit(1);
   const lastAt = last?.[0]?.created_at ? new Date(last[0].created_at).getTime() : 0;
   // After a Run now ends (saved_max_run_min still set), the normal settings are ENFORCED, never adopted from the
   // master, until three checks in a row find every inverter right (Jason, 2026-11-12).
@@ -339,7 +339,7 @@ async function resyncSite({ sb, site_key, auth, autoIds, cfg, socMode, overrides
   } else if (plan.allMatch && restoring) {
     // Every inverter is back on the normal settings. Count consecutive good checks since the run ended (or since the
     // last resend); after the third, the put-back is confirmed and the check stops treating this as a restore.
-    const { data: recent } = await sb.from("gen_events").select("action").eq("site_key", site_key).order("created_at", { ascending: false }).limit(30);
+    const { data: recent } = await sb.from("gen_events").select("action").eq("site_key", site_key).not("action", "like", "prop_%").order("ts", { ascending: false }).limit(30);
     let n = 0;
     for (const e of recent || []) { if (e.action === "end_check_ok") n++; else if (e.action === "resync_write" || /^(control_(end|stop|auto)|cron_force_end)$/.test(e.action)) break; }
     n += 1;

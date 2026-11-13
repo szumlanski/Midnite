@@ -20,6 +20,7 @@ import {
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
+import { summarizeTrials, RUN_HOURS_DEFAULT as PROP_HOURS } from "@/lib/generator/proptest";
 import { GEN_READ_CODES, genWiring } from "@/lib/generator/registers";
 import { agsForAutomatic, automaticFromAgs } from "@/lib/generator/control";
 import {
@@ -162,6 +163,40 @@ export default async function handler(req, res) {
       const r = await pushToUser(user.id, { title: "Midnite Sentinel", body: "Test notification: push alerts are working on this device.", url: "/", tag: "sentinel-push-test" }, { sb });
       if (!r.total) return res.status(404).json({ error: "No push subscriptions for your account. Turn on push on this device first.", ...r });
       return res.json({ ok: r.sent > 0, ...r });
+    }
+
+    // ── Admin: parallel-settings propagation test (writes only the inert 2153; see pages/api/generator/proptest.js) ──
+    if (action === "propTest") {
+      if (appRole !== "admin") return res.status(403).json({ error: "forbidden" });
+      const site_key = requireSiteKey(body);
+      const { data: runs } = await sb.from("gen_events").select("id,ts,after").eq("site_key", site_key).eq("action", "prop_run").order("ts", { ascending: false }).limit(1);
+      const run = runs?.[0] || null;
+      const active = run && ["running", "restoring"].includes(run.after?.status);
+      if (body.op === "start") {
+        if (active) return res.status(409).json({ error: "A test is already running." });
+        const { data: g } = await sb.from("gen_sites").select("site_key,master_sn").eq("site_key", site_key).maybeSingle();
+        if (!g?.master_sn) return res.status(409).json({ error: "Set up generator control (master inverter) for this site first." });
+        const hours = Math.min(24, Math.max(0.25, Number(body.hours) || PROP_HOURS));
+        const now = new Date();
+        const after = { status: "running", hours, started_at: now.toISOString(), ends_at: new Date(now.getTime() + hours * 3600000).toISOString(), trials: 0, started_by: actorBase.name || actorBase.email };
+        const { error } = await sb.from("gen_events").insert({ site_key, action: "prop_run", source: "user", actor_id: user.id, actor_email: actorBase.email, actor_name: actorBase.name, actor_role: "admin", after, success: true });
+        dbCheck(error);
+        return res.json({ ok: true, run: after });
+      }
+      if (body.op === "stop") {
+        if (!active) return res.json({ ok: true });
+        await sb.from("gen_events").update({ after: { ...run.after, status: "restoring", stopped_by: actorBase.name || actorBase.email, ends_at: new Date().toISOString() } }).eq("id", run.id);
+        return res.json({ ok: true });
+      }
+      if (!run) return res.json({ run: null });
+      const { data: rows } = await sb.from("gen_events").select("after").eq("site_key", site_key).eq("action", "prop_trial").gte("ts", run.ts).order("ts", { ascending: true }).limit(2000);
+      const trials = (rows || []).map(r => r.after);
+      const sns = run.after?.sns || [];
+      return res.json({
+        run: run.after, trials: trials.length,
+        all: summarizeTrials(trials, sns), idle: summarizeTrials(trials, sns, { filter: t => !t.gen_running }), running: summarizeTrials(trials, sns, { filter: t => t.gen_running }),
+        lastTrials: trials.slice(-10),
+      });
     }
 
     // ── Admin: turn a site on/off and set its master inverter ──
@@ -443,7 +478,7 @@ export default async function handler(req, res) {
 
       case "events": {
         const limit = Math.min(200, Math.max(1, Number(body.limit) || 50));
-        let q = sb.from("gen_events").select("*").eq("site_key", site_key).order("ts", { ascending: false }).limit(limit);
+        let q = sb.from("gen_events").select("*").eq("site_key", site_key).not("action", "like", "prop_%").order("ts", { ascending: false }).limit(limit);
         if (body.before) q = q.lt("ts", new Date(body.before).toISOString());
         const { data, error } = await q;
         dbCheck(error);

@@ -15,6 +15,10 @@
     {
       "path": "/api/strings/daily",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/generator/proptest",
+      "schedule": "* * * * *"
     }
   ]
 }

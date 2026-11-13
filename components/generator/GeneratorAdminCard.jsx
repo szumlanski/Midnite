@@ -7,6 +7,7 @@ import { toast, confirmAlert } from "@/components/ui/Alert";
 import { TEXT, MUTED, FS, GEN_TEXT } from "@/components/ui/tokens";
 import { siteKeyOf } from "@/lib/generator/core";
 import { genApi, Card, ErrorNote, InfoNote, fmtWhen } from "./shared";
+import { PropTestCard } from "./PropTestCard";
 
 export const PILOT_MASTER = "2452-40920023PH";
 
@@ -62,6 +63,7 @@ export function GeneratorAdminCard({ site, onChanged }) {
   const invLabel = (sn) => site.inverters.find((i) => i.sn === sn)?.label || sn;
 
   return (
+    <>
     <Card title="Generator control" icon="generator" right={gen !== undefined && <Switch checked={enabled} onChange={toggle} label="Generator control" disabled={busy} />}>
       {gen === undefined ? <div className="ui-skel" aria-busy="true" aria-label="Loading generator setup" style={{ height: 90, borderRadius: 12 }} /> : (
         <>
@@ -95,5 +97,7 @@ export function GeneratorAdminCard({ site, onChanged }) {
         </>
       )}
     </Card>
+    {gen?.master_sn && <PropTestCard site={site} siteKey={siteKey} />}
+    </>
   );
 }

@@ -2,6 +2,15 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.19 (2026-11-13): Settings propagation test; watchdog fix
+
+- Admin > Generator control has a new "Settings propagation test": for 8 hours it writes the inert exercise run date
+  (2153) to one inverter at a time (rotating), reads all inverters at about 10 s, 30 s, 45 s, 75 s and 2 min, and
+  builds a "written to" x "reached" table with median times, split by generator off / running. It never writes in
+  a minute when the generator system made a real write, and puts the original value back at the end.
+- Fix: the watchdog and the after-run checks read the activity log by a column name that does not exist, so the
+  watchdog was not running and the after-run "3 checks" never counted past one. Fixed.
+
 ## 1.2.18 (2026-11-12): "Today" is your local day
 
 - The app worked out "today" in UTC, so after 7 PM in Florida (8 PM in summer) the Day tab jumped to tomorrow and
