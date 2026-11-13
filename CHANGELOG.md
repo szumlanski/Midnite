@@ -2,6 +2,11 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.21 (2026-11-13): Generator legs show the whole stack
+
+- Generator card: Gen L1/L2 amps and watts are now the total of every inverter at the site (each inverter only
+  reports its own share). Voltage and frequency still come from the master. A note under the legs says so.
+
 ## 1.2.20 (2026-11-13): Time windows actually reach the inverter
 
 - Fix: when a time window started, the new start/charge-to % were sent, but if the cloud had not confirmed them

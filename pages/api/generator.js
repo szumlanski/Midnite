@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow, fetchDayExcel, fetchGenLegs,
+  supabaseAdmin, getSaasUser, fetchFlowRt, fetchSiteFlowRt, readShadow, writeShadow, fetchDayExcel, fetchGenLegs, fetchSiteGenLegs,
 } from "@/lib/midniteServer";
 import { DEFAULT_CONFIG, siteKeyOf, evaluateGen, localParts, computeNextRun, validateWindow, overlappingPairs } from "@/lib/generator/core";
 import { summarizeRuns } from "@/lib/generator/history";
@@ -261,7 +261,11 @@ export default async function handler(req, res) {
           if (live.registers) Object.assign(live, genWiring(live.registers));
           // Per-leg generator voltages (L1/L2) from the master's 5-minute export (the live feed has no per-leg V).
           // Live per-leg generator V/A/W + Hz from the rich status (what the MNP app shows); the CSV is the fallback.
-          try { live.genLegs = await fetchGenLegs(ctx.auth, resolveMaster(ctx), ctx.site?.MemberAutoID ?? ctx.auth?.memberAutoId); }
+          // V/Hz from the master; A/W summed over every inverter (each reports only its own share of the generator).
+          try {
+            let ids; try { ids = siteAutoIds(ctx.gen, ctx.site); } catch { ids = [resolveMaster(ctx)]; }
+            live.genLegs = await fetchSiteGenLegs(ctx.auth, ids, ctx.site?.MemberAutoID ?? ctx.auth?.memberAutoId);
+          }
           catch (e) { live.genLegsError = e.message; }
           if (!live.genLegs) try { live.legs = await genLegsCached(ctx.gen.site_name || ctx.site?.MemberID, ctx.gen.master_sn, ctx.gen.timezone || "America/New_York"); }
           catch (e) { live.legsError = e.message; }

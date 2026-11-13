@@ -707,7 +707,7 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   in `lib/generator/server.js` (shared by the `control` action and the tick cron). Not yet: master re-detection.
 - Live generator/grid power in `state` and the tick cron is the SUM over every inverter at the site
   (`fetchSiteFlowRt`); SOC/time/V/Hz come from the master.
-- `state` (live) also returns `live.genLegs` from `fetchGenLegs` (`getInverterStatus` `data.gen.lines` V/A/W + Hz, the
+- `state` (live) `live.genLegs` comes from `fetchSiteGenLegs` (1.2.21): `fetchGenLegs` on every inverter (`siteAutoIds`), `combineGenLegs` = V/Hz from the master, A/W summed, `count`. Originally: `live.genLegs` from `fetchGenLegs` (`getInverterStatus` `data.gen.lines` V/A/W + Hz, the
   MNP app's source) for the master; the 5-min CSV `live.legs` (`genLegsCached`) is only the fallback.
 - `state` also reads `213F` (Generator input location) and `2100` (Work Mode) from the master and returns
   `genLocation: 'grid'|'gen_port'` and `offGrid` (null when unread). Both are read-only; never writable.

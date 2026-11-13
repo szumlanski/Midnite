@@ -143,6 +143,7 @@ export function ControlView({ state, siteKey, userKey, liveAt, onChanged }) {
                 <Stat label="Gen L1" value={f(gl.l1)} sub={sub(gl.l1)} />
                 <Stat label="Gen L2" value={f(gl.l2)} sub={sub(gl.l2)} />
                 {gl.hz != null && <Stat label="Gen frequency" value={`${gl.hz.toFixed(1)} Hz`} />}
+                {gl.count > 1 && <div style={{ gridColumn: "1 / -1", fontSize: FS.caption, color: MUTED, marginTop: -4 }}>Amps and watts are the total of all {gl.count} inverters; voltage and frequency are from the master.</div>}
               </>;
             }
             const lg = state.live?.legs;
