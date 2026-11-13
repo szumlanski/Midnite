@@ -2,6 +2,13 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.20 (2026-11-13): Time windows actually reach the inverter
+
+- Fix: when a time window started, the new start/charge-to % were sent, but if the cloud had not confirmed them
+  within a few seconds the app kept the old values as "applied", and the minute check then wrote the old values
+  back. Now an accepted write counts, and the minute check keeps resending the window's values until every
+  inverter matches.
+
 ## 1.2.19 (2026-11-13): Settings propagation test; watchdog fix
 
 - Admin > Generator control has a new "Settings propagation test": for 8 hours it writes the inert exercise run date

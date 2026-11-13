@@ -228,14 +228,16 @@ async function tickSite(sb, gen, { dry, startedAt }) {
           try {
             const r1 = await writeAll(fast, auth, autoIds, { [order[0][0]]: order[0][1] });
             const r2 = await writeAll(fast, auth, autoIds, { [order[1][0]]: order[1][1] });
-            r = { verified: r1.verified && r2.verified, err: [r1.err, r2.err].filter(Boolean).join("; ") || null,
+            // Accepted by the cloud (RequestId) counts: the resync then enforces it every minute until it sticks.
+            // Without this, an unconfirmed write left applied_* at the old values and the resync wrote them back.
+            r = { verified: r1.verified && r2.verified, accepted: !!(r1.write && r2.write), err: [r1.err, r2.err].filter(Boolean).join("; ") || null,
               before: { ...(r1.before || {}), ...(r2.before || {}) }, after: { ...(r1.after || {}), ...(r2.after || {}) }, per: [r1.per, r2.per] };
           } catch (e) { r = { verified: false, err: e.message }; }
           const after = { start_pct: a.start_pct, stop_pct: a.stop_pct, from: a.from, window_id: a.window_id, inverter_before: r.before || null, inverter_after: r.after || null };
-          if (r.verified) {
+          if (r.verified || r.accepted) {
             _threshFail.delete(site_key);
             cfg = await patchConfig(sb, site_key, { applied_start_pct: a.start_pct, applied_stop_pct: a.stop_pct });
-            await logEvent(sb, site_key, SYSTEM_ACTOR, "cron_thresholds", { before, after, source: "cron" });
+            await logEvent(sb, site_key, SYSTEM_ACTOR, "cron_thresholds", { before, after: r.verified ? after : { ...after, pending: true, note: "Accepted, not yet confirmed. The minute check keeps resending until every inverter matches." }, source: "cron" });
           } else {
             _threshFail.set(site_key, Date.now());
             await logEvent(sb, site_key, SYSTEM_ACTOR, "cron_thresholds", { before, after, success: false, error: `2129/212A write not confirmed${r.err ? ": " + r.err : ""}`, source: "cron" });

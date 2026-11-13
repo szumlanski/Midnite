@@ -738,7 +738,7 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
     switch is off, a forced run is already on, or it is > 15 min late; it is deferred (not marked) when a forced
     run ends in the same tick. (3) else, master switch + `auto_enabled` + no forced run: if `activeSetpoint` for now
     (site tz) differs from `applied_start_pct/applied_stop_pct`, ONE write of `2129`+`212A` (event
-    `cron_thresholds`), skipped in Voltage capacity mode (`2124`=1), 10-min backoff after a failed write.
+    `cron_thresholds`), skipped in Voltage capacity mode (`2124`=1), 10-min backoff after a failed write. An accepted-but-unconfirmed write (RequestId) still sets `applied_*` (1.2.20), so the resync enforces the window values instead of writing the old ones back.
   - Time budget (maxDuration 60): no control op with < 40 s left, no threshold write with < 25 s left.
 - **`lib/generator/alerts.js` `notifyGeneratorEvent(site, 'start'|'stop', {source, socPct, durationSec})`**: never
   throws; skipped when `gen_config.alerts_enabled` is false. Recipients (deduped): accounts verified to hold the site
