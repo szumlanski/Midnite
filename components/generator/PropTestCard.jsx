@@ -27,6 +27,8 @@ export function PropTestCard({ site, siteKey }) {
 
   const run = d?.run, active = run && ["running", "restoring"].includes(run.status);
   const sum = d?.[view];
+  const done = (d?.all?.sources || []).reduce((a, r) => a + r.n, 0);
+  const inProgress = !!run?.open_trial;
   return (
     <Card title="Settings propagation test" icon="refresh">
       {d === undefined ? <div className="ui-skel" style={{ height: 60, borderRadius: 12 }} /> : (
@@ -36,7 +38,7 @@ export function PropTestCard({ site, siteKey }) {
           </div>
           {run ? (
             <div style={{ fontSize: FS.footnote, color: TEXT, display: "grid", gap: 2, marginBottom: 10 }}>
-              <div><strong>{{ running: "Running", restoring: "Finishing: putting the original value back", done: "Done" }[run.status] || run.status}</strong>, {d.trials} trials{run.skipped_for_real_write ? `, ${run.skipped_for_real_write} minutes skipped for real generator writes` : ""}</div>
+              <div><strong>{{ running: "Running", restoring: "Finishing: putting the original value back", done: "Done" }[run.status] || run.status}</strong>, {done} trials finished{inProgress ? ", 1 in progress" : ""}{run.skipped_for_real_write ? `, ${run.skipped_for_real_write} minutes skipped for real generator writes` : ""}</div>
               <div style={{ color: MUTED }}>Started {fmtWhen(run.started_at)} by {run.started_by || "an admin"}; {run.status === "done" ? `finished ${fmtWhen(run.finished_at)}` : `ends ${fmtWhen(run.ends_at)}`}</div>
               {run.firmware && <div style={{ color: MUTED }}>Firmware: {Object.entries(run.firmware).map(([sn, f]) => `${label(sn)} DSP ${f?.dspVer || "?"} / slave ${f?.slaveDspVer || "?"} / CSB ${f?.csbVer || "?"}`).join("; ")}</div>}
               {run.restore_failed && <div style={{ color: "#B91C1C" }}>Could not put the original value back on: {run.restore_failed.map(label).join(", ")}</div>}
