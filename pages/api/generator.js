@@ -189,6 +189,11 @@ export default async function handler(req, res) {
         return res.json({ ok: true });
       }
       if (!run) return res.json({ run: null });
+      if (body.op === "export") { // raw trials for offline analysis (admin only)
+        const { data: raw } = await sb.from("gen_events").select("ts,after").eq("site_key", site_key).eq("action", "prop_trial").gte("ts", run.ts).order("ts", { ascending: true }).limit(5000);
+        const { data: real } = await sb.from("gen_events").select("ts,action,after,success").eq("site_key", site_key).gte("ts", run.ts).lte("ts", run.after?.ends_at || new Date().toISOString()).not("action", "like", "prop_%").order("ts", { ascending: true }).limit(2000);
+        return res.json({ site_key, run: run.after, run_ts: run.ts, trials: (raw || []).map(r => ({ ts: r.ts, ...r.after })), other_events: real || [] });
+      }
       const { data: rows } = await sb.from("gen_events").select("after").eq("site_key", site_key).eq("action", "prop_trial").gte("ts", run.ts).order("ts", { ascending: true }).limit(2000);
       const trials = (rows || []).map(r => r.after);
       const sns = run.after?.sns || [];

@@ -694,7 +694,7 @@ reads every generator register and writes nothing. Admin → API Debug → **Gen
   **Propagation test (1.2.19):** admin `propTest {op:start|stop|status}` in generator.js + cron `pages/api/generator/proptest.js`
   (every minute) + pure `lib/generator/proptest.js` + `components/generator/PropTestCard.jsx` (under the Admin generator card).
   Writes only `2153` (inert while 2151=0) to one inverter at a time, ~2 min trials, reads all at ~10/30/45/75/110 s,
-  rows `prop_run`/`prop_trial` in gen_events (hidden from Activity and from the watchdog/resync queries). Skips a minute
+  rows `prop_run`/`prop_trial` in gen_events (op `export` + the card's **Download raw data** = every trial row + the other gen_events in the run window, as JSON) (hidden from Activity and from the watchdog/resync queries). Skips a minute
   with a real generator write; restores the original 2153 at the end. NB gen_events' time column is `ts` (not
   `created_at`; queries alias `created_at:ts`).
   **Run now SOC (1.2.9, Jason):** in SOC mode (2124=0) start also writes `212A`=100 THEN `2129`=95 (separate writes:

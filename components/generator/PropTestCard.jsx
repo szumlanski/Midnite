@@ -13,6 +13,16 @@ export function PropTestCard({ site, siteKey }) {
   const [view, setView] = useState("all");
   const label = (sn) => { const i = site.inverters.find(x => x.sn === sn); return `${i?.label || "?"} …${String(sn).slice(-6)}`; };
 
+  async function download() {
+    setBusy(true);
+    try {
+      const data = await genApi("propTest", { site_key: siteKey, op: "export" });
+      const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `propagation-test-${String(data.run_ts || "").slice(0, 10)}.json`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
   async function load() { try { setD(await genApi("propTest", { site_key: siteKey, op: "status" })); setErr(null); } catch (e) { setErr(e.message); setD(null); } }
   useEffect(() => { load(); const id = setInterval(load, 60000); return () => clearInterval(id); }, [siteKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -48,6 +58,7 @@ export function PropTestCard({ site, siteKey }) {
             {!active && <Button variant="primary" disabled={busy} onClick={start}>Start 8-hour test</Button>}
             {active && run.status === "running" && <Button variant="destructive" disabled={busy} onClick={stop}>Stop test</Button>}
             <Button disabled={busy} onClick={load}>Refresh</Button>
+            {run && <Button disabled={busy} onClick={download}>Download raw data</Button>}
           </div>
           {sum && d.trials > 0 && (
             <div style={{ marginTop: 14 }}>
