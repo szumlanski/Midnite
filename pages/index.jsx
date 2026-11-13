@@ -22,13 +22,16 @@ import { StringsSettings } from "@/components/strings/StringsSettings";
 import { StringsSection } from "@/components/strings/StringsSection";
 import { CountUp, Meter, useStaggerIn, useSlidingIndicator, gsap, Flip, prefersReducedMotion, useIsoLayoutEffect, usePrefersReducedMotion } from "@/components/ui/motion";
 
-const today = new Date().toISOString().split("T")[0];
+// LOCAL calendar date (the viewer's day), never UTC: toISOString() flips to tomorrow after 7-8 PM in Florida,
+// which opened the Day tab on an empty tomorrow and let today's live data be cached as "historical".
+const localYmd = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today = localYmd();
 const thisMonth = today.slice(0,7);
 const thisYear = today.slice(0,4);
 // Build marker (baked in at build time via next.config env) — lets you confirm a deploy landed.
 const BUILD = `v${process.env.NEXT_PUBLIC_APP_VERSION || "?"} · ${process.env.NEXT_PUBLIC_COMMIT || "local"} · ${(process.env.NEXT_PUBLIC_BUILD_TIME || "").slice(5,16).replace("T"," ")}`;
 // Date math for the Explorer date-range picker (operate at noon to dodge DST edges).
-const addDays = (d,n) => { const x=new Date(d+"T12:00:00"); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
+const addDays = (d,n) => { const x=new Date(d+"T12:00:00"); x.setDate(x.getDate()+n); return localYmd(x); };
 const dayDiff = (a,b) => Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000);
 const datesInRange = (start,end) => { const out=[]; let d=start; while(d<=end && out.length<7){ out.push(d); d=addDays(d,1); } return out; };
 
@@ -1828,7 +1831,7 @@ function FaultPanel({site}) {
   const [events, setEvents] = useState(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
+  const thirtyAgo = localYmd(new Date(Date.now()-30*24*60*60*1000));
   const [startDate, setStartDate] = useState(thirtyAgo);
   const [endDate, setEndDate] = useState(today);
   // Loads only on demand (Search button) — never auto-fetches on site view.
@@ -2714,8 +2717,8 @@ function DayChart({date, onDateChange, data, loading, summary, prodSeries=[], co
     {key:"soc", label:"SOC", color:SOC_LINE, active:showSoc, onToggle:setShowSoc},
   ];
   const dayAtMax = date >= today;
-  const dayPrev = () => { const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()-1); onDateChange(d.toISOString().split('T')[0]); };
-  const dayNext = () => { if(!dayAtMax){const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()+1); onDateChange(d.toISOString().split('T')[0]);} };
+  const dayPrev = () => { const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()-1); onDateChange(localYmd(d)); };
+  const dayNext = () => { if(!dayAtMax){const d=new Date(date+'T12:00:00'); d.setDate(d.getDate()+1); onDateChange(localYmd(d));} };
   return (
     <div style={{marginBottom:24}}>
       <PeriodHeader title="Day" subtitle={mpptActive?"Production per MPPT string · drag the bar to zoom":"Power through the day · drag the bar to zoom"}>

@@ -2,6 +2,12 @@
 
 Midnite Sentinel follows the HIG rollout in `docs/hig/audit.md`: one version per phase.
 
+## 1.2.18 (2026-11-12): "Today" is your local day
+
+- The app worked out "today" in UTC, so after 7 PM in Florida (8 PM in summer) the Day tab jumped to tomorrow and
+  showed an empty day, and the current day's data could be cached as if it were finished. "Today" and the Day/Explorer
+  date arrows now use the phone's or computer's own date.
+
 ## 1.2.17 (2026-11-12): Watchdog checks charging and generator voltage separately
 
 - After a run ends, two checks: (1) the inverters stop charging from the generator (power gone); if they are still
